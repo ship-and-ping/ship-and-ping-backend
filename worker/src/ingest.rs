@@ -83,6 +83,8 @@ struct Stats {
     client_errors: u32,
     duration_sum_ms: u64,
     hist: [u32; 16],
+    // Transient inputs for DB-side aggregation with the feature's current threshold.
+    timings: Vec<(DateTime<Utc>, u32, Option<bool>)>,
 }
 
 fn require(ok: bool) -> Result<(), ApiError> {
@@ -302,6 +304,8 @@ impl Aggregate {
                 row.client_errors += u32::from(client);
                 row.duration_sum_ms += u64::from(duration_ms);
                 row.hist[BOUNDS.partition_point(|bound| *bound < duration_ms)] += 1;
+                row.timings
+                    .push((ts, duration_ms, (!client).then_some(!failed)));
             }
             Data::AttemptStart {
                 ts: _,
