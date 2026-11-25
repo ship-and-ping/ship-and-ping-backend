@@ -45,6 +45,7 @@ pub struct Counts {
 #[derive(Deserialize)]
 struct Batch {
     spec: String,
+    app_id: Option<serde::de::IgnoredAny>,
     batch_id: Uuid,
     app_version: String,
     platform: String,
@@ -449,7 +450,8 @@ pub fn prepare_ingest(
         return Err(ApiError::TooLarge);
     }
     require(
-        batch.spec == "sp-1"
+        batch.app_id.is_none()
+            && batch.spec == "sp-1"
             && bounded(&batch.app_version, 64)
             && matches!(batch.platform.as_str(), "server" | "browser"),
     )?;
@@ -477,8 +479,15 @@ pub fn prepare_ingest(
             value
         })
         .collect();
+    // Retain the release label for display validation unless it contains private data.
+    let masked_version = mask(&batch.app_version);
+    let version = if masked_version.contains("[가림]") {
+        masked_version.chars().take(64).collect()
+    } else {
+        batch.app_version
+    };
     let rpc = json!({"app_key_hash":hash,"payload":{
-        "batch_id":batch.batch_id,"app_version":batch.app_version,"platform":batch.platform,"sent_at":batch.sent_at,
+        "batch_id":batch.batch_id,"app_version":version,"platform":batch.platform,"sent_at":batch.sent_at,
         "stats":stats,"attempts":attempts,"error_samples":samples
     }});
     Ok((

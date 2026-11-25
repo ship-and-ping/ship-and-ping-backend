@@ -29,7 +29,10 @@ fn masks_identifiers_and_private_text_before_rpc() {
         short_key(),
         "가".repeat(400)
     ));
-    let rpc = run(batch(vec![r])).unwrap();
+    let mut input = batch(vec![r]);
+    input["app_version"] = json!(format!("v1-{}", ["sp", "srv", "fixture"].join("_")));
+    let rpc = run(input).unwrap();
+    assert_eq!(rpc["payload"]["app_version"], "v1-[가림]");
     assert_eq!(rpc["payload"]["stats"][0]["route"], "/a/:id/:id/:id/short");
     let msg = rpc["payload"]["error_samples"][0]["message"]
         .as_str()
@@ -185,6 +188,7 @@ fn limits_inclusive() {
 fn validates_envelope_fields_and_records() {
     for (k, v) in [
         ("spec", json!("old")),
+        ("app_id", json!(ID)),
         ("batch_id", json!("x")),
         ("platform", json!("x")),
         ("sent_at", json!(0)),
