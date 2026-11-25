@@ -60,6 +60,11 @@ select lives_ok($$insert into apps(name) values('third')$$,'registration reopens
 select throws_ok($$insert into apps(name) values('fourth')$$,'23514','app limit reached','member quota still applies');
 select pg_temp.record('b','/extra');
 select is(private.active_feature_count(),100::bigint,'previous overflow route can claim released slot');
+update private.settings set active_feature_limit=101;
+select ingest_batch(repeat('b',64),jsonb_build_object('batch_id',gen_random_uuid(),'app_version','v1',
+ 'stats',jsonb_build_array(pg_temp.stats('/admitted'),pg_temp.stats('/still-full'))));
+select is(private.active_feature_count(),101::bigint,'a larger configured cap admits exactly one more feature inside a batch');
+select is_empty($$select id from features where route='/still-full'$$,'later item in same batch respects new cap');
 select is((select size_alert_bytes from private.settings),300000000::bigint,'300 decimal MB threshold');
 update private.settings set size_alert_bytes=9223372036854775807;
 select cleanup_daily();

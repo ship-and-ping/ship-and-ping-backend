@@ -34,7 +34,11 @@ begin
   if exists(select 1 from public.features where id=feature and last_record_at>=now()-interval '7 days') then
     return true;
   end if;
-  return private.beta_has_room();
+  if not private.beta_has_room() then return false; end if;
+  -- Publish a new row version so a transaction using a repeatable snapshot
+  -- retries admission if another app took its last visible slot.
+  update private.settings set active_feature_limit=active_feature_limit;
+  return true;
 end $$;
 create function private.overflow_feature(app uuid) returns uuid language plpgsql set search_path='' as $$
 declare feature uuid;
@@ -63,7 +67,8 @@ begin
   end if;
   if feature is null then feature:=private.find_or_create_auto(app,verb,original_path); end if;
   if record_activity then
-    update public.features set last_record_at=now() where id=feature and method<>'*' and last_record_at is distinct from now();
+    update public.features set last_record_at=now() where id=feature and method<>'*'
+      and (last_record_at is null or last_record_at<now());
   end if;
   return feature;
 end $$;
@@ -155,7 +160,7 @@ begin
         and ((result_event and a.ended_at is null) or (not result_event and a.started_at is null));
     if not found then dropped := dropped+1; continue; end if;
     if feature=requested_feature then
-      update public.features set last_record_at=now() where id=feature;
+      update public.features set last_record_at=now() where id=feature and (last_record_at is null or last_record_at<now());
     end if;
     if result_event and item->>'error_message' is not null then
       insert into public.error_samples(app_id,feature_id,version,at,error_kind,message)
