@@ -24,3 +24,6 @@ jobs:
       - run: worker-build --release
       - run: npm install --prefix target/workerd --no-save workerd@1.20261123.1
       - run: cargo test --locked --test http -- --ignored
+      - run: cargo run --locked --release --example bench
+      - run: npm install --prefix target/wrangler --no-save wrangler@4.168.0
+      - run: python3 bench_http.py --start-local

@@ -13,16 +13,21 @@ const BOUNDS: [u32; 15] = [
 ];
 static PRIVATE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
-        r"(?i)\b(?:set-cookie|cookie)[ \t]*:[^\r\n]*",
-        r"|\bbearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;]+",
-        r"|\bbasic[ \t]+(?-iu:[A-Za-z0-9+/]{14,}==|[A-Za-z0-9+/]{15,}=|[A-Za-z0-9+/]{16,})",
-        r"|\b(?:access_token|token|key|password)=[^&\s,;#]+",
-        r"|(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|\beyJ)[a-z0-9_.=\-]+",
-        r"|(?P<separator>^|(?-i:[^A-Za-z0-9]))(?:sk_|pk_|rk_)(?-iu:[A-Za-z0-9_]{16,})",
+        r"(?i)(?-u:\b)(?:set-cookie|cookie)[ \t]*:[^\r\n]*",
+        r"|(?-u:\b)bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;]+",
+        r"|(?-u:\b)basic[ \t]+(?-iu:[A-Za-z0-9+/]{14,}==|[A-Za-z0-9+/]{15,}=|[A-Za-z0-9+/]{16,})",
+        r"|(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|(?-u:\b)eyJ)[a-z0-9_.=\-]+",
         r"|[a-z0-9._%+\-]+(?:@|%40)[a-z0-9.\-]+\.[a-z]{2,}",
-        r"|\+?\b\d(?:[ ().\-]*\d){8,14}\b",
     ))
     .expect("static redaction patterns")
+});
+
+static SHORT_KEY: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i-u:sk_|pk_|rk_)[A-Za-z0-9_]{16,}").expect("short key pattern")
+});
+static NAMED_SECRET: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i-u:[A-Za-z0-9_-]*(?:token|key|secret|password|passwd|pwd))[ \t]*[=:][ \t]*([^&\s,;#]+)")
+        .expect("credential value")
 });
 
 #[derive(Debug, PartialEq)]
@@ -44,18 +49,13 @@ struct Batch {
     app_version: String,
     platform: String,
     sent_at: DateTime<Utc>,
-    records: Vec<Value>,
-}
-#[derive(Deserialize)]
-struct Record {
-    ts: DateTime<Utc>,
-    #[serde(flatten)]
-    data: Data,
+    records: Vec<Box<serde_json::value::RawValue>>,
 }
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Data {
     Request {
+        ts: DateTime<Utc>,
         route: String,
         method: String,
         status: u16,
@@ -64,10 +64,12 @@ enum Data {
         error_message: Option<String>,
     },
     AttemptStart {
+        ts: DateTime<Utc>,
         feature_key: String,
         attempt_id: Uuid,
     },
     AttemptResult {
+        ts: DateTime<Utc>,
         feature_key: String,
         attempt_id: Uuid,
         result: String,
@@ -95,25 +97,27 @@ fn bounded(value: &str, max: usize) -> bool {
 fn valid_kind(kind: &Option<String>) -> bool {
     kind.as_ref().is_none_or(|s| bounded(s, 80))
 }
+fn clean_char(c: char) -> Option<char> {
+    match c {
+        '\u{00ad}'
+        | '\u{061c}'
+        | '\u{200b}'..='\u{200f}'
+        | '\u{202a}'..='\u{202e}'
+        | '\u{2060}'..='\u{2064}'
+        | '\u{2066}'..='\u{2069}'
+        | '\u{feff}' => None,
+        '\r' | '\x0b' | '\x0c' | '\u{0085}' | '\u{2028}' | '\u{2029}' => Some('\n'),
+        _ => Some(c),
+    }
+}
 fn normalize(text: &str) -> Cow<'_, str> {
-    if text.is_ascii() && !text.contains(['\r', '\x0b', '\x0c']) {
+    if unicode_normalization::is_nfkc_quick(text.chars())
+        == unicode_normalization::IsNormalized::Yes
+        && text.chars().all(|c| clean_char(c) == Some(c))
+    {
         return Cow::Borrowed(text);
     }
-    Cow::Owned(
-        text.nfkc()
-            .filter_map(|c| match c {
-                '\u{00ad}'
-                | '\u{061c}'
-                | '\u{200b}'..='\u{200f}'
-                | '\u{202a}'..='\u{202e}'
-                | '\u{2060}'..='\u{2064}'
-                | '\u{2066}'..='\u{2069}'
-                | '\u{feff}' => None,
-                '\r' | '\x0b' | '\x0c' | '\u{0085}' | '\u{2028}' | '\u{2029}' => Some('\n'),
-                _ => Some(c),
-            })
-            .collect(),
-    )
+    Cow::Owned(text.nfkc().filter_map(clean_char).collect())
 }
 
 fn opaque_segment(part: &str) -> bool {
@@ -141,7 +145,7 @@ fn route(path: &str) -> String {
             if !part.is_empty()
                 && (part.bytes().all(|b| b.is_ascii_digit())
                     || Uuid::try_parse(part).is_ok()
-                    || PRIVATE.is_match(part)
+                    || private_segment(part)
                     || opaque_segment(part))
             {
                 ":id"
@@ -152,12 +156,130 @@ fn route(path: &str) -> String {
         .collect::<Vec<_>>()
         .join("/")
 }
+fn boundary(text: &str, start: usize) -> bool {
+    start == 0 || !text.as_bytes()[start - 1].is_ascii_alphanumeric()
+}
+fn phones(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
+    static PHONE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\+?[0-9](?:[ ().\-]*[0-9]){8,14}").expect("phone pattern"));
+    let bytes = text.as_bytes();
+    let mut cursor = 0;
+    std::iter::from_fn(move || {
+        loop {
+            let hit = PHONE.find_at(text, cursor)?;
+            let (start, mut end) = (hit.start(), hit.end());
+            if start == 0 || !bytes[start - 1].is_ascii_digit() {
+                if bytes.get(end).is_some_and(u8::is_ascii_digit) {
+                    // The last digit group continues beyond the limit. Try the preceding group.
+                    while end > start && bytes[end - 1].is_ascii_digit() {
+                        end -= 1;
+                    }
+                    while end > start && !bytes[end - 1].is_ascii_digit() {
+                        end -= 1;
+                    }
+                    if bytes[start..end]
+                        .iter()
+                        .filter(|b| b.is_ascii_digit())
+                        .count()
+                        < 9
+                    {
+                        end = start;
+                    }
+                }
+                if end > start {
+                    cursor = end;
+                    return Some(start..end);
+                }
+            }
+            // Skip the rejected start, retaining later candidates after punctuation or whitespace.
+            cursor = start + 1;
+            if bytes[start].is_ascii_digit() {
+                while bytes.get(cursor).is_some_and(u8::is_ascii_digit) {
+                    cursor += 1;
+                }
+            }
+        }
+    })
+}
+fn private_segment(part: &str) -> bool {
+    if phones(part).next().is_some() || (part.contains([':', '=']) && NAMED_SECRET.is_match(part)) {
+        return true;
+    }
+    if !part.is_ascii() || part.contains(['_', '=', '@', '%']) {
+        return PRIVATE.is_match(part) || short_keys(part).next().is_some();
+    }
+    // These legacy patterns also match route segments without the four markers.
+    static OTHER: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(concat!(
+        r"(?i)(?-u:\b)(?:set-cookie|cookie)[ \t]*:|(?-u:\b)bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;]+",
+        r"|(?-u:\b)basic[ \t]+[a-z0-9+/]{16,}|(?-u:\b)eyj[a-z0-9_.=\-]+",
+    )).expect("ASCII route patterns")
+    });
+    OTHER.is_match(part)
+}
+fn short_keys(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
+    SHORT_KEY.find_iter(text).filter_map(move |hit| {
+        if boundary(text, hit.start()) {
+            return Some(hit.range());
+        }
+        // A rejected match can contain a valid prefix after an underscore.
+        let bytes = text.as_bytes();
+        (hit.start() + 3..=hit.end() - 19)
+            .find(|&i| {
+                boundary(text, i)
+                    && [b"sk_", b"pk_", b"rk_"]
+                        .iter()
+                        .any(|prefix| bytes[i..i + 3].eq_ignore_ascii_case(*prefix))
+            })
+            .map(|start| start..hit.end())
+    })
+}
 fn mask(text: &str) -> String {
-    PRIVATE
-        .replace_all(&normalize(text), "${separator}[가림]")
-        .chars()
-        .take(300)
-        .collect()
+    let normalized = normalize(text);
+    let mut short = short_keys(&normalized).peekable();
+    let mut phone = phones(&normalized).peekable();
+    let mut values = normalized
+        .contains([':', '='])
+        .then(|| NAMED_SECRET.captures_iter(&normalized))
+        .into_iter()
+        .flatten()
+        .map(|caps| caps.get(1).unwrap().range())
+        .peekable();
+    if short.peek().is_none() && phone.peek().is_none() && values.peek().is_none() {
+        return PRIVATE
+            .replace_all(&normalized, regex::NoExpand("[가림]"))
+            .chars()
+            .take(300)
+            .collect();
+    }
+    let mut main = PRIVATE.find_iter(&normalized).map(|m| m.range()).peekable();
+    let mut end = 0;
+    let mut result = String::new();
+    loop {
+        let first = [main.peek(), short.peek(), phone.peek(), values.peek()]
+            .into_iter()
+            .flatten()
+            .map(|r| r.start)
+            .min();
+        let Some(start) = first else { break };
+        let span = if main.peek().is_some_and(|r| r.start == start) {
+            main.next()
+        } else if short.peek().is_some_and(|r| r.start == start) {
+            short.next()
+        } else if values.peek().is_some_and(|r| r.start == start) {
+            values.next()
+        } else {
+            phone.next()
+        }
+        .unwrap();
+        if span.start >= end {
+            result.push_str(&normalized[end..span.start]);
+            result.push_str("[가림]");
+        }
+        end = end.max(span.end);
+    }
+    result.push_str(&normalized[end..]);
+    result.chars().take(300).collect()
 }
 pub fn credential(header: &str) -> Result<&str, ApiError> {
     let key = header
@@ -184,11 +306,22 @@ struct Aggregate {
 }
 
 impl Aggregate {
-    fn add(&mut self, value: Value, now_ms: i64, key: &str) -> Result<(), ApiError> {
-        let Record { ts, data } = serde_json::from_value(value).map_err(|_| ApiError::Invalid)?;
+    fn add(
+        &mut self,
+        value: &serde_json::value::RawValue,
+        now_ms: i64,
+        key: &str,
+    ) -> Result<(), ApiError> {
+        let data: Data = serde_json::from_str(value.get()).map_err(|_| ApiError::Invalid)?;
+        let ts = match &data {
+            Data::Request { ts, .. }
+            | Data::AttemptStart { ts, .. }
+            | Data::AttemptResult { ts, .. } => *ts,
+        };
         require(ts.timestamp_millis().abs_diff(now_ms) <= 86_400_000)?;
         match data {
             Data::Request {
+                ts: _,
                 route: path,
                 method,
                 status,
@@ -196,18 +329,13 @@ impl Aggregate {
                 error_kind,
                 error_message,
             } => {
-                let path = normalize(&path);
-                let path = path.split(['?', '#']).next().unwrap_or_default();
+                let path = clean_route(&path)?;
                 require(
-                    path.starts_with('/')
-                        && bounded(path, 200)
-                        && bounded(&method, 32)
-                        && method.bytes().all(|b| b.is_ascii_uppercase() || b == b'-')
+                    valid_method(&method)
                         && (status == 0 || (100..600).contains(&status))
                         && duration_ms <= 600000
                         && valid_kind(&error_kind),
                 )?;
-                let path = route(path);
                 let client = (400..500).contains(&status);
                 let failed = !client && (status == 0 || status >= 500 || error_kind.is_some());
                 if (failed || client) && (error_message.is_some() || error_kind.is_some()) {
@@ -224,6 +352,7 @@ impl Aggregate {
                 row.hist[BOUNDS.partition_point(|bound| *bound < duration_ms)] += 1;
             }
             Data::AttemptStart {
+                ts: _,
                 feature_key,
                 attempt_id,
             } => {
@@ -231,6 +360,7 @@ impl Aggregate {
                 self.attempts.push(json!({"type":"attempt_start","feature_key":feature_key,"attempt_id":attempt_id,"ts":ts}));
             }
             Data::AttemptResult {
+                ts: _,
                 feature_key,
                 attempt_id,
                 result,
@@ -253,8 +383,59 @@ impl Aggregate {
     }
 }
 
+#[derive(Deserialize, Serialize)]
+struct Feature {
+    route: String,
+    method: String,
+    name: String,
+}
+fn valid_method(method: &str) -> bool {
+    bounded(method, 32) && method.bytes().all(|b| b.is_ascii_uppercase() || b == b'-')
+}
+fn clean_route(input: &str) -> Result<String, ApiError> {
+    let normalized = normalize(input);
+    let path = normalized.split(['?', '#']).next().unwrap_or_default();
+    require(path.starts_with('/') && bounded(path, 200))?;
+    Ok(route(path))
+}
+
+pub fn prepare_map(hash: &str, body: &[u8]) -> Result<(Vec<u8>, Counts), ApiError> {
+    if body.len() > MAX_BYTES {
+        return Err(ApiError::TooLarge);
+    }
+    let mut items: Vec<Feature> = serde_json::from_slice(body).map_err(|_| ApiError::Invalid)?;
+    if items.len() > 200 {
+        return Err(ApiError::TooLarge);
+    }
+    for item in &mut items {
+        require(valid_method(&item.method) && bounded(&item.name, 300))?;
+        item.route = clean_route(&item.route)?;
+        item.name = mask(&item.name);
+        require(bounded(&item.name, 300))?;
+    }
+    let counts = Counts {
+        accepted: items.len(),
+        dropped: 0,
+    };
+    let rpc = json!({"app_key_hash": hash, "items": items});
+    Ok((
+        serde_json::to_vec(&rpc).map_err(|_| ApiError::Invalid)?,
+        counts,
+    ))
+}
+pub fn key_hash(key: &str) -> String {
+    format!("{:x}", Sha256::digest(key.as_bytes()))
+}
 pub fn prepare(header: &str, body: &[u8], now_ms: i64) -> Result<(Vec<u8>, Counts), ApiError> {
     let key = credential(header)?;
+    prepare_ingest(key, &key_hash(key), body, now_ms)
+}
+pub fn prepare_ingest(
+    key: &str,
+    hash: &str,
+    body: &[u8],
+    now_ms: i64,
+) -> Result<(Vec<u8>, Counts), ApiError> {
     if body.len() > MAX_BYTES {
         return Err(ApiError::TooLarge);
     }
@@ -270,7 +451,7 @@ pub fn prepare(header: &str, body: &[u8], now_ms: i64) -> Result<(Vec<u8>, Count
     let mut counters = Counts::default();
     let mut aggregate = Aggregate::default();
     for value in batch.records {
-        if aggregate.add(value, now_ms, key).is_ok() {
+        if aggregate.add(&value, now_ms, key).is_ok() {
             counters.accepted += 1;
         } else {
             counters.dropped += 1;
@@ -291,7 +472,7 @@ pub fn prepare(header: &str, body: &[u8], now_ms: i64) -> Result<(Vec<u8>, Count
             value
         })
         .collect();
-    let rpc = json!({"app_key_hash":format!("{:x}",Sha256::digest(key.as_bytes())),"payload":{
+    let rpc = json!({"app_key_hash":hash,"payload":{
         "batch_id":batch.batch_id,"app_version":batch.app_version,"platform":batch.platform,"sent_at":batch.sent_at,
         "stats":stats,"attempts":attempts,"error_samples":samples
     }});

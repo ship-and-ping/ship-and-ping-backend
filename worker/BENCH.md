@@ -34,3 +34,17 @@ npx --yes wrangler@4.168.0 dev --local --ip 127.0.0.1 --port 8787 --var INGEST_D
 2. `target/release/examples/bench --body` 출력을 HTTPS 클라이언트로 테스트 배포 주소의 `/v1/ingest`에 POST한다. Content-Type은 `application/json`, Authorization은 `bench_http.py`와 같은 예시 키를 사용한다. 첫 요청과 예열 후 100회 이상을 분리하고 HTTP 상태·수락 건수·측정 시간대를 기록한다.
 3. Workers & Pages에서 해당 Worker의 Metrics를 열고 측정 시간대로 좁혀 **CPU Time per execution**의 p50·p99와 invocation status의 CPU 초과 건수를 확인한다. 요청별 최댓값은 해당 시간대 Workers Logs의 invocation CPU time에서 확인한다. [공식 지표 설명](https://developers.cloudflare.com/workers/observability/metrics-and-analytics/) · [무료 한도](https://developers.cloudflare.com/workers/platform/limits/)
 4. T3·T4 연동 후 테스트 DB와 발급한 키를 연결하고, 중복 방지에 걸리지 않도록 매 호출의 batch_id를 새 UUID로 바꿔 다시 측정한다. 초기 요청과 상위 구간이 10ms를 넘거나 초과 종료가 있으면 50건·32 KiB로 상한을 낮춰 같은 조건에서 재측정한다.
+
+## T4 GitHub CI 측정 (392742c)
+
+| 64 KiB·100건 (ms) | T4 전 macOS 중앙값 / 최대 | T4 CI ASCII 중앙값 / 최대 | T4 CI 한글 포함 중앙값 / 최대 |
+|---|---:|---:|---:|
+| 네이티브 처리 | 3.472 / 6.496 | 0.795 / 0.905 | 1.040 / 1.069 |
+| 로컬 Wasm HTTP 왕복 | 8.876 / 15.217 | 5.063 / 12.854 | 5.718 / 8.828 |
+| Cloudflare 요청당 CPU | 미측정 | 미측정 | 미측정 |
+
+T4 수치는 Ubuntu CI에서 10회 예열 후 100회 측정했다. 이전 macOS 측정과 실행 환경이 다르고 HTTP 연결 재사용 조건도 달라 개선율은 산출하지 않았다. [CI 실행 기록](https://github.com/ship-and-ping/ship-and-ping-backend/actions/runs/45583353357)
+
+## T4 검증 수정 후 macOS arm64 측정
+
+64 KiB·100건을 10회 예열하고 100회 측정했다. 같은 Mac의 수정 전후 네이티브 중앙값은 ASCII 0.382 → 0.371 ms, 한글 0.493 → 0.488 ms였다. 수정 후 최댓값은 각각 0.406 ms와 0.537 ms였다. 로컬 Wasm HTTP 왕복 중앙값 / 최대는 ASCII 1.862 / 3.721 ms, 한글 1.906 / 2.804 ms였다. 배포 환경의 CPU 시간은 미측정이다.
