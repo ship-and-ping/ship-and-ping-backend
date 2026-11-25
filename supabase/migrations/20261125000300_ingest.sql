@@ -25,7 +25,9 @@ begin
 end $$;
 
 create function private.mask(s text) returns text language sql immutable strict set search_path='' as $$
- select left(regexp_replace(s,'Bearer[[:space:]]+[^[:space:],;]+|sk_[[:alnum:]_.-]+|eyJ[[:alnum:]_.=-]+|[[:alnum:]._+%-]+@[[:alnum:].-]+\.[[:alpha:]]{2,}|\+?[0-9]([ ().-]*[0-9]){8,14}','[가림]','gi'),300)
+ select left(regexp_replace(s,
+   'Bearer[[:space:]]+[^[:space:],;]+|sk_[[:alnum:]_.-]+|eyJ[[:alnum:]_.=-]+|[[:alnum:]._+%-]+(@|%40)[[:alnum:].-]+\.[[:alpha:]]{2,}|\m((access_|refresh_|id_)?token|(api[_-]?)?key)=[^&#[:space:]]+|\+?[0-9]([ ().-]*[0-9]){8,14}',
+   '[가림]','gi'),300)
 $$;
 create function private.route(path text) returns text language sql immutable strict set search_path='' as $$
  select string_agg(case when part ~* '^([0-9]+|[a-z0-9]{16,}|[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12})$'
@@ -37,7 +39,9 @@ create function private.auto_feature(app uuid,verb text,path text) returns uuid 
 declare feature uuid;
 begin
   path := private.route(path);
-  if verb !~ '^[A-Z-]{1,32}$' or path not like '/%' then raise exception 'invalid route' using errcode='22023'; end if;
+  if verb is null or verb !~ '^[A-Z-]{1,32}$' or path is null or path not like '/%' then
+    raise exception 'invalid route' using errcode='22023';
+  end if;
   select id into feature from public.features where app_id=app and method=verb and route=path;
   if found then return feature; end if;
   if (select count(*) from public.features where app_id=app and kind='auto' and method <> '*') >= 200 then
@@ -60,7 +64,7 @@ create function public.ingest_batch(app_key_hash text,payload jsonb) returns jso
 language plpgsql security definer set search_path='' as $$
 declare
   k public.app_keys := private.lock_key(app_key_hash);
-  version_name text := payload->>'app_version';
+  version_name text := trim(payload->>'app_version');
   feature uuid;
   accepted integer := 0;
   dropped integer := 0;
@@ -70,7 +74,10 @@ declare
   sampled_features uuid[] := '{}';
 begin
   if jsonb_typeof(payload) is distinct from 'object' or payload ? 'app_id' or payload ? 'records'
-    or coalesce(length(trim(version_name)),0) not between 1 and 64 then
+    or not (payload ?| array['stats','attempts','error_samples'])
+    or jsonb_typeof(payload->'batch_id') is distinct from 'string'
+    or jsonb_typeof(payload->'app_version') is distinct from 'string'
+    or length(version_name) not between 1 and 64 then
     raise exception 'invalid aggregate envelope' using errcode='22023';
   end if;
   insert into public.ingest_batches(app_id,batch_id) values(k.app_id,(payload->>'batch_id')::uuid)
@@ -80,6 +87,15 @@ begin
     on conflict(app_id,version) do update set last_seen_at=greatest(public.app_versions.last_seen_at,excluded.last_seen_at);
 
   for item in select value from jsonb_array_elements(payload->'stats') loop
+    if jsonb_typeof(item->'method') is distinct from 'string' or jsonb_typeof(item->'route') is distinct from 'string'
+      or jsonb_typeof(item->'bucket') is distinct from 'string' or jsonb_typeof(item->'hist') is distinct from 'array'
+      or exists (select from unnest(array['total','failures','client_errors','duration_sum_ms']) field
+                 where jsonb_typeof(item->field) is distinct from 'number') then
+      raise exception 'invalid aggregate fields' using errcode='22023';
+    end if;
+    if exists (select from jsonb_array_elements(item->'hist') bin where jsonb_typeof(bin)<>'number') then
+      raise exception 'invalid histogram bin' using errcode='22023';
+    end if;
     feature := private.auto_feature(k.app_id,item->>'method',item->>'route');
     insert into public.stats_5m as s(app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist)
       values(k.app_id,feature,version_name,(item->>'bucket')::timestamptz,(item->>'total')::integer,
@@ -92,7 +108,9 @@ begin
   end loop;
   for item in select value from jsonb_array_elements(payload->'attempts') loop
     result_event := item->>'type'='attempt_result';
-    if (item->>'type') is null or item->>'type' not in ('attempt_start','attempt_result') or
+    if jsonb_typeof(item->'feature_key') is distinct from 'string' or trim(item->>'feature_key')=''
+      or jsonb_typeof(item->'attempt_id') is distinct from 'string' or jsonb_typeof(item->'ts') is distinct from 'string'
+      or (item->>'type') is null or item->>'type' not in ('attempt_start','attempt_result') or
       (result_event and (coalesce(item->>'source','') not in ('server','browser')
       or coalesce(item->>'result','') not in ('success','failure','abandon')
       or (item->>'source'='server' and k.kind <> 'srv'))) then
@@ -142,6 +160,11 @@ begin
     raise exception 'invalid feature map' using errcode='22023';
   end if;
   for item in select value from jsonb_array_elements(items) loop
+    if jsonb_typeof(item->'method') is distinct from 'string' or item->>'method' !~ '^[A-Z-]{1,32}$'
+      or jsonb_typeof(item->'route') is distinct from 'string' or item->>'route' not like '/%' or length(item->>'route')>200
+      or jsonb_typeof(item->'name') is distinct from 'string' or length(item->>'name')>300 or item->>'name' !~ '[^[:space:]]' then
+      raise exception 'invalid feature map item' using errcode='22023';
+    end if;
     insert into public.feature_map_suggestions(app_id,method,route,name)
       values(k.app_id,item->>'method',private.route(item->>'route'),private.mask(item->>'name'))
       on conflict(app_id,method,route) do update set name=excluded.name,received_at=now(),applied=false;

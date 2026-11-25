@@ -3,7 +3,8 @@ returns uuid language plpgsql security definer set search_path='' as $$
 declare notification_id uuid;
 begin
   insert into public.notifications(incident_id,channel,event,ok,error)
-    values($1,$2,$3,$4,private.mask($5)) returning id into notification_id;
+    values($1,$2,$3,$4,private.mask(regexp_replace($5,'https?://[^[:space:]]+','[가림]','gi')))
+    returning id into notification_id;
   if $4 then update public.incidents set last_notified_at=now() where id=$1; end if;
   return notification_id;
 end $$;
