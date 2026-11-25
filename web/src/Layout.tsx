@@ -20,18 +20,24 @@ export function Hero({
   title,
   detail,
   arrived = false,
+  showSheep = true,
   badge,
   mood = "neutral",
 }: {
   title: string;
   detail: string;
   arrived?: boolean;
+  showSheep?: boolean;
   badge?: ReactNode;
   mood?: "neutral" | "waiting" | "worried" | "relieved";
 }) {
+  const [transition, setTransition] = useState({ arrived, animate: false });
+  if (transition.arrived !== arrived) {
+    setTransition({ arrived, animate: arrived });
+  }
   return (
-    <section className={"hero-card" + (arrived ? " arrived" : "")} data-mood={mood}>
-      <Sheep key={mood} />
+    <section className={"hero-card" + (transition.animate ? " arrived" : "")} data-mood={mood}>
+      {showSheep && <Sheep />}
       {badge}
       <h2>{title}</h2>
       <p role="status">{detail}</p>
@@ -280,7 +286,7 @@ export function Landing() {
                 <button key={name} aria-pressed={preview === name} onClick={() => setPreview(name)}>{name}</button>)}</div>
             </div>
             <Hero title={preview === "앱 홈" ? "모임 신청에서 실패가 늘었어요" : "모임 신청 20건 중 6건 실패"}
-              mood="worried" badge={<StatusBadge state="open" />}
+              mood="worried" showSheep={false} badge={<StatusBadge state="open" />}
               detail={preview === "앱 홈" ? "최근 30분 동안 실패가 6건 있었어요." : "감지 구간 · 최근 30분"} />
             {preview === "앱 홈" ? <div className="example-row"><h3>문제</h3>
               <IssueListItem summary="모임 신청에서 실패가 늘었어요" state="open"

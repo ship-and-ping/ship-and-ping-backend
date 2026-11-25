@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createRequire } from "node:module";
 import { chromium, webkit } from "playwright";
@@ -26,6 +26,8 @@ const cases = [
 const profiles = [
   [1440,"light",1,false], [1280,"dark",1,false], [390,"light",1,false], [390,"dark",2,true],
 ];
+const selected = process.argv.slice(3);
+if (selected.some(id => !cases[Number(id)] || String(Number(id)) !== id)) throw Error("Unknown screen index");
 const server = await createServer({server:{host:"127.0.0.1",port:4179,strictPort:true,hmr:false},
   define: { "import.meta.env.VITE_SUPABASE_URL": JSON.stringify("https://example.supabase.co"),
     "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify("sb_publishable_qa_local_only"),
@@ -38,6 +40,7 @@ try {
   const entries = [];
   for (const [width,colorScheme,scale,reduced] of profiles) {
     for (const [index,[title,path,state,ready]] of cases.entries()) {
+      if (selected.length && !selected.includes(String(index))) continue;
       const page = await browser.newPage({ viewport:{width,height:width===390?844:900}, colorScheme,
         reducedMotion: reduced ? "reduce" : "no-preference", locale:"ko-KR",timezoneId:"Asia/Seoul", serviceWorkers:"block" });
       try {
@@ -56,7 +59,7 @@ try {
         }
         if (phase === "after" && path.endsWith("/issues/example") && state === "failure") {
           await page.getByRole("heading", {name:"모임 신청 20건 중 6건 실패"}).waitFor();
-          const title = page.locator(".monitor h1");
+          const title = page.getByRole("heading", {level:1,name:"모임 신청 · 실패 문제 상세"});
           if (!await title.evaluate(el => el === document.activeElement && getComputedStyle(el).outlineStyle === "none"))
             throw Error("Issue heading focus");
           if (!await page.getByRole("button", {name:"문제 아님으로 닫기"}).evaluate(el => el.classList.contains("secondary")))
@@ -93,7 +96,7 @@ try {
       } finally { await page.close(); }
     }
   }
-  if (phase === "after") {
+  if (phase === "after" && (!selected.length || selected.includes("0"))) {
     const motionDir = resolve(dir, "../motion");
     const page = await browser.newPage({viewport:{width: 980, height: 720},
       recordVideo:{dir:motionDir,size:{width: 800,height: 588}}, reducedMotion:"no-preference",
@@ -116,7 +119,11 @@ try {
     await video.saveAs(resolve(motionDir, "landing.webm"));
     await video.delete();
   }
-  await writeFile(resolve(dir,"results.json"),JSON.stringify(entries,null,2)+"\n");
+  const resultsPath = resolve(dir,"results.json");
+  const results = selected.length
+    ? JSON.parse(await readFile(resultsPath,"utf8")).map(old => entries.find(entry => entry.file === old.file) ?? old)
+    : entries;
+  await writeFile(resultsPath,JSON.stringify(results,null,2)+"\n");
   console.log(entries.length+" screenshots in "+dir);
   if (phase === "after" && entries.some(entry=>entry.issues.length || entry.overflow > 1))
     throw Error("Review overflow or axe findings in results.json");

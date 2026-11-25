@@ -645,7 +645,7 @@ function Issue({
   }
   return (
     <>
-      <h1 tabIndex={-1}>문제 상세</h1>
+      <h1 tabIndex={-1}>{displayText(f.name)} · {{ failure: "실패", slow: "느림", unconfirmed: "결과 미확인" }[i.kind]} 문제 상세</h1>
       {f.kind === "deep" && <section><h2>문제 감지 구간부터의 결과</h2><Outcomes stats={summarize(data.stats.filter(r => r.feature_id === f.id && Date.parse(r.bucket) <= Date.parse(i.closed_at ?? new Date(data.now).toISOString())))} /></section>}
       <Hero badge={<StatusBadge state={i.status} />}
         mood={i.status === "open" ? "worried" : "relieved"} arrived={i.status === "resolved"}
