@@ -120,19 +120,38 @@
 .sp-landing.m .lt { font-size: calc(24px * var(--sp-scale)); }
 .sp-landing.m .shot { padding: 12px; }
 
-/* ---------- 태블릿 640~1023: 왼쪽 메뉴를 접고 위쪽 줄 [메뉴]로, 본문 한 열 ---------- */
-.sp-desk.tab { display: flex; flex-direction: column; }
-.sp-tbar { display: flex; align-items: center; gap: 12px; padding: 10px 24px; border-bottom: 1px solid var(--sp-line); background: var(--sp-surface); }
+/* =====================================================================
+   너비별 배치 — 실제 너비로 고른다(컨테이너 쿼리).
+   컨테이너: 화면 모음의 창 프레임(.browser > .sp)과 live.html의 페이지 전체(.sp.live = 브라우저 창 너비).
+   앱 구현에서는 같은 값을 @media (max-width: 1023px) / (max-width: 639px)로 쓴다(페이지 전체가 컨테이너인 것과 같음).
+   ===================================================================== */
+.browser > .sp, .sp.live { container-type: inline-size; container-name: page; }
+.v-full, .v-wide { display: flex; flex-direction: column; flex: 1; }
+.v-full.sp-desk { display: grid; }
+.v-phone, .v-narrow { display: none; flex-direction: column; flex: 1; }
+.sp-tbar { display: none; align-items: center; gap: 12px; padding: 10px 24px; border-bottom: 1px solid var(--sp-line); background: var(--sp-surface); }
 .sp-tbar .brand { display: flex; align-items: center; gap: 8px; font-weight: var(--sp-weight-bold); color: var(--sp-ink); text-decoration: none; }
 .sp-tbar .where { margin-left: auto; color: var(--sp-ink-2); font-size: var(--sp-text-sm); }
-.sp-desk.tab .sp-side { border-right: 0; border-bottom: 1px solid var(--sp-line); padding: 12px 24px; }
-.sp-desk.tab .sp-side[hidden] { display: none; }
-.sp-desk.tab .sp-side .brand, .sp-desk.tab .sp-side .grow { display: none; }
-.sp-desk.tab .sp-main { padding: 24px 24px 48px; }
-.tab .sp-cols, .tab .sp-cols.even, .tab .sp-grid3, .tab .sp-hero.pc { grid-template-columns: minmax(0, 1fr); }
-.tab .sp-cols > .side { position: static; }
-.sp-public.tab .sp-wrap.pub { padding: 24px 24px 48px; }
-.sp-public.tab .sp-pubbar { padding: 12px 24px; }
 
+/* ---------- 태블릿 640~1023: 왼쪽 메뉴를 접고 위쪽 줄 [메뉴]로, 본문 한 열 ---------- */
+@container page (max-width: 1023px) {
+  .v-wide { display: none; }
+  .v-narrow { display: flex; }                         /* 소개 페이지는 한 열 배치 */
+  .v-full.sp-desk { display: flex; flex-direction: column; }
+  .sp-tbar { display: flex; }
+  .sp-desk .sp-side { display: none; border-right: 0; border-bottom: 1px solid var(--sp-line); padding: 12px 24px; }
+  .sp-desk .sp-side.open { display: flex; }
+  .sp-desk .sp-side .brand, .sp-desk .sp-side .grow { display: none; }
+  .sp-desk .sp-main { padding: 24px 24px 48px; }
+  .sp-cols, .sp-cols.even, .sp-grid3, .sp-hero.pc { grid-template-columns: minmax(0, 1fr); }
+  .sp-cols > .side { position: static; }
+  .sp-public .sp-wrap.pub { padding: 24px 24px 48px; }
+  .sp-public .sp-pubbar { padding: 12px 24px; }
+}
 /* ---------- 휴대폰 <640: 휴대폰 화면 그대로 ---------- */
-.sp-phonewrap { width: 100%; display: flex; flex-direction: column; flex: 1; }
+@container page (max-width: 639px) {
+  .v-full { display: none !important; }
+  .v-phone { display: flex; }
+}
+/* live.html: 화면 하나를 브라우저 창 전체로 */
+.sp.live { min-height: 100vh; display: flex; flex-direction: column; }

@@ -137,20 +137,23 @@ window.SP = window.SP || {};
     var ink = '#261B40', wht = '#F8F4FC', mint = '#76E7C4', lav = '#C3A6FF';
     var S = ' stroke="' + ink + '" stroke-width="24" stroke-linejoin="round" paint-order="stroke"';
     var g = function (name, inner) { return '<g ' + attr(name) + '>' + inner + '</g>'; };
-    var foot = function (x, y, w) { return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="58" rx="16" fill="' + wht + '"' + S + '/>'; };
-    var joint = function (cx, cy) { return '<circle cx="' + cx + '" cy="' + cy + '" r="66" fill="' + wht + '"' + S + '/><circle cx="' + cx + '" cy="' + cy + '" r="22" fill="' + ink + '"/>'; };
+    /* 로봇 다리(원본 1254px 기준): 앞쪽 다리는 둥근 관절 머리와 좁아지는 정강이가 한 덩어리(관절 가운데 짙은 구멍),
+       뒤쪽 다리는 몸 아래에서 비스듬히 내려오는 정강이. 발판은 정강이와 떨어진 사다리꼴(아래가 조금 넓음, 모서리 둥금) */
+    var P = function (d) { return '<path d="' + d + '" fill="' + wht + '"' + S + '/>'; };
+    var hole = function (cx, cy) { return '<circle cx="' + cx + '" cy="' + cy + '" r="22" fill="' + ink + '"/>'; };
     var spiral = 'M655 438 C600 330 430 292 318 342 C198 396 168 545 232 645 C292 742 444 760 512 690 C580 620 562 502 470 472 C390 446 318 502 330 572 C335 600 348 610 360 614';
     return g('pings', '<circle class="ping p1" cx="415" cy="590" r="300" fill="none" stroke="' + mint + '" stroke-width="18"/><circle class="ping p2" cx="415" cy="590" r="300" fill="none" stroke="' + mint + '" stroke-width="18"/>') +
       g('bod',
-        g('leg-3', '<path d="M380 995 L470 1015 L482 1045 L400 1045 Z" fill="' + wht + '"' + S + '/>' + foot(392, 1050, 98)) +
-        g('leg-4', '<path d="M752 1005 L818 968 L858 1045 L775 1045 Z" fill="' + wht + '"' + S + '/>' + foot(770, 1050, 92)) +
+        g('leg-3', P('M384 992 C410 1000 440 1008 468 1016 L486 1044 L404 1044 Z') + P('M402 1056 L484 1056 Q490 1056 492 1062 L498 1100 Q499 1110 489 1110 L404 1110 Q394 1110 395 1100 L397 1062 Q398 1056 402 1056 Z')) +
+        g('leg-4', P('M748 1006 C770 992 792 980 814 968 L858 1044 L778 1044 Z') + P('M782 1056 L852 1056 Q858 1056 860 1062 L866 1100 Q867 1110 857 1110 L792 1110 Q782 1110 783 1100 L776 1062 Q776 1056 782 1056 Z')) +
         g('body', '<path d="M300 780 C390 810 500 800 575 752 C660 812 760 835 858 838 C858 900 830 950 760 980 C640 1010 500 1000 420 970 C360 950 300 950 275 920 C255 870 262 815 300 780 Z" fill="' + wht + '"' + S + '/>') +
-        g('leg-1', '<path d="M300 958 L405 972 L350 1042 L262 1042 Z" fill="' + wht + '"' + S + '/>' + foot(250, 1050, 88) + joint(355, 930)) +
-        g('leg-2', '<path d="M625 955 L740 965 L715 1042 L635 1042 Z" fill="' + wht + '"' + S + '/>' + foot(635, 1050, 90) + joint(680, 930)) +
+        g('leg-1', P('M288 934 A68 68 0 0 1 424 934 C423 948 416 960 406 972 L350 1038 L262 1038 L289 950 Z') + hole(356, 932) + P('M262 1056 L336 1056 Q342 1056 341 1062 L334 1100 Q332 1110 322 1110 L256 1110 Q246 1110 248 1100 L256 1062 Q257 1056 262 1056 Z')) +
+        g('leg-2', P('M612 934 A68 68 0 0 1 748 934 C747 946 744 956 740 966 L716 1038 L634 1038 L613 950 Z') + hole(680, 932) + P('M642 1056 L712 1056 Q718 1056 719 1062 L724 1100 Q725 1110 715 1110 L644 1110 Q634 1110 635 1100 L637 1062 Q637 1056 642 1056 Z')) +
         g('wool', '<g fill="' + lav + '"' + S + '><circle cx="565" cy="255" r="100"/><circle cx="765" cy="282" r="95"/><circle cx="922" cy="360" r="80"/><circle cx="690" cy="350" r="80"/><circle cx="850" cy="405" r="70"/></g><g fill="' + lav + '"><circle cx="565" cy="255" r="100"/><circle cx="765" cy="282" r="95"/><circle cx="922" cy="360" r="80"/><circle cx="690" cy="350" r="80"/><circle cx="850" cy="405" r="70"/></g>') +
         g('horn', '<path d="' + spiral + '" fill="none" stroke="' + ink + '" stroke-width="98" stroke-linecap="round"/><path d="' + spiral + '" fill="none" stroke="' + mint + '" stroke-width="72" stroke-linecap="round"/><circle cx="415" cy="600" r="40" fill="' + lav + '"/>') +
         g('head', '<path d="M535 435 C600 425 680 440 715 445 L800 425 C860 470 930 470 945 478 L970 530 C1010 545 1060 560 1065 600 C1068 640 1058 665 1050 690 C1020 760 900 805 820 805 C730 805 650 775 598 715 C630 650 645 600 640 590 C580 560 535 500 535 435 Z" fill="' + wht + '"' + S + '/>' +
-          '<path d="M572 470 C612 482 650 512 668 548 C640 556 610 550 592 530 C578 512 572 492 572 470 Z" fill="none" stroke="' + ink + '" stroke-width="13" stroke-linejoin="round"/>' +
+          /* 귀 안쪽: 원본처럼 짙은 퍼플로 채운 아몬드(뾰족한 끝이 왼쪽 위) */
+          '<path d="M574 466 C618 478 654 510 670 548 C638 558 606 550 589 530 C576 512 572 490 574 466 Z" fill="' + ink + '"/>' +
           '<path d="M968 670 C990 690 1030 690 1050 665" fill="none" stroke="' + ink + '" stroke-width="14" stroke-linecap="round"/>' +
           g('eye', '<ellipse cx="835" cy="577" rx="58" ry="62" fill="' + ink + '"/><ellipse cx="849" cy="549" rx="20" ry="16" fill="' + wht + '" transform="rotate(35 849 549)"/>')));
   };
@@ -221,7 +224,7 @@ window.SP = window.SP || {};
   K.empty = function (title, body, act) { return '<div class="sp-empty"><b>' + title + '</b><span class="sp-sub">' + body + '</span>' + (act || '') + '</div>'; };
   K.hdr = function (title, sub, back, right) {
     /* 양은 큰 문장 카드에서만 말한다. 머리말 왼쪽 브랜드 타일은 워드마크(양 없음) */
-    return '<header class="sp-hdr">' + (back ? '<button class="sp-ibtn" aria-label="' + back + '">' + ic.back(22) + '</button>' : '<img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="30" height="30">') + '<span class="t">' + title + (sub ? '<small>' + sub + '</small>' : '') + '</span>' + (right === undefined ? '<button class="sp-ibtn" aria-label="앱 설정">' + ic.gear(20) + '</button>' : right) + '</header>';
+    return '<header class="sp-hdr">' + (back ? '<button class="sp-ibtn" aria-label="' + back + '">' + ic.back(22) + '</button>' : '<img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="30" height="30">') + '<span class="t" data-ft tabindex="-1">' + title + (sub ? '<small>' + sub + '</small>' : '') + '</span>' + (right === undefined ? '<button class="sp-ibtn" aria-label="앱 설정">' + ic.gear(20) + '</button>' : right) + '</header>';
   };
   K.top = function (crumb, right) { return '<header class="sp-top"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="30" height="30"><span class="crumb">내 앱 › <b>' + crumb + '</b></span><span style="flex:1"></span>' + (right || '<button class="sp-ibtn" aria-label="알림 설정">' + ic.bell(20) + '</button><button class="sp-ibtn" aria-label="앱 설정">' + ic.gear(20) + '</button>') + '</header>'; };
 
@@ -306,7 +309,9 @@ window.SP = window.SP || {};
   });
   function setMenu(btn, open) {
     var nav = document.getElementById(btn.getAttribute('aria-controls'));
-    btn.setAttribute('aria-expanded', String(open)); if (nav) nav.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+    /* 태블릿의 왼쪽 메뉴는 PC에서 늘 보여야 하므로 hidden 대신 .open으로(접힘은 CSS 컨테이너 쿼리가 정함) */
+    if (nav) { if (nav.classList.contains('sp-side')) nav.classList.toggle('open', open); else nav.hidden = !open; }
     if (open && nav) { var a = nav.querySelector('a'); if (a) a.focus(); }
   }
   document.addEventListener('keydown', function (e) {

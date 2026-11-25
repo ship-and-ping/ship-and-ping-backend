@@ -434,6 +434,40 @@
     mobile: function () { return wrap(K.hdr('내 앱', '쉽앤핑', null, '<a class="sp-ibtn" href="#s11-noapps" aria-label="내 계정">' + ic.user(22) + '</a>') + sec('<h1>앱 0개</h1>' + K.empty('아직 등록한 앱이 없어요', '앱을 등록하면 코딩 AI에 붙여넣을 연결 요청문을 드려요.', '<a class="sp-btn" href="#s3" style="text-decoration:none">' + ic.plus(18) + '앱 등록하기</a>') + '<p class="sp-sub">무료 베타는 앱 3개까지 등록할 수 있어요.</p>')); },
     pc: function () { return K.empty('아직 등록한 앱이 없어요', '앱을 등록하면 코딩 AI에 붙여넣을 연결 요청문을 드려요. 요청문을 붙여넣고 배포하면 쉽앤핑이 지켜보기 시작해요.', '<a class="sp-btn" href="#s3" style="text-decoration:none">' + ic.plus(18) + '앱 등록하기</a>') + '<p class="sp-sub">무료 베타는 앱 3개까지 등록할 수 있어요.</p>'; } });
 
+  /* 독서노트·우리동네 장터의 기능·문제·설정 화면(그 앱 문맥). 왼쪽 앱 안 메뉴가 여기로 온다 */
+  var OTHER = {
+    '독서노트': { key: 'dokseo', url: 'https://dokseo-note.pages.dev', pub: 'sp_pub_71bd', srv: 'sp_srv_2e40', ok: true },
+    '우리동네 장터': { key: 'jangteo', url: '', pub: 'sp_pub_c05e', srv: 'sp_srv_9a13', ok: false }
+  };
+  var keyCard = function (name, pfx, note) { return '<div class="sp-card"><div style="display:flex;align-items:center;gap:8px">' + ic.key(18) + '<b>' + name + '</b></div><code style="font-size:14px">' + pfx + '········</code><p class="sp-sub">' + note + '</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="sp-btn line">새 키 만들기</button><button class="sp-btn danger">폐기</button></div><p class="sp-sub">새 키를 만들면 이전 키는 24시간 뒤에 멈춰요. 폐기하면 최대 5분 안에 이 키로 기록 받기가 멈춰요.</p></div>'; };
+  ['우리동네 장터', '독서노트'].forEach(function (app) {   /* 같은 자리 뒤에 끼우므로 거꾸로 넣어 독서노트가 먼저 */
+    var o = OTHER[app], k = o.key, base = '/apps/' + k, back = app + ' 홈으로';
+    var waitSay = function () { return K.say({ meta: K.status('wait') + '<span>어제 등록함</span>', headline: '<p class="sp-headline">첫 기록을 기다리고 있어요</p>', body: '<p class="hsub">연결 요청문을 코딩 AI에 붙여넣고 배포한 뒤, 앱을 한 번 써 보면 기록이 와요.</p>' }); };
+    insertAfter('s6-7d', { id: 's6-' + k, app: app, probs: 0, tab: 'features', ptitle: '기능', crumb: ['내 앱', app, '기능'], path: base + '/features', group: 'S6 기능 상세', title: 'S6 ' + app + '의 기능',
+      desc: app + '를 고른 상태에서 왼쪽 앱 안 메뉴 "기능"으로 오는 화면. 그 앱의 기능만 보인다(모임모아의 분석이 나오지 않음).' + (o.ok ? '' : ' 아직 기록이 없어 목록이 비어 있다.'),
+      mobile: function () {
+        return wrap(K.hdr('기능', app, back, '') + (o.ok
+          ? K.say({ meta: K.status('ok') + '<span>최근 24시간</span>', headline: '<p class="sp-headline">기능 4개 모두 평소 속도예요</p>', body: '<p class="hsub">실패는 로그인 1건이에요. 기준보다 적어 문제로 보지 않았어요.</p>' }) + sec('<h2>기능 4개</h2><p class="sp-sub">최근 24시간, 사용 많은 순</p>' + K.featList(dokFeatures))
+          : waitSay() + sec(K.empty('기능 목록이 비어 있어요', '첫 기록이 오면 코딩 AI가 붙인 기능 이름으로 채워져요.'))));
+      } });
+    insertAfter('s7-dismissed', { id: 's7-' + k, app: app, probs: 0, tab: 'problems', ptitle: '문제', crumb: ['내 앱', app, '문제'], path: base + '/problems', group: 'S7 문제 상세', title: 'S7 ' + app + '의 문제',
+      desc: app + '의 "문제" 메뉴. 열린 문제가 없으면 그렇다고 말하고, 지난 30일 문제 목록 자리를 보여 준다(문제는 30일 보관).',
+      mobile: function () {
+        return wrap(K.hdr('문제', app, back, '') + (o.ok
+          ? K.say({ meta: K.status('ok') + '<span>지금</span>', headline: '<p class="sp-headline">열린 문제가 없어요</p>', body: '<p class="hsub">문제가 생기면 메일로 알려 드리고 여기에 쌓여요.</p>' }) + sec('<h2>지난 30일</h2>' + K.empty('지난 30일 동안 문제가 없었어요', '문제는 30일 동안 보관해요.'))
+          : waitSay() + sec('<h2>지난 30일</h2>' + K.empty('아직 판정할 기록이 없어요', '첫 기록이 오고 평소 속도를 익히면 문제를 찾아 알려 드려요.'))));
+      } });
+    insertAfter('s10-names', { id: 's10-' + k, app: app, probs: 0, tab: 'settings', ptitle: '앱 설정', crumb: ['내 앱', app], narrow: true, path: base + '/settings', group: 'S10 앱 설정', title: 'S10 ' + app + '의 앱 설정',
+      desc: app + '의 "설정" 메뉴. 이름·주소·기능 이름표·키·앱 삭제가 모두 이 앱의 값이다. 삭제 확인 칸은 "' + app + '"를 똑같이 적어야 눌린다.',
+      mobile: function () {
+        return wrap(K.hdr('앱 설정', app, back, '') +
+          sec('<h2>앱 정보</h2>' + K.field({ label: '앱 이름', value: app }) + K.field({ label: '앱 주소', opt: true, value: o.url, help: o.url ? '' : '앱 주소는 나중에 적어도 돼요' }) + '<button class="sp-btn">저장</button>') +
+          sec('<h2>기능 이름표</h2><div class="sp-card"><b>' + (o.ok ? '기능 4개' : '아직 기능이 없어요') + '</b><span class="sp-sub">' + (o.ok ? '숨긴 기능이 없어요' : '첫 기록이 오면 코딩 AI가 보낸 이름표가 여기에 생겨요') + '</span></div>') +
+          sec('<h2>키</h2>' + keyCard('수집 키', o.pub, '앱에 넣는 키예요. 기록을 보내기만 할 수 있어요.') + keyCard('서버 키', o.srv, '서버 코드에만 넣는 비공개 키예요.')) +
+          sec('<h2>앱 삭제</h2><p class="sp-sub">모든 기록이 바로 지워지고 되돌릴 수 없어요.</p>' + confirmField('확인을 위해 앱 이름을 적어 주세요', app, app + ' 삭제', 's2')));
+      } });
+  });
+
   var byId = {}; E.forEach(function (e) { byId[e.id] = e; });
   /* 열린 문제가 없는 화면은 왼쪽 메뉴 "문제" 옆 숫자를 쓰지 않는다 */
   ['s4-copy', 's4-copy-fail', 's4-wait', 's4-empty', 's4', 's4-loading', 's4-error', 's5-ok', 's5-empty', 's7', 's7-quiet', 's7-dismissed'].forEach(function (id) { if (byId[id]) byId[id].probs = 0; });
@@ -510,10 +544,10 @@
   var landing = function (m) {
     var bar = m ? '<header class="sp-pubbar m"><a class="brand" href="#s0"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="30" height="30">쉽앤핑</a><span class="grow"></span><a class="sp-btn text" href="#s1">로그인</a></header>' : SP.pubbar();
     var acts = '<div class="acts"><a class="sp-btn" href="#s1" style="text-decoration:none">시작하기</a><a class="sp-btn line" href="#s1" style="text-decoration:none">로그인</a></div>';
-    var hero = '<section class="lsec hero" aria-labelledby="l-h1' + (m ? 'm' : '') + '"><div class="txt"><h1 id="l-h1' + (m ? 'm' : '') + '" class="lt1">힘겹게 모은 사용자,<br>서버 문제로 잃으실 건가요?</h1><p class="lead strong">사용자가 나쁜 리뷰를 남기기 전에, 먼저 알고 고치세요.</p><p class="lead">쉽앤핑은 바이브 코딩으로 앱을 낸 사람을 위한 관리형 모니터링이에요. 문제가 생기면 쉬운 한 문장으로 알려 드리고, 코딩 AI에 보낼 내용까지 챙겨 드려요.</p>' + acts + '</div>' +
+    var hero = '<section class="lsec hero" aria-labelledby="l-h1' + (m ? 'm' : '') + '"><div class="txt"><h1 id="l-h1' + (m ? 'm' : '') + '" class="lt1">힘겹게 모은 사용자,<br>서버 문제로 잃으실 건가요?</h1><p class="lead strong">사용자가 나쁜 리뷰를 남기기 전에 먼저 알고 고칠 수 있게, 쉽앤핑이 대신 지켜볼게요.</p><p class="lead">쉽앤핑은 바이브 코딩으로 앱을 낸 사람을 위한 관리형 모니터링이에요. 문제가 생기면 쉬운 한 문장으로 알려 드리고, 코딩 AI에 보낼 내용까지 챙겨 드려요.</p>' + acts + '</div>' +
       /* 상자에서 꺼낸 양(크게, S0에서만 반복 움직임: 숨쉬기·깜빡임·뿔 레이더 핑) + 그 양이 하는 말(카드에는 양을 다시 넣지 않음) */
       '<div class="pic"><div class="bigsheep">' + SP.sheep('live') + '</div>' + K.say({ noAv: true, meta: K.status('ok') + '<span>예시 화면</span>', headline: '<p class="sp-headline">모임모아는 지금 모두 괜찮아요</p>', body: '<p class="hsub">기능 8개를 지켜보고 있어요. 문제가 생기면 슬랙이나 메일로 바로 알려 드릴게요.</p>' }) + '</div></section>';
-    var pains = '<section class="lsec"><h2 class="lt">나쁜 리뷰로 먼저 알게 되면 늦어요</h2><p class="lead">코딩 AI로 만든 앱은 빨리 나오지만, 무엇이 멈추거나 느려졌는지는 사용자가 연락하거나 리뷰를 남겨야 알게 되는 경우가 많아요. 쉽앤핑은 그 전에 먼저 알려 드려요.</p><ul class="three">' +
+    var pains = '<section class="lsec"><h2 class="lt">나쁜 리뷰로 먼저 알게 되면 늦어요</h2><p class="lead">코딩 AI로 만든 앱은 빨리 나오지만, 무엇이 멈추거나 느려졌는지는 사용자가 연락하거나 리뷰를 남겨야 알게 되는 경우가 많아요. 쉽앤핑은 기록에서 문제가 보이면 바로 알려 드려서, 그보다 먼저 알아챌 수 있게 도와요.</p><ul class="three">' +
       ['신청 버튼은 눌렸는데 저장이 안 된 것을, 사용자 연락이나 리뷰를 보고서야 알아요', '평소보다 느려진 기능은 직접 써 보기 전에는 눈치채기 어려워요', '고쳐서 배포했는데 정말 고쳐졌는지 확인할 방법이 없어요'].map(function (t) { return '<li class="sp-panel"><p>' + t + '</p></li>'; }).join('') + '</ul></section>';
     var does = '<section class="lsec"><h2 class="lt">쉽앤핑이 대신 답해 주는 세 가지</h2><ul class="three">' +
       [['bad', '어디서 막혔나', '모임 신청 20건 중 6건 실패했어요'], ['wait', '평소보다 느려졌나', '분석이 느려졌어요. 평소 1.1초 → 최근 30분 3.4초'], ['ok', '고쳐졌나', '업데이트 후 분석 15건 모두 평소 속도로 끝났어요']].map(function (r) {
@@ -543,7 +577,7 @@
     return '<div class="sp-landing' + (m ? ' m' : '') + '">' + bar + '<main>' + hero + pains + does + steps + shot + alerts + beta + '</main><footer class="lfoot sp-sub">쉽앤핑 무료 베타</footer></div>';
   };
   E.unshift({ id: 's0', group: 'S0 소개 페이지', title: 'S0 소개 페이지 (로그인 전 첫 화면)', path: '/',
-    desc: '로그인 전 첫 화면. 큰 제목은 사용자 요청 말투를 살린 "힘겹게 모은 사용자, 서버 문제로 잃으실 건가요?", 바로 아래 "사용자가 나쁜 리뷰를 남기기 전에, 먼저 알고 고치세요." 오른쪽에는 상자에서 꺼낸 SVG 양이 크게 서서 숨쉬고 눈을 깜빡이고 뿔에서 레이더 핑을 보낸다(반복 움직임은 이 화면에서만, 동작 줄이기면 정지). "연결하면 이렇게 보여요"는 나중에 앱 온보딩 화면 그림으로 바꿀 자리이고 지금은 S2→S3→S4→S5 축소본. 한 문장 소개(바이브 코딩으로 앱을 낸 사람을 위한 관리형 모니터링), 문제 공감(사용자 연락·리뷰로 알게 되는 문제), 하는 일 세 가지(어디서 막혔나·평소보다 느려졌나·고쳐졌나), 연결 3단계, 실제 화면 예시(앱 홈 카드, 예시 데이터라고 밝힘), 슬랙·메일 알림 예시, 무료 베타 안내, [시작하기]·[로그인]. 가격·성과 숫자·"최고·유일" 같은 말·지어낸 후기는 쓰지 않는다. 양은 맨 위 큰 양 한 마리뿐이다(예시 카드와 축소본에는 넣지 않음). [시작하기]와 [로그인]은 모두 S1(Google·이메일 링크)으로 간다.',
+    desc: '로그인 전 첫 화면. 큰 제목은 사용자 요청 말투를 살린 "힘겹게 모은 사용자, 서버 문제로 잃으실 건가요?", 바로 아래 "사용자가 나쁜 리뷰를 남기기 전에 먼저 알고 고칠 수 있게, 쉽앤핑이 대신 지켜볼게요."(먼저 알린다고 보장하지 않는 말) 오른쪽에는 상자에서 꺼낸 SVG 양이 크게 서서 숨쉬고 눈을 깜빡이고 뿔에서 레이더 핑을 보낸다(반복 움직임은 이 화면에서만, 동작 줄이기면 정지). "연결하면 이렇게 보여요"는 나중에 앱 온보딩 화면 그림으로 바꿀 자리이고 지금은 S2→S3→S4→S5 축소본. 한 문장 소개(바이브 코딩으로 앱을 낸 사람을 위한 관리형 모니터링), 문제 공감(사용자 연락·리뷰로 알게 되는 문제), 하는 일 세 가지(어디서 막혔나·평소보다 느려졌나·고쳐졌나), 연결 3단계, 실제 화면 예시(앱 홈 카드, 예시 데이터라고 밝힘), 슬랙·메일 알림 예시, 무료 베타 안내, [시작하기]·[로그인]. 가격·성과 숫자·"최고·유일" 같은 말·지어낸 후기는 쓰지 않는다. 양은 맨 위 큰 양 한 마리뿐이다(예시 카드와 축소본에는 넣지 않음). [시작하기]와 [로그인]은 모두 S1(Google·이메일 링크)으로 간다.',
     mobile: function () { return landing(true); }, pc: function () { return landing(false); } });
 
   /* ---------------- 양 원본 PNG ↔ SVG 비교 (D4) ---------------- */

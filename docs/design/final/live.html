@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>쉽앤핑 화면 (실제 창 너비)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/tokens.css">
+<link rel="stylesheet" href="src/components.css">
+<link rel="stylesheet" href="src/desk.css">
+<style>
+  /* 화면 하나를 브라우저 창 전체로 그린다. 페이지 전체(.sp.live)가 너비 기준이라 창을 줄이면
+     1023px 이하에서 태블릿 배치, 639px 이하에서 휴대폰 화면으로 바뀐다(desk.css 컨테이너 쿼리 = 창 너비). */
+  html, body { margin: 0; }
+  body { background: #FAF9FC; }
+  * { box-sizing: border-box; }
+</style>
+</head>
+<body>
+<div id="live" class="sp live"></div>
+<script src="src/kit.js"></script>
+<script src="src/desk.js"></script>
+<script src="src/screens.js"></script>
+<script>
+  (function (SP) {
+    var root = document.getElementById('live');
+    var dark = false;
+    try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (err) {}
+    if (/[?&]theme=dark/.test(location.search)) dark = true;
+    if (/[?&]theme=light/.test(location.search)) dark = false;
+    root.setAttribute('data-theme', dark ? 'dark' : 'light');
+    document.body.style.background = dark ? '#0F0A1C' : '#FAF9FC';
+    function draw(focus) {
+      var id = location.hash.replace('#', '') || 's0', e = null;
+      SP.entries.forEach(function (x) { if (x.id === id) e = x; });
+      if (!e) e = SP.entries[0];
+      root.setAttribute('data-anim', e.anim || '');
+      root.innerHTML = SP.deskHtml(e);
+      root.classList.remove('play'); void root.offsetWidth; if (e.anim) root.classList.add('play');
+      document.title = '쉽앤핑 화면: ' + e.title;
+      if (focus) { var t = null; root.querySelectorAll('[data-ft]').forEach(function (el) { if (!t && el.offsetParent !== null) t = el; }); if (t) t.focus({ preventScroll: true }); }
+    }
+    window.addEventListener('hashchange', function () { draw(true); window.scrollTo(0, 0); });
+    draw(false);
+  })(window.SP);
+</script>
+</body>
+</html>

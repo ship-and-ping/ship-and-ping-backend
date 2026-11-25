@@ -5,17 +5,26 @@
     var path = SP.deskPath(e);
     if (e.deskBig) {
       /* 창 1440을 브라우저에서 200%로 확대하면 실제로 쓰는 폭은 720 → 태블릿 배치(메뉴 접힘, 한 열) */
-      var t = function (th) { return SP.browser(th, SP.deskHtml(e, 720), path, e.anim, { width: 720, big: true, cap: '창 1440을 200%로 확대(실제 폭 720, 태블릿 배치)' }); };
+      var t = function (th) { return SP.browser(th, SP.deskHtml(e), path, e.anim, { width: 720, big: true, cap: '창 1440을 200%로 확대(실제 폭 720, 태블릿 배치)' }); };
       return t('light') + t('dark');
     }
+    /* 배치는 프레임 실제 너비로 CSS가 고른다(컨테이너 쿼리). 캡션은 설명용 */
     var lay = pcw >= 1024 ? 'PC 배치' : pcw >= 640 ? '태블릿 배치' : '휴대폰 배치';
-    return SP.browser('light', SP.deskHtml(e, pcw), path, e.anim, { width: pcw, cap: lay }) + SP.browser('dark', SP.deskHtml(e, pcw), path, e.anim, { width: pcw, cap: lay });
+    return SP.browser('light', SP.deskHtml(e), path, e.anim, { width: pcw, cap: lay }) + SP.browser('dark', SP.deskHtml(e), path, e.anim, { width: pcw, cap: lay });
+  }
+  /* 화면을 바꾸면 초점: 보이는 첫 프레임 안 그 화면의 제목(data-ft: PC 본문 h1 / 휴대폰 머리말 제목)으로.
+     그래서 다음 Tab은 메뉴가 아니라 본문 첫 조작 요소로 간다. 화면 안 제목이 없으면 갤러리 제목으로 */
+  function focusTitle() {
+    var t = null;
+    document.querySelectorAll('#mount [data-ft]').forEach(function (el) { if (!t && el.offsetParent !== null) t = el; });
+    if (!t) t = document.getElementById('h-' + E[cur].id);
+    if (t) { try { t.focus({ preventScroll: true }); } catch (err) { t.focus(); } }
   }
   function draw(i) {
     var e = E[i];
     var frames = view === 'pc' ? '<div class="pcs">' + pcFrames(e) + '</div>'
       : '<div class="frames">' + SP.phone('light', e.mobile(), { anim: e.anim, big: e.big }) + SP.phone('dark', e.mobile(), { anim: e.anim, big: e.big }) + '</div>';
-    return '<article class="entry" id="' + e.id + '" aria-labelledby="h-' + e.id + '"><h1 id="h-' + e.id + '" tabindex="-1">' + e.title + '</h1><p class="desc">' + e.desc + '</p>' + (e.anim ? '<p><button class="pg-btn" data-replay>움직임 다시 보기</button></p>' : '') + frames + '</article>';
+    return '<article class="entry" id="' + e.id + '" aria-labelledby="h-' + e.id + '"><h1 id="h-' + e.id + '" tabindex="-1">' + e.title + '</h1><p class="desc">' + e.desc + '</p><p class="desc"><a href="live.html#' + e.id + '" target="_blank" rel="noopener">이 화면을 실제 브라우저 창 너비로 열기</a> — 창을 1023px·639px 아래로 줄이면 태블릿·휴대폰 배치로 바뀌어요.</p>' + (e.anim ? '<p><button class="pg-btn" data-replay>움직임 다시 보기</button></p>' : '') + frames + '</article>';
   }
   function render() {
     var m = document.getElementById('mount');
@@ -33,7 +42,7 @@
     cur = Math.max(0, Math.min(E.length - 1, i));
     if (push !== false) { try { history.replaceState(null, '', '#' + E[cur].id); } catch (err) {} }
     render(); window.scrollTo(0, 0);
-    if (focus !== false) { var h = document.getElementById('h-' + E[cur].id); if (h) { try { h.focus({ preventScroll: true }); } catch (err) { h.focus(); } } }
+    if (focus !== false) focusTitle();
   }
   SP.initIndex = function () {
     var nav = document.getElementById('list'), g = '', out = '';
