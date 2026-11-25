@@ -345,8 +345,12 @@
     o = o || {};
     var bid = 'cb' + (SP.uid = (SP.uid || 0) + 1);
     var visible = o.raw ? String(want) : SP.mask(want);            /* 화면에 보이는 글자 = 비교 기준 */
-    var masked = !o.raw && visible !== String(want);
-    var help = '"' + esc(visible) + '"를 똑같이 적어야 단추가 눌려요' + (masked ? '. 이름 일부가 [가림]으로 가려져 있어요. 화면에 보이는 그대로([가림] 포함) 입력해 주세요' : '');
+    /* 안내는 두 경우를 나눈다: 실제로 [가림]이 생긴 경우(키 등) / 정규화만 바뀐 경우(Ａ마트 → A마트 같은 전각 문자) */
+    var normOnly = !o.raw && SP.norm(want) !== String(want);
+    var masked = !o.raw && visible !== SP.norm(want);
+    var help = '"' + esc(visible) + '"를 똑같이 적어야 단추가 눌려요' +
+      (masked ? '. 이름 일부가 [가림]으로 가려져 있어요. 화면에 보이는 그대로([가림] 포함) 입력해 주세요'
+        : normOnly ? '. 화면에 보이는 그대로 입력해 주세요' : '');
     var field = K.field({ label: label, value: o.value || '', help: help, attr: ' autocomplete="off" data-confirm="' + esc(visible) + '" data-confirm-btn="' + bid + '"' + (o.locked ? ' disabled' : '') });
     if (o.noButton) return field;
     return field + '<button class="sp-btn danger block" id="' + bid + '" data-go="' + go + '" aria-disabled="' + (o.value === visible ? 'false' : 'true') + '">' + (o.raw ? esc(btnText) : SP.show(btnText)) + '</button>';
