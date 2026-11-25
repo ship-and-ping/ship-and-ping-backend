@@ -47,7 +47,7 @@
   SP.side = function (n, probs, sideId) {
     var inApp = n.top === 'apps' && n.app, A = inApp ? APPS[n.app] : null;
     var cnt = probs > 0 ? ' <span class="cnt" aria-label="열린 문제 ' + probs + '개">' + probs + '</span>' : '';
-    var sub = inApp ? '<div class="sub" role="group" aria-label="' + n.app + ' 메뉴"><span class="appname">' + n.app + '</span>' +
+    var sub = inApp ? '<div class="sub" role="group" aria-label="' + SP.show(n.app) + ' 메뉴"><span class="appname">' + SP.show(n.app) + '</span>' +
       nv(A.home, 'home', '홈', n.tab === 'home') + nv(A.feat, 'list', '기능', n.tab === 'features') + nv(A.prob, 'bad', '문제' + cnt, n.tab === 'problems') + nv(A.set, 'gear', '설정', n.tab === 'settings') + '</div>' : '';
     return '<nav class="sp-side" aria-label="쉽앤핑 메뉴"' + (sideId ? ' id="' + sideId + '"' : '') + '><a class="brand" href="#s2"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="30" height="30">쉽앤핑</a>' +
       nv('s2', 'apps', '내 앱', n.top === 'apps' && !inApp) + sub +
@@ -56,10 +56,10 @@
   };
   /* 본문 맨 위: 경로(작게) + 제목. 알림 설정은 앱 고르기 */
   SP.ptitle = function (n) {
-    var crumb = n.crumb.length ? '<p class="crumb">' + n.crumb.map(esc).join(' › ') + '</p>' : '';
-    var picker = n.picker ? '<div class="sp-seg" role="group" aria-label="알림을 정할 앱">' + Object.keys(APPS).map(function (a) { return '<a href="#' + APPS[a].alert + '"' + (a === n.app ? ' aria-current="page"' : '') + '>' + a + '</a>'; }).join('') + '</div>' : '';
+    var crumb = n.crumb.length ? '<p class="crumb">' + n.crumb.map(function (c) { return SP.show(c); }).join(' › ') + '</p>' : '';
+    var picker = n.picker ? '<div class="sp-seg" role="group" aria-label="알림을 정할 앱">' + Object.keys(APPS).map(function (a) { return '<a href="#' + APPS[a].alert + '"' + (a === n.app ? ' aria-current="page"' : '') + '>' + SP.show(a) + '</a>'; }).join('') + '</div>' : '';
     /* data-ft: 화면이 바뀌면 초점이 오는 제목(tabindex=-1). 다음 Tab은 본문 첫 조작 요소 */
-    return '<header class="sp-ptitle">' + crumb + '<h1 data-ft tabindex="-1">' + n.title + '</h1>' + picker + '</header>';
+    return '<header class="sp-ptitle">' + crumb + '<h1 data-ft tabindex="-1">' + SP.show(n.title) + '</h1>' + picker + '</header>';
   };
   /* 로그인 전 화면 맨 위 줄 */
   SP.pubbar = function () { return '<header class="sp-pubbar"><a class="brand" href="#s0"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="34" height="34">쉽앤핑</a><span class="grow"></span><a class="sp-btn text" href="#s1">로그인</a><a class="sp-btn" href="#s1" style="text-decoration:none">시작하기</a></header>'; };
@@ -76,7 +76,7 @@
     if (n.kind === 'public') return '<div class="v-full sp-public">' + SP.pubbar() + '<main class="sp-wrap pub"><h1 class="sr" data-ft tabindex="-1">' + (e.id === 's1' ? '쉽앤핑 시작하기' : '쉽앤핑') + '</h1>' + main + '</main></div>' + phone;
     var probs = e.probs != null ? e.probs : (n.app ? APPS[n.app].probs : 0);
     var sid = 'side' + (SP.uid = (SP.uid || 0) + 1);
-    return '<div class="v-full sp-desk"><header class="sp-tbar"><button class="sp-btn line sp-menu-btn" aria-expanded="false" aria-controls="' + sid + '">' + ic.menu(18) + '메뉴</button><a class="brand" href="#s2"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="28" height="28">쉽앤핑</a><span class="where">' + esc(n.app && n.top === 'apps' ? n.app : n.title) + '</span></header>' +
+    return '<div class="v-full sp-desk"><header class="sp-tbar"><button class="sp-btn line sp-menu-btn" aria-expanded="false" aria-controls="' + sid + '">' + ic.menu(18) + '메뉴</button><a class="brand" href="#s2"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="28" height="28">쉽앤핑</a><span class="where">' + SP.show(n.app && n.top === 'apps' ? n.app : n.title) + '</span></header>' +
       SP.side(n, probs, sid) + '<main class="sp-main"><div class="sp-wrap">' + SP.ptitle(n) + main + '</div></main></div>' + phone;
   };
   SP.deskPath = function (e) { return e.path || SP.navOf(e.id, e).path; };
