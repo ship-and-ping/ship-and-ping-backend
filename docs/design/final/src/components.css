@@ -23,12 +23,19 @@
 .sp-ibtn { min-width: var(--sp-touch); min-height: var(--sp-touch); display: inline-grid; place-items: center; border: 0; background: transparent; color: var(--sp-ink); border-radius: var(--sp-radius-md); }
 
 /* ---------- 큰 문장 카드 + 양 (sp-say) ---------- */
-.sp-say { margin: 4px 12px 0; display: flex; flex-direction: column; gap: 10px; }
-.sp-av { position: relative; width: 36px; height: 36px; flex: none; }
-.sp-av img { width: 36px; height: 36px; border-radius: 10px; display: block; }
-.sp-av::after { content: ""; position: absolute; inset: -5px; border-radius: 14px; border: 3px solid var(--sp-ok); opacity: 0; pointer-events: none; }
+/* 양은 상자(타일) 없이 카드 왼쪽 위 가장자리에 걸쳐 앉는다: 양 아래쪽 22px가 카드 위로 겹친다 */
+.sp-say { margin: 4px 12px 0; display: flex; flex-direction: column; }
+.sp-av { position: relative; z-index: 1; width: 58px; height: 58px; flex: none; margin: 0 0 -22px 14px; }
+.sp-desk .sp-av, .sp-public .sp-av { width: 66px; height: 66px; margin-bottom: -24px; }
+.sp-av .sp-sheep { width: 100%; height: 100%; display: block; overflow: visible; }
+.sp-av::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 3px solid var(--sp-ok); opacity: 0; pointer-events: none; }
+.sp-say:not(.noav) > .sp-hero { padding-top: 30px; }
+/* 양 SVG의 부위별 움직임 기준점 */
+.sp-sheep .ping, .sp-sheep .eye, .sp-sheep .bod { transform-box: fill-box; transform-origin: center; }
+.sp-sheep .bod { transform-origin: 50% 100%; }
+.sp-sheep .ping { opacity: 0; }
 .sp-hero { position: relative; background: var(--sp-hero); color: var(--sp-hero-ink); border: 1px solid var(--sp-hero-line); border-radius: var(--sp-radius-tail) var(--sp-radius-xl) var(--sp-radius-xl) var(--sp-radius-xl); padding: var(--sp-space-5); box-shadow: var(--sp-hero-shadow); display: flex; flex-direction: column; gap: var(--sp-space-3); }
-.sp-hero::before { content: ""; position: absolute; top: -9px; left: 12px; width: 16px; height: 10px; background: var(--sp-hero); clip-path: polygon(0 0, 100% 100%, 0 100%); }
+/* (D4) 말풍선 꼬리 삼각형은 뺐다 — 양이 카드 위에 직접 앉아 말하므로 꼬리 자리를 양이 덮는다. 왼쪽 위 6px 모서리는 남김 */
 .sp-hero .meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--sp-text-xs); color: var(--sp-hero-ink-2); }
 .sp-headline { font-size: var(--sp-text-headline); line-height: var(--sp-lh-headline); font-weight: var(--sp-weight-headline); letter-spacing: -0.03em; overflow-wrap: break-word; word-break: keep-all; }
 .sp-hero .hsub { color: var(--sp-hero-ink-2); font-size: var(--sp-text-sm); }
@@ -225,6 +232,19 @@ a.sp-frow .go { color: var(--sp-ink-2); display: grid; place-items: center; flex
 [data-anim].play .sp-track i { animation: sp-fill var(--sp-dur-fill) var(--sp-ease-out) 300ms both; }
 [data-anim].play .sp-after { animation: sp-fade var(--sp-dur-swap) var(--sp-ease-out) 1000ms both; }
 [data-anim].play .sp-av.ring::after { animation: sp-ring var(--sp-dur-ring) var(--sp-ease-out) 1050ms both; }
+/* 양: 앱 화면에서는 상태가 바뀔 때 한 번만. 첫 기록(S4) = 뿔에서 핑 한 번, 해결(S7) = 폴짝 한 번 + 민트 고리 */
+[data-anim].play .sp-av.pinger .ping { animation: sheep-ping 900ms var(--sp-ease-out) 560ms both; }
+[data-anim].play .sp-av.pinger .ping.p2 { animation-delay: 760ms; }
+[data-anim].play .sp-av.ring .bod { animation: sheep-hop 520ms var(--sp-ease-out) 1000ms both; }
+/* 양: S0 소개 페이지에서만 반복(크게) — 숨쉬기, 눈 깜빡임, 뿔에서 레이더 핑 */
+.sp-sheep.live .bod { animation: sheep-breathe 4.2s ease-in-out infinite; }
+.sp-sheep.live .eye { animation: sheep-blink 5.6s ease-in-out infinite; }
+.sp-sheep.live .ping { animation: sheep-ping 3s var(--sp-ease-out) infinite; }
+.sp-sheep.live .ping.p2 { animation-delay: 1.5s; }
+@keyframes sheep-ping { 0% { opacity: .7; transform: scale(.35) } 100% { opacity: 0; transform: scale(1.35) } }
+@keyframes sheep-hop { 0% { transform: none } 35% { transform: translateY(-12%) scale(1.02, .98) } 70% { transform: translateY(0) scale(1.03, .96) } 100% { transform: none } }
+@keyframes sheep-breathe { 0%, 100% { transform: none } 50% { transform: translateY(-1.2%) scale(1.012, 1.018) } }
+@keyframes sheep-blink { 0%, 92%, 100% { transform: none } 95% { transform: scaleY(.12) } }
 @keyframes sp-out { from { opacity: 1 } to { opacity: 0 } }
 @keyframes sp-rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
 @keyframes sp-fill { from { transform: scaleX(0) } to { transform: scaleX(1) } }
@@ -239,6 +259,8 @@ a.sp-frow .go { color: var(--sp-ink-2); display: grid; place-items: center; flex
   .sp-btn:active, .sp-hbtn:active { transform: none; }
   [data-anim].play .sp-track i, [data-anim].play .sp-after { animation: sp-fade 150ms linear both; }
   [data-anim].play .sp-av.ring::after { animation: none; }
+  /* 양은 정지 이미지: 핑·폴짝·숨쉬기·깜빡임 모두 없음 */
+  .sp-sheep .bod, .sp-sheep .eye, .sp-sheep .ping, [data-anim].play .sp-sheep .bod, [data-anim].play .sp-sheep .ping { animation: none !important; }
   .sp-skel { animation: none; }
   .sp-spin { animation-duration: 1.6s; }
   .sp-btn, .sp-hbtn, .sp-switch .knob, .sp-switch .knob::after { transition: none; }

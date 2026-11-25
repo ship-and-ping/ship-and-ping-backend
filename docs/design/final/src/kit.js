@@ -28,6 +28,9 @@ window.SP = window.SP || {};
     exit: function (s) { return I('<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="m10 16-4-4 4-4"/><path d="M6 12h10"/>', s); },
     question: function (s) { return I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.4"/><path d="M12 16.8v.1"/>', s); },
     user: function (s) { return I('<circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>', s); },
+    apps: function (s) { return I('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>', s); },
+    home: function (s) { return I('<path d="M4 11 12 4l8 7"/><path d="M6 10v10h12V10"/>', s); },
+    list: function (s) { return I('<path d="M9 7h11M9 12h11M9 17h11"/><path d="M4.5 7h.1M4.5 12h.1M4.5 17h.1"/>', s); },
     menu: function (s) { return I('<path d="M4 7h16M4 12h16M4 17h16"/>', s); },
     google: function (s) { return I('<path d="M20.5 12.2c0-.6-.1-1.2-.2-1.7H12v3.3h4.8a4.2 4.2 0 0 1-1.8 2.7v2.2h2.9c1.7-1.6 2.6-3.9 2.6-6.5z"/><path d="M12 21c2.4 0 4.5-.8 5.9-2.2L15 16.5c-.8.5-1.8.9-3 .9-2.3 0-4.3-1.6-5-3.7H4v2.3A9 9 0 0 0 12 21z"/><path d="M7 13.7a5.4 5.4 0 0 1 0-3.4V8H4a9 9 0 0 0 0 8z"/><path d="M12 6.6c1.3 0 2.5.5 3.4 1.3L18 5.4A9 9 0 0 0 4 8l3 2.3c.7-2.1 2.7-3.7 5-3.7z"/>', s); }
   };
@@ -124,12 +127,47 @@ window.SP = window.SP || {};
   var K = SP.K = {};
   K.status = function (st, t) { return '<span class="sp-status ' + st + '">' + ic[st](15) + (t || stTxt[st]) + '</span>'; };
   K.swapStatus = function (a, at, b, bt) { return '<span class="sp-swap"><span class="from">' + K.status(a, at) + '</span><span class="to">' + K.status(b, bt) + '</span></span>'; };
-  /* 큰 문장 카드 + 양: o = { meta, headline, body, ring, pc, side } */
+  /* ---------- 양 SVG (D4: 상자에서 꺼낸 양) ----------
+     앱 아이콘 PNG를 바탕으로 같은 모양을 브랜드 색만으로 다시 그렸다. 배경 없음.
+     부위별 묶음: .pings(뿔에서 퍼지는 레이더 핑) .bod(숨쉬기·폴짝) .legs .wool .horn .head .eye(깜빡임)
+     흰 몸은 밝은 바탕에서도 보이게 퍼플(#261B40) 테두리를 두른다. 장식이라 aria-hidden */
+  /* 부위 그림(좌표는 1254px 원본 기준). docs/design/brand/sheep.svg와 같은 모양이다.
+     부위 사이 짙은 퍼플 분리선은 같은 색 테두리를 칠 아래에 깔아(paint-order: stroke) 만든다 */
+  SP.sheepParts = function (attr) {
+    var ink = '#261B40', wht = '#F8F4FC', mint = '#76E7C4', lav = '#C3A6FF';
+    var S = ' stroke="' + ink + '" stroke-width="24" stroke-linejoin="round" paint-order="stroke"';
+    var g = function (name, inner) { return '<g ' + attr(name) + '>' + inner + '</g>'; };
+    /* 로봇 다리(원본 1254px 기준): 앞쪽 다리는 둥근 관절 머리와 좁아지는 정강이가 한 덩어리(관절 가운데 짙은 구멍),
+       뒤쪽 다리는 몸 아래에서 비스듬히 내려오는 정강이. 발판은 정강이와 떨어진 사다리꼴(아래가 조금 넓음, 모서리 둥금) */
+    var P = function (d) { return '<path d="' + d + '" fill="' + wht + '"' + S + '/>'; };
+    var hole = function (cx, cy) { return '<circle cx="' + cx + '" cy="' + cy + '" r="22" fill="' + ink + '"/>'; };
+    var spiral = 'M655 438 C600 330 430 292 318 342 C198 396 168 545 232 645 C292 742 444 760 512 690 C580 620 562 502 470 472 C390 446 318 502 330 572 C335 600 348 610 360 614';
+    return g('pings', '<circle class="ping p1" cx="415" cy="590" r="300" fill="none" stroke="' + mint + '" stroke-width="18"/><circle class="ping p2" cx="415" cy="590" r="300" fill="none" stroke="' + mint + '" stroke-width="18"/>') +
+      g('bod',
+        g('leg-3', P('M384 992 C410 1000 440 1008 468 1016 L486 1044 L404 1044 Z') + P('M402 1056 L484 1056 Q490 1056 492 1062 L498 1100 Q499 1110 489 1110 L404 1110 Q394 1110 395 1100 L397 1062 Q398 1056 402 1056 Z')) +
+        g('leg-4', P('M748 1006 C770 992 792 980 814 968 L858 1044 L778 1044 Z') + P('M782 1056 L852 1056 Q858 1056 860 1062 L866 1100 Q867 1110 857 1110 L792 1110 Q782 1110 783 1100 L776 1062 Q776 1056 782 1056 Z')) +
+        g('body', '<path d="M300 780 C390 810 500 800 575 752 C660 812 760 835 858 838 C858 900 830 950 760 980 C640 1010 500 1000 420 970 C360 950 300 950 275 920 C255 870 262 815 300 780 Z" fill="' + wht + '"' + S + '/>') +
+        g('leg-1', P('M288 934 A68 68 0 0 1 424 934 C423 948 416 960 406 972 L350 1038 L262 1038 L289 950 Z') + hole(356, 932) + P('M262 1056 L336 1056 Q342 1056 341 1062 L334 1100 Q332 1110 322 1110 L256 1110 Q246 1110 248 1100 L256 1062 Q257 1056 262 1056 Z')) +
+        g('leg-2', P('M612 934 A68 68 0 0 1 748 934 C747 946 744 956 740 966 L716 1038 L634 1038 L613 950 Z') + hole(680, 932) + P('M642 1056 L712 1056 Q718 1056 719 1062 L724 1100 Q725 1110 715 1110 L644 1110 Q634 1110 635 1100 L637 1062 Q637 1056 642 1056 Z')) +
+        g('wool', '<g fill="' + lav + '"' + S + '><circle cx="565" cy="255" r="100"/><circle cx="765" cy="282" r="95"/><circle cx="922" cy="360" r="80"/><circle cx="690" cy="350" r="80"/><circle cx="850" cy="405" r="70"/></g><g fill="' + lav + '"><circle cx="565" cy="255" r="100"/><circle cx="765" cy="282" r="95"/><circle cx="922" cy="360" r="80"/><circle cx="690" cy="350" r="80"/><circle cx="850" cy="405" r="70"/></g>') +
+        g('horn', '<path d="' + spiral + '" fill="none" stroke="' + ink + '" stroke-width="98" stroke-linecap="round"/><path d="' + spiral + '" fill="none" stroke="' + mint + '" stroke-width="72" stroke-linecap="round"/><circle cx="415" cy="600" r="40" fill="' + lav + '"/>') +
+        g('head', '<path d="M535 435 C600 425 680 440 715 445 L800 425 C860 470 930 470 945 478 L970 530 C1010 545 1060 560 1065 600 C1068 640 1058 665 1050 690 C1020 760 900 805 820 805 C730 805 650 775 598 715 C630 650 645 600 640 590 C580 560 535 500 535 435 Z" fill="' + wht + '"' + S + '/>' +
+          /* 귀 안쪽: 원본처럼 짙은 퍼플로 채운 아몬드(뾰족한 끝이 왼쪽 위) */
+          '<path d="M574 466 C618 478 654 510 670 548 C638 558 606 550 589 530 C576 512 572 490 574 466 Z" fill="' + ink + '"/>' +
+          '<path d="M968 670 C990 690 1030 690 1050 665" fill="none" stroke="' + ink + '" stroke-width="14" stroke-linecap="round"/>' +
+          g('eye', '<ellipse cx="835" cy="577" rx="58" ry="62" fill="' + ink + '"/><ellipse cx="849" cy="549" rx="20" ry="16" fill="' + wht + '" transform="rotate(35 849 549)"/>')));
+  };
+  SP.sheep = function (cls) {
+    return '<svg class="sp-sheep ' + (cls || '') + '" viewBox="150 130 940 1000" aria-hidden="true" focusable="false">' + SP.sheepParts(function (n) { return 'class="' + (n === 'bod' ? 'bod' : n) + '"'; }) + '</svg>';
+  };
+  /* 큰 문장 카드 + 양: o = { meta, headline, body, ring(해결: 폴짝 + 민트 고리), ping(첫 기록: 뿔 핑), pc, side, noAv }
+     양은 상자 없이 카드 왼쪽 위 가장자리에 걸쳐 앉는다. 움직임은 상태가 바뀔 때 한 번만(components.css) */
   K.say = function (o) {
-    var av = '<span class="sp-av' + (o.ring ? ' ring' : '') + '"><img src="' + SP.IMG.sheep + '" alt="" width="36" height="36"></span>';
+    /* noAv: 한 화면에 큰 문장 카드가 둘 이상일 때(S0 예시 화면) 두 번째부터는 양을 빼서 양이 한 번만 나오게 */
+    var av = o.noAv ? '' : '<span class="sp-av' + (o.ring ? ' ring' : '') + (o.ping ? ' pinger' : '') + '">' + SP.sheep('perch') + '</span>';
     var main = '<div class="meta">' + (o.meta || '') + '</div>' + o.headline + (o.body || '');
     var card = o.pc ? '<div class="sp-hero pc"><div style="display:flex;flex-direction:column;gap:14px;min-width:0">' + main + '</div>' + (o.side || '') + '</div>' : '<div class="sp-hero">' + main + (o.side || '') + '</div>';
-    return '<section class="sp-say" aria-label="쉽앤핑이 알려 드려요">' + av + card + '</section>';
+    return '<section class="sp-say' + (o.noAv ? ' noav' : '') + '" aria-label="쉽앤핑이 알려 드려요">' + av + card + '</section>';
   };
   K.cmp = function (a, b, cls) {
     return '<div class="sp-cmp" role="img" aria-label="' + a[0] + ' ' + a[1] + '초, ' + b[0] + ' ' + b[1] + '초"><span class="v old"><span class="lb">' + a[0] + '</span><span class="n">' + a[1] + '<small>초</small></span></span><span class="arr" aria-hidden="true">→</span><span class="v ' + (cls || 'bad') + '"><span class="lb">' + b[0] + '</span><span class="n">' + b[1] + '<small>초</small></span></span></div>';
@@ -138,6 +176,8 @@ window.SP = window.SP || {};
   K.frow = function (f, focus) {
     var rt = f.st === 'wait' ? '<span class="rt"><small>아직 없어요</small></span>' : f.learning ? '<span class="rt"><small>평소 속도<br>익히는 중</small></span>' : '<span class="rt">' + f.now + '<small>평소 ' + f.usual + '</small></span>';
     var sub = f.st === 'wait' ? '아직 사용 기록이 없어요' : f.learning ? f.learning : f.deep ? '사용 ' + f.uses + '건: 성공 ' + f.deep.ok + ', 실패 ' + f.deep.fail + ', 중단 ' + f.deep.stop + ', 결과 미확인 ' + f.deep.unk : '사용 ' + f.uses.toLocaleString() + '건, 실패 ' + f.fail + '건';
+    /* f.nolink: 상세 화면을 그리지 않은 앱(독서노트)의 행 — 다른 앱 화면으로 잘못 보내지 않게 링크 없이 */
+    if (f.nolink) return '<li><div class="sp-frow ' + f.st + '"><span class="si ' + f.st + '">' + ic[f.st](20) + '<span class="sr">' + stTxt[f.st] + '</span></span><span class="nm">' + f.name + '<small>' + sub + '</small></span>' + rt + '</div></li>';
     return '<li><a class="sp-frow ' + f.st + (focus ? ' is-focus' : '') + '" href="#' + (f.deep ? 's8-result' : 's6') + '"><span class="si ' + f.st + '">' + ic[f.st](20) + '<span class="sr">' + stTxt[f.st] + '</span></span><span class="nm">' + f.name + (f.deep ? ' <span class="tag">깊게 보기</span>' : '') + '<small>' + sub + '</small></span>' + rt + '<span class="go">' + ic.chev(18) + '</span></a></li>';
   };
   K.featList = function (list, focusFirst) { return '<ul class="sp-list">' + list.map(function (f, i) { return K.frow(f, focusFirst && i === 0); }).join('') + '</ul>'; };
@@ -184,7 +224,7 @@ window.SP = window.SP || {};
   K.empty = function (title, body, act) { return '<div class="sp-empty"><b>' + title + '</b><span class="sp-sub">' + body + '</span>' + (act || '') + '</div>'; };
   K.hdr = function (title, sub, back, right) {
     /* 양은 큰 문장 카드에서만 말한다. 머리말 왼쪽 브랜드 타일은 워드마크(양 없음) */
-    return '<header class="sp-hdr">' + (back ? '<button class="sp-ibtn" aria-label="' + back + '">' + ic.back(22) + '</button>' : '<img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="30" height="30">') + '<span class="t">' + title + (sub ? '<small>' + sub + '</small>' : '') + '</span>' + (right === undefined ? '<button class="sp-ibtn" aria-label="앱 설정">' + ic.gear(20) + '</button>' : right) + '</header>';
+    return '<header class="sp-hdr">' + (back ? '<button class="sp-ibtn" aria-label="' + back + '">' + ic.back(22) + '</button>' : '<img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="30" height="30">') + '<span class="t" data-ft tabindex="-1">' + title + (sub ? '<small>' + sub + '</small>' : '') + '</span>' + (right === undefined ? '<button class="sp-ibtn" aria-label="앱 설정">' + ic.gear(20) + '</button>' : right) + '</header>';
   };
   K.top = function (crumb, right) { return '<header class="sp-top"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="30" height="30"><span class="crumb">내 앱 › <b>' + crumb + '</b></span><span style="flex:1"></span>' + (right || '<button class="sp-ibtn" aria-label="알림 설정">' + ic.bell(20) + '</button><button class="sp-ibtn" aria-label="앱 설정">' + ic.gear(20) + '</button>') + '</header>'; };
 
@@ -194,10 +234,12 @@ window.SP = window.SP || {};
     opts = opts || {};
     return '<figure class="t-' + theme + '" style="margin:0"><figcaption class="cap">휴대폰, ' + (theme === 'light' ? '밝은 모드' : '어두운 모드') + (opts.big ? ', 글자 200%' : '') + '</figcaption><div class="phone"><div class="sp' + (opts.big ? ' text-200' : '') + '" data-theme="' + theme + '"' + (opts.anim ? ' data-anim="' + opts.anim + '"' : '') + '><div class="sb" aria-hidden="true"><span>9:41</span><span class="island"></span><span class="ic">' + sbIcons + '</span></div><div class="scr">' + inner + '</div><div class="home" aria-hidden="true"><i></i></div></div></div></figure>';
   };
-  SP.browser = function (theme, inner, path, anim) {
-    return '<figure class="t-' + theme + '" style="margin:0"><figcaption class="cap">PC 브라우저, ' + (theme === 'light' ? '밝은 모드' : '어두운 모드') + '</figcaption><div class="pc-fit"><div class="browser' + (theme === 'dark' ? ' dark' : '') + '"><div class="chrome" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">' + ic.lock(12) + 'ship-and-ping.pages.dev' + path + '</span><span style="width:52px"></span></div><div class="sp" data-theme="' + theme + '"' + (anim ? ' data-anim="' + anim + '"' : '') + '>' + inner + '</div></div></div></figure>';
+  /* PC 브라우저 창(주소창 포함). o = { width: 1440 | 1280 | 720, big: 글자 200%, cap: 덧붙일 설명 } — 높이는 900 기준(내용이 길면 늘어남) */
+  SP.browser = function (theme, inner, path, anim, o) {
+    o = o || {}; var w = o.width || 1440;
+    return '<figure class="t-' + theme + '" style="margin:0"><figcaption class="cap">PC 브라우저 ' + w + '×900, ' + (theme === 'light' ? '밝은 모드' : '어두운 모드') + (o.cap ? ', ' + o.cap : '') + '</figcaption><div class="pc-fit"><div class="browser' + (theme === 'dark' ? ' dark' : '') + '" data-w="' + w + '" style="width:' + w + 'px"><div class="chrome" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">' + ic.lock(12) + 'ship-and-ping.pages.dev' + path + '</span><span style="width:52px"></span></div><div class="sp' + (o.big ? ' text-200' : '') + '" data-theme="' + theme + '"' + (anim ? ' data-anim="' + anim + '"' : '') + '>' + inner + '</div></div></div></figure>';
   };
-  SP.fit = function () { document.querySelectorAll('.pc-fit').forEach(function (w) { var b = w.firstElementChild; if (b) b.style.zoom = Math.min(1, w.clientWidth / 1240); }); };
+  SP.fit = function () { document.querySelectorAll('.pc-fit').forEach(function (w) { var b = w.firstElementChild; if (b) b.style.zoom = Math.min(1, w.clientWidth / (+b.getAttribute('data-w') || 1440)); }); };
   window.addEventListener('resize', function () { SP.fit(); });
 
   /* ---------- 동작: 복사(성공·실패 구분, 중복 누름 방지), 스위치, 움직임 다시 보기 ---------- */
@@ -217,13 +259,16 @@ window.SP = window.SP || {};
       else end(oldCopy(text));
     } catch (err) { end(false); }
   };
+  /* 값을 읽는 범위: 한 화면에 PC·태블릿 마크업(.v-full)과 숨겨진 휴대폰 화면(.v-phone)이 함께 있으므로,
+     누르거나 입력한 요소가 속한 쪽(지금 보이는 폼)만 본다. 둘 다 아니면 화면 전체(.sp) */
+  SP.scope = function (el) { return el.closest('.v-full, .v-phone, .v-wide, .v-narrow') || el.closest('.sp'); };
   function selectAll(el) { try { var r = document.createRange(); r.selectNodeContents(el); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } catch (err) {} }
   document.addEventListener('click', function (e) {
     var c = e.target.closest('[data-copy]');
     if (c) {
       if (c.getAttribute('data-state') === 'done' || c.getAttribute('aria-busy') === 'true' || c.getAttribute('aria-disabled') === 'true') return;
       var kind = c.getAttribute('data-copy'), label = c.getAttribute('data-label') || '복사';
-      var text = SP.texts[kind] ? SP.texts[kind](c.closest('.sp')) : '';
+      var text = SP.texts[kind] ? SP.texts[kind](SP.scope(c)) : '';
       var lbl = c.querySelector('.lbl'), box = c.closest('.sp-copyblock'), manual = box ? box.querySelector('.sp-copy-manual') : null;
       c.setAttribute('aria-busy', 'true');
       var force = c.hasAttribute('data-force-fail');
@@ -267,7 +312,9 @@ window.SP = window.SP || {};
   });
   function setMenu(btn, open) {
     var nav = document.getElementById(btn.getAttribute('aria-controls'));
-    btn.setAttribute('aria-expanded', String(open)); if (nav) nav.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+    /* 태블릿의 왼쪽 메뉴는 PC에서 늘 보여야 하므로 hidden 대신 .open으로(접힘은 CSS 컨테이너 쿼리가 정함) */
+    if (nav) { if (nav.classList.contains('sp-side')) nav.classList.toggle('open', open); else nav.hidden = !open; }
     if (open && nav) { var a = nav.querySelector('a'); if (a) a.focus(); }
   }
   document.addEventListener('keydown', function (e) {
@@ -278,7 +325,7 @@ window.SP = window.SP || {};
     var t = e.target;
     /* S8: 세 칸을 고치면 미리 보기 전문도 바로 바뀜(복사 내용과 같음) */
     if (t.hasAttribute && t.hasAttribute('data-deep')) {
-      var root = t.closest('.sp'), txt = SP.texts.deep(root), miss = SP.deepVals(root).missing;
+      var root = SP.scope(t), txt = SP.texts.deep(root), miss = SP.deepVals(root).missing;
       root.querySelectorAll('.sp-copyblock[data-kind="deep"] pre').forEach(function (p) { p.textContent = txt; });
       /* 빈 칸이 하나라도 있으면 복사 단추를 막고 이유를 보여 줌 */
       root.querySelectorAll('.sp-copyblock[data-kind="deep"]').forEach(function (b) {

@@ -1,0 +1,157 @@
+/* =====================================================================
+   쉽앤핑 PC 배치 (D4) — docs/design-system.md 10장과 같은 값
+   PC ≥1024px: 왼쪽 메뉴 248px + 본문(가운데, 최대 폭 1080px)
+   태블릿 640~1023px: 왼쪽 메뉴를 접고 머리말 [메뉴]로, 본문 한 열
+   휴대폰 <640px: 휴대폰 화면 그대로
+   시안에서는 창 프레임이 고정 폭이라 아래 규칙을 클래스로 그렸다. 앱에서는 같은 값을 @media로 쓴다.
+   ===================================================================== */
+.sp-desk { display: grid; grid-template-columns: 248px minmax(0, 1fr); flex: 1; min-height: 856px; }
+
+/* 왼쪽 메뉴 */
+.sp-side { display: flex; flex-direction: column; gap: 2px; padding: 20px 12px; background: var(--sp-surface); border-right: 1px solid var(--sp-line); }
+.sp-side .brand, .sp-pubbar .brand { display: flex; align-items: center; gap: 10px; font-weight: var(--sp-weight-bold); font-size: var(--sp-text-lg); color: var(--sp-ink); text-decoration: none; padding: 4px 8px 18px; }
+.sp-side .nv { display: flex; align-items: center; gap: 10px; min-height: var(--sp-touch); padding: 0 12px; border-radius: var(--sp-radius-md); color: var(--sp-ink-2); text-decoration: none; font-weight: var(--sp-weight-medium); background: none; border: 0; width: 100%; text-align: left; font-size: var(--sp-text-md); }
+.sp-side .nv[aria-current="page"] { background: var(--sp-surface-2); color: var(--sp-ink); font-weight: var(--sp-weight-bold); box-shadow: inset 3px 0 0 var(--sp-btn); }
+.sp-side .nv svg { flex: none; }
+.sp-side .sub { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 8px 22px; padding-left: 8px; border-left: 1px solid var(--sp-line-strong); }
+.sp-side .sub .appname { font-size: var(--sp-text-xs); color: var(--sp-ink-2); font-weight: var(--sp-weight-bold); padding: 6px 12px 2px; }
+.sp-side .cnt { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; margin-left: 6px; border-radius: var(--sp-radius-pill); background: var(--sp-bad-soft); color: var(--sp-bad-ink); font-size: var(--sp-text-xs); font-weight: var(--sp-weight-bold); }
+.sp-side .grow, .sp-pubbar .grow { flex: 1; }
+
+/* 본문 */
+.sp-main { min-width: 0; padding: 28px 40px 56px; }
+.sp-wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+.sp-ptitle { display: flex; flex-direction: column; gap: 4px; }
+.sp-ptitle .crumb { color: var(--sp-ink-2); font-size: var(--sp-text-sm); }
+.sp-ptitle h1 { font-size: var(--sp-text-xl); }
+.sp-ptitle .sp-seg { margin-top: 10px; }
+.sp-seg a { display: inline-flex; align-items: center; min-height: var(--sp-touch); padding: 0 14px; border-radius: 9px; color: var(--sp-ink); text-decoration: none; font-weight: var(--sp-weight-medium); font-size: var(--sp-text-sm); }
+.sp-seg a[aria-current="page"] { background: var(--sp-btn); color: var(--sp-on-btn); font-weight: var(--sp-weight-bold); }
+
+/* PC에서는 카드·구역의 휴대폰용 바깥 여백을 없애고 간격으로 나눈다 */
+.sp-desk .sp-say, .sp-public .sp-say, .sp-landing .sp-say { margin: 0; }
+.sp-desk .sp-sec, .sp-public .sp-sec { padding: 0; }
+/* 휴대폰 내용을 그대로 넣을 때: 휴대폰 머리말·200% 메뉴는 숨기고(PC는 왼쪽 메뉴가 대신함) 구역 사이 24px */
+.sp-body .sp-hdr, .sp-body .only-big-nav { display: none; }
+.sp-body > div { gap: 24px; padding-bottom: 0 !important; }
+.sp-body.narrow { max-width: 720px; }
+.sp-desk .sp-pre.scroll { max-height: 520px; }
+
+/* 넓은 화면 그리드 */
+.sp-cols { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 32px; align-items: start; }
+.sp-cols.even { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sp-cols > .side { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 16px; }
+.sp-cols > div { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.sp-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.sp-panel { background: var(--sp-surface); border: 1px solid var(--sp-line); border-radius: var(--sp-radius-md); padding: var(--sp-space-5); display: flex; flex-direction: column; gap: 12px; }
+.sp-panel h2 { font-size: var(--sp-text-md); }
+
+/* 넓은 화면의 기능 목록: 열을 맞춘 표처럼(상태·이름 | 지금 | 평소 | ›) */
+.sp-desk .sp-list a.sp-frow { display: grid; grid-template-columns: 28px minmax(0, 1fr) 120px 28px; gap: 4px 12px; padding: 10px 8px; border-radius: var(--sp-radius-sm); }
+.sp-desk .sp-list a.sp-frow .rt { margin: 0; }
+.sp-desk .sp-list a.sp-frow:hover { background: var(--sp-surface-2); }
+
+/* 로그인 전 화면 */
+.sp-public { display: flex; flex-direction: column; flex: 1; }
+.sp-pubbar { display: flex; align-items: center; gap: 8px; padding: 14px 40px; border-bottom: 1px solid var(--sp-line); }
+.sp-pubbar .brand { padding: 0; }
+.sp-wrap.pub { width: 100%; padding: 40px 40px 64px; }
+.sp-public .sp-body .sp-hdr { display: none; }
+
+/* ---------- S0 소개 페이지 (PC: 가운데 최대 폭 1120px, 휴대폰: .m 한 열) ---------- */
+.sp-landing { display: flex; flex-direction: column; flex: 1; }
+.sp-landing main { display: flex; flex-direction: column; }
+.sp-landing .lsec { width: 100%; max-width: 1120px; margin: 0 auto; padding: 56px 40px; display: flex; flex-direction: column; gap: 20px; }
+.sp-landing .lsec + .lsec { border-top: 1px solid var(--sp-line); }
+.sp-landing .hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 48px; align-items: center; padding-top: 72px; padding-bottom: 72px; }
+.sp-landing .txt { display: flex; flex-direction: column; gap: 20px; }
+.sp-landing .lt1 { font-size: calc(46px * var(--sp-scale)); line-height: 1.2; font-weight: var(--sp-weight-headline); letter-spacing: -0.03em; word-break: keep-all; }
+.sp-landing .lt { font-size: calc(28px * var(--sp-scale)); line-height: 1.3; font-weight: var(--sp-weight-num); letter-spacing: -0.02em; word-break: keep-all; }
+.sp-landing .lead { font-size: var(--sp-text-lg); color: var(--sp-ink-2); max-width: 60ch; word-break: keep-all; }
+.sp-landing .acts { display: flex; gap: 12px; flex-wrap: wrap; }
+.sp-landing .three { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.sp-landing .three.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sp-landing .three h3 { font-size: var(--sp-text-lg); }
+.sp-landing .lic { width: 40px; height: 40px; border-radius: var(--sp-radius-md); display: grid; place-items: center; }
+.sp-landing .lic.bad { background: var(--sp-bad-soft); color: var(--sp-bad-ink); } .sp-landing .lic.wait { background: var(--sp-wait-soft); color: var(--sp-wait-ink); } .sp-landing .lic.ok { background: var(--sp-ok-soft); color: var(--sp-ok-ink); }
+.sp-landing .say { font-weight: var(--sp-weight-bold); }
+.sp-landing .num .n { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--sp-btn); color: var(--sp-on-btn); font-weight: var(--sp-weight-bold); }
+.sp-landing .shot { display: flex; flex-direction: column; gap: 16px; padding: 24px; border: 1px solid var(--sp-line); border-radius: var(--sp-radius-xl); background: var(--sp-bg); }
+.sp-landing .shot .sp-say { margin: 0; }
+.sp-landing .note .from { display: flex; align-items: center; gap: 8px; color: var(--sp-ink-2); font-size: var(--sp-text-sm); }
+.sp-landing .note .lnk { color: var(--sp-ink); text-decoration: underline; text-underline-offset: 3px; font-weight: var(--sp-weight-medium); }
+.sp-landing .beta { align-items: flex-start; padding: 32px; }
+.sp-landing .lfoot { text-align: center; padding: 24px 16px 40px; border-top: 1px solid var(--sp-line); }
+.sp-landing .pic .sp-say { margin: 0; }
+/* 큰 제목: 두 줄로 끊어 한 줄을 짧게(PC 46px, 한 줄 최대 약 14자), 줄 간격 1.25, 본문 글자색 */
+.sp-landing .lt1 { text-wrap: balance; color: var(--sp-ink); }
+.sp-landing .lead.strong { color: var(--sp-ink); font-weight: var(--sp-weight-bold); font-size: calc(20px * var(--sp-scale)); }
+/* 상자에서 꺼낸 큰 양: 카드 위에 서 있다 */
+.sp-landing .pic { display: flex; flex-direction: column; align-items: flex-start; }
+.sp-landing .bigsheep { width: 220px; margin: 0 0 -28px 28px; position: relative; z-index: 1; }
+.sp-landing .bigsheep .sp-sheep { width: 100%; height: auto; display: block; overflow: visible; }
+.sp-landing .pic .sp-hero { padding-top: 40px; width: 100%; }
+.sp-landing.m .bigsheep { width: 150px; margin-left: 16px; }
+/* "연결하면 이렇게 보여요" 자리(data-slot="onboarding"): 단계마다 화면 축소본. 나중에 .frame 안을 온보딩 그림으로 바꾼다 */
+.sp-landing .flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.sp-landing .thumb { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.sp-landing .thumb .frame { --s: .58; width: calc(390px * var(--s)); height: calc(640px * var(--s)); overflow: hidden; border-radius: 18px; border: 1px solid var(--sp-line-strong); background: var(--sp-bg); }
+.sp-landing .thumb .mini { width: 390px; transform: scale(var(--s)); transform-origin: top left; pointer-events: none; }
+.sp-landing .thumb .mini .sp-av { display: none; }   /* 축소본에는 양을 넣지 않는다(이 페이지의 양은 맨 위 하나) */
+.sp-landing .thumb .mini .sp-say:not(.noav) > .sp-hero { padding-top: 20px; }
+.sp-landing .thumb figcaption { display: flex; flex-direction: column; gap: 2px; }
+.sp-landing .thumb figcaption .n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--sp-btn); color: var(--sp-on-btn); font-weight: var(--sp-weight-bold); font-size: var(--sp-text-sm); margin-bottom: 4px; }
+.sp-landing.m .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.sp-landing.m .thumb .frame { --s: .4; }
+/* 원본 PNG와 SVG 비교 */
+.sp-compare { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; padding: 40px; align-items: start; }
+.sp-compare figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.sp-compare .box { aspect-ratio: 1; border-radius: 16px; display: grid; place-items: center; border: 1px solid var(--sp-line); overflow: hidden; }
+.sp-compare .box.dark { background: #261B40; } .sp-compare .box.light { background: var(--sp-bg); }
+.sp-compare .box img { width: 100%; height: 100%; object-fit: contain; }
+.sp-compare .box .sp-sheep { width: 78%; height: auto; overflow: visible; }
+.sp-compare.m { grid-template-columns: 1fr; padding: 16px; }
+/* 휴대폰 */
+.sp-pubbar.m { padding: 6px 12px 10px 16px; border-bottom: 0; }
+.sp-landing.m .lsec { padding: 32px 16px; gap: 16px; }
+.sp-landing.m .hero, .sp-landing.m .three, .sp-landing.m .three.two { grid-template-columns: 1fr; gap: 16px; }
+.sp-landing.m .hero { padding-top: 16px; padding-bottom: 32px; }
+.sp-landing.m .lt1 { font-size: calc(32px * var(--sp-scale)); }
+.sp-landing.m .lt { font-size: calc(24px * var(--sp-scale)); }
+.sp-landing.m .shot { padding: 12px; }
+
+/* =====================================================================
+   너비별 배치 — 실제 너비로 고른다(컨테이너 쿼리).
+   컨테이너: 화면 모음의 창 프레임(.browser > .sp)과 live.html의 페이지 전체(.sp.live = 브라우저 창 너비).
+   앱 구현에서는 같은 값을 @media (max-width: 1023px) / (max-width: 639px)로 쓴다(페이지 전체가 컨테이너인 것과 같음).
+   ===================================================================== */
+.browser > .sp, .sp.live { container-type: inline-size; container-name: page; }
+.v-full, .v-wide { display: flex; flex-direction: column; flex: 1; }
+.v-full.sp-desk { display: grid; }
+.v-phone, .v-narrow { display: none; flex-direction: column; flex: 1; }
+.sp-tbar { display: none; align-items: center; gap: 12px; padding: 10px 24px; border-bottom: 1px solid var(--sp-line); background: var(--sp-surface); }
+.sp-tbar .brand { display: flex; align-items: center; gap: 8px; font-weight: var(--sp-weight-bold); color: var(--sp-ink); text-decoration: none; }
+.sp-tbar .where { margin-left: auto; color: var(--sp-ink-2); font-size: var(--sp-text-sm); }
+
+/* ---------- 태블릿 640~1023: 왼쪽 메뉴를 접고 위쪽 줄 [메뉴]로, 본문 한 열 ---------- */
+@container page (max-width: 1023px) {
+  .v-wide { display: none; }
+  .v-narrow { display: flex; }                         /* 소개 페이지는 한 열 배치 */
+  .v-full.sp-desk { display: flex; flex-direction: column; }
+  .sp-tbar { display: flex; }
+  .sp-desk .sp-side { display: none; border-right: 0; border-bottom: 1px solid var(--sp-line); padding: 12px 24px; }
+  .sp-desk .sp-side.open { display: flex; }
+  .sp-desk .sp-side .brand, .sp-desk .sp-side .grow { display: none; }
+  .sp-desk .sp-main { padding: 24px 24px 48px; }
+  .sp-cols, .sp-cols.even, .sp-grid3, .sp-hero.pc { grid-template-columns: minmax(0, 1fr); }
+  .sp-cols > .side { position: static; }
+  .sp-public .sp-wrap.pub { padding: 24px 24px 48px; }
+  .sp-public .sp-pubbar { padding: 12px 24px; }
+}
+/* ---------- 휴대폰 <640: 휴대폰 화면 그대로 ---------- */
+@container page (max-width: 639px) {
+  .v-full { display: none !important; }
+  .v-phone { display: flex; }
+}
+/* live.html: 화면 하나를 브라우저 창 전체로 */
+.sp.live { min-height: 100vh; display: flex; flex-direction: column; }
