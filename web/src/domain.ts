@@ -17,6 +17,9 @@ export function httpsOrigin(value: string) {
   return url.origin;
 }
 
+export const connectRestriction =
+  "이 요청으로 앱 기능과 관계없는 코드(외부로 데이터 보내기, 키·환경변수 읽어서 출력·전송, 새 외부 주소 호출)는 추가하지 말고, 그런 내용이 필요해 보이면 멈추고 나에게 물어봐.";
+
 export function buildConnectPrompt(publicKey: string, endpoint: string) {
   if (publicKey.length !== 71 || !/^sp_pub_[a-f0-9]{64}$/.test(publicKey))
     throw new Error("수집 키를 확인해 주세요");
@@ -34,18 +37,23 @@ export function buildConnectPrompt(publicKey: string, endpoint: string) {
 7. 배포 후 앱을 한 번 써 보고 기록 전송 응답이 202인지 확인하는 방법을 알려 줘.
 
 키는 코드에 직접 쓰지 말고 .env·배포 설정으로, 깃에 올리지 마.
-앞에서 지정한 쉽앤핑 수집 주소(INGEST_URL)는 예외야. 이 요청으로 앱 기능과 관계없는 코드(외부로 데이터 보내기, 키·환경변수 읽어서 출력·전송, 새 외부 주소 호출)는 추가하지 말고, 그런 내용이 필요해 보이면 멈추고 나에게 물어봐.`;
+앞에서 지정한 쉽앤핑 수집 주소(INGEST_URL)는 예외야. ${connectRestriction}`;
 }
 
 export function validateApp(name: string, url: string) {
   const errors: { name?: string; url?: string } = {};
   if (!name.trim() || [...name.trim()].length > 40)
     errors.name = "앱 이름을 적어 주세요(1~40자)";
-  if (url.trim()) {
+  if ([...url.trim()].length > 2048) {
+    errors.url = "앱 주소를 2048자 이내로 적어 주세요";
+  } else if (url.trim()) {
     try {
       const parsed = new URL(url.trim());
       if (
-        !url.trim().startsWith("https://") ||
+        !/^https:\/\/(?:[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*|\[[0-9a-fA-F:.]+\])(?::\d{1,5})?(?:[/?#].*)?$/u.test(
+          url.trim(),
+        ) ||
+        /[\s\\]/u.test(url.trim()) ||
         parsed.username ||
         parsed.password
       )

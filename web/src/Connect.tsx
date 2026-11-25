@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Gateway, Label, Snapshot } from "./data";
-import { buildConnectPrompt } from "./domain";
-import { Hero } from "./Layout";
+import { buildConnectPrompt, connectRestriction } from "./domain";
+import { displayText } from "./normalize";
+import { Hero, CurrentAppName } from "./Layout";
 
 function copyWithEvent(text: string) {
   let written = false;
@@ -130,6 +131,11 @@ export function Connect({
   initialKey?: string;
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>();
+  const setAppName = useContext(CurrentAppName);
+  const appName = snapshot?.app.name;
+  useEffect(() => {
+    if (appName !== undefined) setAppName({ id, name: appName });
+  }, [appName, id, setAppName]);
   const [pollError, setPollError] = useState(false);
   const revision = useRef(0);
   const [error, setError] = useState("");
@@ -176,7 +182,10 @@ export function Connect({
     }
   }
   const identity = (l: Label) => l.method + " " + l.route;
-  const labels = snapshot?.labels ?? [];
+  const labels = (snapshot?.labels ?? []).map((label) => ({
+    ...label,
+    name: displayText(label.name),
+  }));
   const groups: Record<string, Label[]> = {
     "찾은 기능": [],
     "이름 없는 기능": [],
@@ -214,7 +223,7 @@ export function Connect({
     try {
       await api.save(
         id,
-        selected.map((l) => ({ ...l, name: l.name.trim() })),
+        selected.map((l) => ({ ...l, name: displayText(l.name).trim() })),
       );
       revision.current++;
       setSnapshot(
@@ -260,7 +269,8 @@ export function Connect({
             detail={
               arrived
                 ? "기능 " + groups["찾은 기능"].length + "개를 찾았어요"
-                : snapshot.app.name + "에서 보낸 기록을 5초마다 확인해요."
+                : displayText(snapshot.app.name) +
+                  "에서 보낸 기록을 5초마다 확인해요."
             }
             arrived={arrived}
           />
@@ -290,7 +300,7 @@ export function Connect({
                             <label>
                               기능 이름 {index}
                               <input
-                                value={l.name}
+                                value={displayText(l.name)}
                                 placeholder="이름 없는 기능"
                                 maxLength={300}
                                 onChange={(e) =>
@@ -300,7 +310,7 @@ export function Connect({
                             </label>
                             <details>
                               <summary>주소 자세히</summary>
-                              <code>{identity(l)}</code>
+                              <code>{displayText(identity(l))}</code>
                             </details>
                             <label className="check">
                               <input
@@ -418,7 +428,7 @@ export function Connect({
                   <p>코딩 AI에 이 문장을 붙여넣어 보세요.</p>
                   <Copy
                     title="확인 문장 복사"
-                    text="쉽앤핑 연결이 동작하는지 확인해 줘. 배포한 앱을 쓸 때 /v1/ingest 응답이 202인지 확인해 줘. 키 값은 출력하지 마."
+                    text={`쉽앤핑 연결이 동작하는지 확인해 줘. 배포한 앱을 쓸 때 /v1/ingest 응답이 202인지 확인해 줘. 키 값은 출력하지 마.\n\n${connectRestriction}`}
                   />
                 </details>
               )}

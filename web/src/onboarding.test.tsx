@@ -72,10 +72,13 @@ it("서버 키 복사는 현재 앱에 한정되고 요청문은 다시 복사�
   vi.useRealTimers();
   fireEvent.click(copy);
   expect(writeText.mock.calls[0][0]).toBe(writeText.mock.calls[1][0]);
+  expect(writeText.mock.calls[0][0]).toBe(buildConnectPrompt(pub, base));
   fireEvent.click(screen.getByRole("button", { name: "서버 키 발급" }));
   fireEvent.click(await screen.findByRole("button", { name: "서버 키 복사" }));
   expect(writeText).toHaveBeenLastCalledWith(secret);
-  expect(document.body.innerHTML).not.toContain(secret);
+  expect(new XMLSerializer().serializeToString(document.body)).not.toContain(
+    secret,
+  );
   fireEvent.click(screen.getByRole("link", { name: "내 앱" }));
   fireEvent.click(await screen.findByRole("link", { name: /두 번째 앱/ }));
   fireEvent.click(await screen.findByRole("button", { name: "서버 키 발급" }));
@@ -113,6 +116,7 @@ it("클립보드가 막히면 직접 복사할 전문을 선택한다", async ()
   ) as HTMLTextAreaElement;
   expect(document.activeElement).toBe(field);
   expect(field.selectionEnd - field.selectionStart).toBe(field.value.length);
+  expect(field.value).toBe(buildConnectPrompt(pub, base));
 });
 it("등록한 수집 키는 미리 보기에서 가리고 화면을 다시 열면 폐기한다", async () => {
   const api = fake();
@@ -178,8 +182,68 @@ it("서버 키 복사가 거절되어도 DOM에 원문을 남기지 않는다", 
   fireEvent.click(await screen.findByRole("button", { name: "서버 키 발급" }));
   fireEvent.click(await screen.findByRole("button", { name: "서버 키 복사" }));
   expect(await screen.findByText(/브라우저의 복사 권한/)).toBeTruthy();
-  expect(document.body.innerHTML).not.toContain(secret);
+  expect(new XMLSerializer().serializeToString(document.body)).not.toContain(
+    secret,
+  );
   expect(screen.queryByLabelText("서버 키 복사 전문")).toBeNull();
+});
+it("회원 앱 카드·연결 안내·이름표·주소는 가린 글자로 보인다", async () => {
+  const api = fake();
+  const name = "＜em＞앱＜/em＞ ＳＰ＿ＳＲＶ＿private";
+  vi.mocked(api.apps).mockResolvedValue([{ ...app, name }]);
+  vi.mocked(api.snapshot).mockResolvedValue({
+    app: { ...app, name, created_at: "2020-01-01" },
+    labels: [
+      {
+        id: "f",
+        method: "GET",
+        route: "/xPk_fixture/<b>",
+        name: "기능 &lt;b&gt; s\u200bk_fixture",
+        hidden: false,
+      },
+    ],
+  });
+  open("/apps", api);
+  const link = await screen.findByRole("link", {
+    name: /<em>앱<\/em> \[가림\]/,
+  });
+  expect(link.querySelector("em")).toBeNull();
+  fireEvent.click(link);
+  expect(
+    await screen.findByText(/앱<\/em> \[가림\]에서 보낸 기록/),
+  ).toBeTruthy();
+  expect(screen.getByDisplayValue("기능 &lt;b&gt; [가림]")).toBeTruthy();
+  expect(screen.getByText("GET /x[가림]/<b>").children.length).toBe(0);
+  for (const selector of [".compact", "#member-menu"]) {
+    const menu = document.querySelector(selector)!;
+    expect(menu.textContent).toContain("<em>앱</em> [가림]");
+    expect(menu.querySelector("em")).toBeNull();
+  }
+  const check = screen.getByLabelText(
+    "확인 문장 복사 전문",
+  ) as HTMLTextAreaElement;
+  expect(check.value).toContain("멈추고 나에게 물어봐");
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "확인 문장 복사" }));
+  expect(writeText).toHaveBeenCalledWith(check.value);
+  expect(check.value).not.toMatch(
+    /(?:sp_srv|sp_pub|sb_secret|sb_publishable)_/i,
+  );
+});
+it("로그인 이메일은 보이는 원문대로 제출한다", async () => {
+  const api = fake(null);
+  open("/login", api);
+  const email = (await screen.findByLabelText(
+    "이메일 주소",
+  )) as HTMLInputElement;
+  fireEvent.change(email, { target: { value: "sk_fixture@example.test" } });
+  expect(email.value).toBe("sk_fixture@example.test");
+  fireEvent.click(screen.getByRole("button", { name: "이메일 링크 받기" }));
+  await waitFor(() => expect(api.login).toHaveBeenCalledWith(email.value));
 });
 function open(path: string, api = fake()) {
   return render(
@@ -208,6 +272,9 @@ describe("연결 요청문과 등록 입력", () => {
     expect(validateApp("   ", "")).toHaveProperty("name");
     expect(validateApp("가".repeat(41), "")).toHaveProperty("name");
     expect(validateApp("가", "http://example.org")).toHaveProperty("url");
+    expect(
+      validateApp("가", "https://example.test/" + "a".repeat(2048)),
+    ).toHaveProperty("url");
     expect(validateApp("가".repeat(40), "")).toEqual({});
   });
 });

@@ -1,18 +1,20 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link, useLocation } from "react-router-dom";
-import sheep from "./assets/sheep.svg?raw";
+import { Sheep } from "./Sheep";
+import { displayText } from "./normalize";
 import mark from "./assets/wordmark.png";
 
-function Sheep({ large = false }: { large?: boolean }) {
-  // 로컬 브랜드 원본만 삽입해 부위별 SVG 움직임을 유지한다.
-  return (
-    <span
-      aria-hidden="true"
-      className={large ? "sheep large" : "sheep"}
-      dangerouslySetInnerHTML={{ __html: sheep }}
-    />
-  );
-}
+type AppHeading = { id: string; name: string };
+export const CurrentAppName = createContext<(heading: AppHeading) => void>(
+  () => {},
+);
+
 export function Hero({
   title,
   detail,
@@ -62,6 +64,11 @@ export function Shell({
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const { pathname } = useLocation();
+  const [heading, setHeading] = useState<AppHeading>();
+  const currentName =
+    heading && pathname === "/apps/" + heading.id + "/connect"
+      ? displayText(heading.name)
+      : "";
   const toggle = useRef<HTMLButtonElement>(null);
   const first = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
@@ -83,6 +90,7 @@ export function Shell({
       </a>
       <header className="compact">
         <Brand />
+        {currentName && <span>{currentName}</span>}
         <button
           ref={toggle}
           aria-controls="member-menu"
@@ -103,6 +111,7 @@ export function Shell({
           >
             내 앱
           </Link>
+          {currentName && <small>{currentName}</small>}
           {(pathname.endsWith("/connect")
             ? ["앱 홈", "기능", "문제", "앱 설정", "알림 설정", "내 계정"]
             : ["알림 설정", "내 계정"]
@@ -133,7 +142,9 @@ export function Shell({
         </nav>
       </aside>
       <main id="main" className="workspace">
-        {children}
+        <CurrentAppName.Provider value={setHeading}>
+          {children}
+        </CurrentAppName.Provider>
       </main>
     </div>
   );

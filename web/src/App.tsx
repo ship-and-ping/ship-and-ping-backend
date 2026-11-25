@@ -10,6 +10,7 @@ import {
 } from "react-router-dom";
 import type { AppSummary, Gateway } from "./data";
 import { validateApp } from "./domain";
+import { displayText } from "./normalize";
 import { Hero, Landing, PublicBar, Shell } from "./Layout";
 import { Connect } from "./Connect";
 
@@ -92,7 +93,7 @@ function Login({ api }: { api: Gateway }) {
                   required
                   type="email"
                   autoComplete="email"
-                  value={email}
+                  value={displayText(email, "login-email")}
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </label>
@@ -204,7 +205,7 @@ function Apps({ api }: { api: Gateway }) {
                       ? "⊙ 괜찮아요"
                       : "◷ 기록을 기다려요"}
                 </span>
-                <h2>{app.name}</h2>
+                <h2>{displayText(app.name)}</h2>
                 <p>열린 문제 {app.issues}개</p>
                 <small>
                   마지막 기록 {app.last ? relative(app.last) : "없음"}
