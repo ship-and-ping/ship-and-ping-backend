@@ -322,12 +322,22 @@ window.SP = window.SP || {};
     return '<div class="sp-cmp" role="img" aria-label="' + a[0] + ' ' + a[1] + '초, ' + b[0] + ' ' + b[1] + '초"><span class="v old"><span class="lb">' + a[0] + '</span><span class="n">' + a[1] + '<small>초</small></span></span><span class="arr" aria-hidden="true">→</span><span class="v ' + (cls || 'bad') + '"><span class="lb">' + b[0] + '</span><span class="n">' + b[1] + '<small>초</small></span></span></div>';
   };
   /* 기능 행: 행 전체가 기능 상세(S6)로 가는 링크 — Tab으로 닿고 Enter로 연다. focus: 초점 모습 시연 */
+  /* 앱 값 안전 사본: 화면에 넣을 기능 정보는 여기서 한 번에 SP.show(정규화·가림·이스케이프)를 거친다.
+     기능 행은 링크가 있든 없든 이 사본만 쓴다(분기마다 따로 처리하다 빠뜨리는 일이 없게) */
+  SP.safeFeature = function (f) {
+    var st = /^(ok|bad|wait)$/.test(f.st) ? f.st : 'wait';   /* 클래스·아이콘 이름도 정해진 값만 */
+    var n = function (x) { return SP.show(x == null ? '' : x); };
+    return { st: st, name: n(f.name), now: n(f.now), usual: n(f.usual), learning: f.learning ? n(f.learning) : '',
+      uses: n(Number(f.uses || 0).toLocaleString()), fail: n(Number(f.fail || 0)), deep: f.deep ? { ok: n(f.deep.ok), fail: n(f.deep.fail), stop: n(f.deep.stop), unk: n(f.deep.unk) } : null };
+  };
   K.frow = function (f, focus) {
-    var rt = f.st === 'wait' ? '<span class="rt"><small>아직 없어요</small></span>' : f.learning ? '<span class="rt"><small>평소 속도<br>익히는 중</small></span>' : '<span class="rt">' + f.now + '<small>평소 ' + f.usual + '</small></span>';
-    var sub = f.st === 'wait' ? '아직 사용 기록이 없어요' : f.learning ? f.learning : f.deep ? '사용 ' + f.uses + '건: 성공 ' + f.deep.ok + ', 실패 ' + f.deep.fail + ', 중단 ' + f.deep.stop + ', 결과 미확인 ' + f.deep.unk : '사용 ' + f.uses.toLocaleString() + '건, 실패 ' + f.fail + '건';
-    /* f.nolink: 상세 화면을 그리지 않은 앱(독서노트)의 행 — 다른 앱 화면으로 잘못 보내지 않게 링크 없이 */
-    if (f.nolink) return '<li><div class="sp-frow ' + f.st + '"><span class="si ' + f.st + '">' + ic[f.st](20) + '<span class="sr">' + stTxt[f.st] + '</span></span><span class="nm">' + SP.show(f.name) + '<small>' + sub + '</small></span>' + rt + '</div></li>';
-    return '<li><a class="sp-frow ' + f.st + (focus ? ' is-focus' : '') + '" href="#' + (f.deep ? 's8-result' : 's6') + '"><span class="si ' + f.st + '">' + ic[f.st](20) + '<span class="sr">' + stTxt[f.st] + '</span></span><span class="nm">' + f.name + (f.deep ? ' <span class="tag">깊게 보기</span>' : '') + '<small>' + sub + '</small></span>' + rt + '<span class="go">' + ic.chev(18) + '</span></a></li>';
+    var v = SP.safeFeature(f);   /* 아래에서는 v만 쓴다. f의 글자를 직접 넣지 않는다 */
+    var rt = v.st === 'wait' ? '<span class="rt"><small>아직 없어요</small></span>' : v.learning ? '<span class="rt"><small>평소 속도<br>익히는 중</small></span>' : '<span class="rt">' + v.now + '<small>평소 ' + v.usual + '</small></span>';
+    var sub = v.st === 'wait' ? '아직 사용 기록이 없어요' : v.learning ? v.learning : v.deep ? '사용 ' + v.uses + '건: 성공 ' + v.deep.ok + ', 실패 ' + v.deep.fail + ', 중단 ' + v.deep.stop + ', 결과 미확인 ' + v.deep.unk : '사용 ' + v.uses + '건, 실패 ' + v.fail + '건';
+    var body = '<span class="si ' + v.st + '">' + ic[v.st](20) + '<span class="sr">' + stTxt[v.st] + '</span></span><span class="nm">' + v.name + (v.deep ? ' <span class="tag">깊게 보기</span>' : '') + '<small>' + sub + '</small></span>' + rt;
+    /* f.nolink: 상세 화면을 그리지 않은 앱의 행 — 다른 앱 화면으로 잘못 보내지 않게 링크 없이(내용은 같은 body) */
+    if (f.nolink) return '<li><div class="sp-frow ' + v.st + '">' + body + '</div></li>';
+    return '<li><a class="sp-frow ' + v.st + (focus ? ' is-focus' : '') + '" href="#' + (v.deep ? 's8-result' : 's6') + '">' + body + '<span class="go">' + ic.chev(18) + '</span></a></li>';
   };
   K.featList = function (list, focusFirst) { return '<ul class="sp-list">' + list.map(function (f, i) { return K.frow(f, focusFirst && i === 0); }).join('') + '</ul>'; };
   /* 이름 없는 기능은 상태가 아니므로 상태 색을 쓰지 않는다(연필 아이콘 + 보조 글자색) */

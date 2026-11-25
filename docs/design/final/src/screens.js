@@ -29,7 +29,7 @@
   add({ id: 's2', group: 'S2 내 앱 목록', title: 'S2 내 앱 목록 (앱 3개, 한도 도달)',
     desc: '앱 카드마다 상태·열린 문제 수·마지막 기록 시각. 문제 있는 앱이 맨 위. 무료 베타 한도(앱 3개)에 닿으면 등록 단추를 비활성으로 두고 이유를 바로 옆에 쓴다. 휴대폰은 머리말 오른쪽 사람 아이콘이 S11 내 계정으로 가는 길이고, PC는 왼쪽 메뉴의 "내 계정"이다. PC에서는 앱 카드를 3열로 놓는다.',
     mobile: function () {
-      var card = function (name, st, line) { return '<a class="sp-appcard" href="#' + SP.APPS[name].home + '"><span class="r"><b>' + name + '</b>' + K.status(st) + '</span><span class="sp-sub">' + line + '</span></a>'; };
+      var card = function (name, st, line) { return '<a class="sp-appcard" href="#' + SP.APPS[name].home + '"><span class="r"><b>' + esc(name) + '</b>' + K.status(st) + '</span><span class="sp-sub">' + line + '</span></a>'; };
       return wrap(K.hdr('내 앱', '쉽앤핑', null, '<a class="sp-ibtn" href="#s11" aria-label="내 계정">' + ic.user(22) + '</a>') +
         sec('<h1>앱 3개</h1>' + card('모임모아', 'bad', '열린 문제 1개, 마지막 기록 1분 전') + card('독서노트', 'ok', '마지막 기록 12분 전') + card('우리동네 장터', 'wait', '연결을 마치면 첫 기록이 와요') +
           '<button class="sp-btn line block" aria-disabled="true" aria-describedby="lim">' + ic.plus(18) + '앱 등록하기</button><p class="sp-sub" id="lim">무료 베타는 앱 3개까지예요. 앱을 지우면 새로 등록할 수 있어요.</p>' +
@@ -369,7 +369,7 @@
   /* ---------------- S11 내 계정 ---------------- */
   var EMAIL = 'moim.maker@example.com';
   /* 앱마다 그 앱의 알림 설정 화면으로 간다: 모임모아 → s9, 독서노트 → s9-dokseo, 우리동네 장터 → s9-none */
-  var appAlert = function (name, line, href) { return '<li><a class="sp-frow" href="#' + href + '"><span class="si none">' + ic.bell(18) + '</span><span class="nm">' + name + '<small>' + line + '</small></span><span class="go">' + ic.chev(18) + '</span></a></li>'; };
+  var appAlert = function (name, line, href) { return '<li><a class="sp-frow" href="#' + href + '"><span class="si none">' + ic.bell(18) + '</span><span class="nm">' + esc(name) + '<small>' + line + '</small></span><span class="go">' + ic.chev(18) + '</span></a></li>'; };
   var s11Parts = {
     account: function () { return sec('<h2>계정</h2><dl class="sp-kv"><div><dt>로그인한 이메일</dt><dd>' + EMAIL + '</dd></div><div><dt>로그인 방식</dt><dd>Google</dd></div></dl>'); },
     alerts: function (none) {
@@ -515,7 +515,7 @@
 
   /* S2: 앱 카드를 3열로 */
   setPc(['s2'], function () {
-    var card = function (name, st, line, href) { return '<a class="sp-appcard" href="#' + href + '"><span class="r"><b>' + name + '</b>' + K.status(st) + '</span><span class="sp-sub">' + line + '</span></a>'; };
+    var card = function (name, st, line, href) { return '<a class="sp-appcard" href="#' + href + '"><span class="r"><b>' + esc(name) + '</b>' + K.status(st) + '</span><span class="sp-sub">' + line + '</span></a>'; };
     return '<div class="sp-grid3">' + card('모임모아', 'bad', '열린 문제 1개, 마지막 기록 1분 전', 's5') + card('독서노트', 'ok', '마지막 기록 12분 전', 's5-dokseo') + card('우리동네 장터', 'wait', '연결을 마치면 첫 기록이 와요', 's5-jangteo') + '</div>' +
       '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><button class="sp-btn line" aria-disabled="true" aria-describedby="limpc">' + ic.plus(18) + '앱 등록하기</button><p class="sp-sub" id="limpc">무료 베타는 앱 3개까지예요. 앱을 지우면 새로 등록할 수 있어요.</p></div>';
   });
