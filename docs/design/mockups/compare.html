@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>쉽앤핑 시안 비교</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Gowun+Dodum&family=Jua&family=Noto+Sans+KR:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/common.css">
+<link rel="stylesheet" href="src/a.css">
+<link rel="stylesheet" href="src/b.css">
+<link rel="stylesheet" href="src/c.css">
+<style>
+.cgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;align-items:start}
+.ccol{min-width:0}
+.ctitle{margin:0 0 6px;font-size:15px}
+body.view-pc .cgrid{grid-template-columns:1fr}
+@media (max-width:900px){.cgrid{grid-template-columns:1fr}}
+.cmp-table td{min-width:220px}
+.brandrow{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+.brandrow img{width:56px;height:56px;border-radius:14px}
+.rank{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0 0}
+.rank div{flex:1 1 240px;background:var(--pg-card);border:1px solid var(--pg-line);border-radius:12px;padding:14px 16px}
+.rank b{font-size:17px}
+</style>
+</head>
+<body>
+<div class="pg">
+<div class="brandrow"><img src="../brand/ship-and-ping-wordmark.png" alt="Ship &amp; Ping" width="56" height="56"><h1 style="margin:0">쉽앤핑 디자인 시안 비교</h1></div>
+<p class="lead">방향이 다른 시안 3개를 같은 흐름(S4 연결 → S5 앱 홈 → S7 문제 상세)으로 나란히 놓았다. 예시 앱은 "모임모아", 문구와 숫자는 PRD 4장 시나리오 그대로다. 사용자 흐름 전체는 <code>docs/monitoring-service-ux.md</code>.</p>
+<div class="rank" aria-label="추천 순위">
+<div><b>1순위: 시안 C 한 문장 알림 카드</b><br><span class="note">가장 중요한 한 문장을 퍼플 카드에 크게. 알림 링크로 열었을 때 가장 빨리 읽힌다.</span></div>
+<div><b>2순위: 시안 A 조용한 상태 보드</b><br><span class="note">단정한 현황판. 가장 안전하고 기능이 많아져도 버틴다.</span></div>
+<div><b>3순위: 시안 B 양이 먼저 말해 줘요</b><br><span class="note">마스코트가 대화로 안내. 개성은 가장 강하지만 매일 훑어보기엔 느리다.</span></div>
+</div>
+<div class="toolbar" role="group" aria-label="보기 설정">
+<span class="seg" role="group" aria-label="화면 모드"><button data-pt="light" aria-pressed="true">밝은 모드</button><button data-pt="dark" aria-pressed="false">어두운 모드</button></span>
+<span class="seg" role="group" aria-label="기기"><button data-view="phone" aria-pressed="true">휴대폰</button><button data-view="pc" aria-pressed="false">PC 브라우저</button></span>
+<a class="pg-btn" href="option-a.html" style="text-decoration:none">시안 A 전체</a><a class="pg-btn" href="option-b.html" style="text-decoration:none">시안 B 전체</a><a class="pg-btn" href="option-c.html" style="text-decoration:none">시안 C 전체</a>
+</div>
+<main id="mount"></main>
+<h2>시안별 설명</h2>
+<p class="note" id="fonts"></p>
+<div id="specs"></div>
+<h2>명도 대비 (WCAG AA)</h2>
+<div id="contrast"></div>
+<h2>공통으로 지킨 것</h2>
+<ul class="note">
+<li>상태는 세 가지(괜찮아요 / 문제 있어요 / 기록을 기다려요)이고, 색과 함께 모양이 다른 아이콘과 글자를 같이 쓴다. 색을 구분하기 어려워도 읽힌다.</li>
+<li>주소(<code>/api/...</code>)·오류 원문·버전 값은 [자세히]와 AI에 보낼 내용 안에만 둔다.</li>
+<li>누르는 곳은 최소 44×44px, 키보드 초점은 3px 테두리로 보인다. 복사 버튼은 누르면 "복사했어요"로 바뀌고 화면 읽기 프로그램에 알리며, 바뀌어 있는 동안 다시 눌러도 동작하지 않는다(중복 방지).</li>
+<li>움직임은 "첫 기록 도착"과 "해결됐어요" 두 순간에만, 0.3초 안팎으로 한 번. 기기의 동작 줄이기 설정이 켜져 있으면 위치 이동 없이 투명도만 바뀐다.</li>
+<li>시안은 정상 흐름만 그렸다. 로딩·빈 화면·오류 문구와 복구 경로는 흐름 문서 4장에 화면별로 정리했고, 고른 시안으로 다음 단계에서 그린다.</li>
+<li>마스코트·워드마크 원본은 퍼플 배경 512px라 화면 안에서는 아이콘 타일로만 썼다. 마스코트를 크게 쓰거나 밝은 바탕에 올리려면 <b>투명 배경 버전 필요</b>.</li>
+</ul>
+</div>
+<script src="src/common.js"></script>
+<script src="src/a.js"></script>
+<script src="src/b.js"></script>
+<script src="src/c.js"></script>
+<script src="src/page.js"></script>
+<script>SP.initCompare();</script>
+</body>
+</html>
