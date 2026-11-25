@@ -47,7 +47,26 @@ try {
         await page.locator(ready).first().waitFor({timeout:12000});
         if (scale===2) await page.addStyleTag({content:"html { font-size: 200% !important }"});
         await page.evaluate(()=>window.scrollTo(0,0));
+        if (phase === "after" && path === "/") {
+          const example = page.getByRole("region", {name:"예시 화면", exact:true});
+          await example.getByRole("button", {name:"문제 상세", exact:true}).click();
+          await example.getByRole("heading", {name:"모임 신청 20건 중 6건 실패"}).waitFor();
+          await example.getByRole("button", {name:"앱 홈", exact:true}).click();
+          await page.evaluate(()=>window.scrollTo(0,0));
+        }
+        if (phase === "after" && path.endsWith("/issues/example") && state === "failure") {
+          await page.getByRole("heading", {name:"모임 신청 20건 중 6건 실패"}).waitFor();
+          const title = page.locator(".monitor h1");
+          if (!await title.evaluate(el => el === document.activeElement && getComputedStyle(el).outlineStyle === "none"))
+            throw Error("Issue heading focus");
+          if (!await page.getByRole("button", {name:"문제 아님으로 닫기"}).evaluate(el => el.classList.contains("secondary")))
+            throw Error("Dismiss action hierarchy");
+        }
         const overflow = await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth);
+        if (phase === "after" && width === 390 && scale === 1) {
+          const endings = await page.evaluate(shortKoreanEndings);
+          if (endings.length) console.warn("Short last lines", index, endings);
+        }
         const issues = [];
         if (phase === "after") {
           await page.addScriptTag({path:require.resolve("axe-core/axe.min.js")});
@@ -74,11 +93,58 @@ try {
       } finally { await page.close(); }
     }
   }
+  if (phase === "after") {
+    const motionDir = resolve(dir, "../motion");
+    const page = await browser.newPage({viewport:{width: 980, height: 720},
+      recordVideo:{dir:motionDir,size:{width: 800,height: 588}}, reducedMotion:"no-preference",
+      locale:"ko-KR",timezoneId:"Asia/Seoul",serviceWorkers:"block"});
+    const video = page.video();
+    try {
+      await mockPage(page, "normal", false, origin);
+      await page.goto(origin);
+      await page.locator(".intro h1").waitFor();
+      await page.waitForTimeout(850);
+      for (const selector of [".review-story", ".answers", ".product-example", ".alert-examples", ".section-heading[data-mood]"]) {
+        await page.locator(selector).evaluate(el => el.scrollIntoView({behavior:"smooth",block:"center"}));
+        await page.waitForTimeout(1100);
+        if (selector === ".product-example") {
+          await page.getByRole("button",{name:"문제 상세",exact:true}).click();
+          await page.waitForTimeout(650);
+        }
+      }
+    } finally { await page.close(); }
+    await video.saveAs(resolve(motionDir, "landing.webm"));
+    await video.delete();
+  }
   await writeFile(resolve(dir,"results.json"),JSON.stringify(entries,null,2)+"\n");
   console.log(entries.length+" screenshots in "+dir);
   if (phase === "after" && entries.some(entry=>entry.issues.length || entry.overflow > 1))
     throw Error("Review overflow or axe findings in results.json");
 } finally { await browser?.close(); await server.close(); }
+
+// Inspect rendered lines, including text split across inline markup.
+function shortKoreanEndings() {
+  const findings = [];
+  for (const el of document.querySelectorAll("main :is(h1,h2,h3,p,small,label,button,summary,dd,blockquote)")) {
+    if (!el.checkVisibility() || el.childElementCount && el.querySelector("input,button,p")) continue;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const lines = new Map();
+    const range = document.createRange();
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (let i = 0; i < node.length; i++) {
+        range.setStart(node,i);
+        range.setEnd(node,i+1);
+        const rect = range.getBoundingClientRect();
+        if (!rect.width || !rect.height) continue;
+        const top = Math.round(rect.bottom);
+        lines.set(top,(lines.get(top) ?? "") + node.data[i]);
+      }
+    }
+    const last = [...lines.values()].at(-1)?.trim() ?? "";
+    if (lines.size > 1 && /^[가-힣]{1,2}[.!?]?$/.test(last)) findings.push(el.textContent.trim());
+  }
+  return findings;
+}
 
 async function tabTo(page,target) {
   await target.waitFor();

@@ -396,7 +396,7 @@ export function Connect({
               )}
               <h3>서버가 있는 앱</h3>
               <p>
-                서버 키는 배포 설정(환경변수 SHIPPING_SERVER_KEY)에 직접
+                서버 키는 배포 설정(환경변수 <code>SHIPPING_SERVER_KEY</code>)에 직접
                 넣으세요. 코딩 AI 대화나 코드에 붙여넣지 마세요.
               </p>
               {server ? (

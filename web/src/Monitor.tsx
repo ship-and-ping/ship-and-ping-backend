@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { Copy } from "./Connect";
+import { status, StatusBadge, Timeline, IssueListItem } from "./IncidentSummary";
 import type { Gateway } from "./data";
 import { Hero, CurrentAppName } from "./Layout";
 import { displayText, sanitizeRoute } from "./normalize";
@@ -21,17 +22,7 @@ const time = (ms: number | string | null) =>
     : ms === Infinity
       ? "30초 초과"
       : +(ms / 1000).toFixed(2) + "초";
-const status = {
-  open: "진행 중",
-  resolved: "해결됐어요",
-  quiet: "잠잠해졌어요",
-  dismissed: "문제 아님으로 닫았어요",
-};
-function StatusBadge({ state }: { state: keyof typeof status | "healthy" | "waiting" }) {
-  const icons = { open: "⚠", resolved: "✓", quiet: "◷", dismissed: "−", healthy: "✓", waiting: "◷" };
-  const label = state === "healthy" ? "정상" : state === "waiting" ? "기록 대기" : status[state];
-  return <span className={"status-badge " + state}><span aria-hidden="true">{icons[state]}</span> {label}</span>;
-}
+
 function observedAt(v: Monitor["versions"][number], i?: Incident) {
   return i && Date.parse(v.first_seen_at) <= Date.parse(i.opened_at) ? v.last_seen_at : v.first_seen_at;
 }
@@ -118,13 +109,14 @@ function MonitorPage({
   const base = "/apps/" + encodeURIComponent(id);
   if (error && !data)
     return (
-      <section role="alert">
+      <section className="load-state" role="alert">
         <h1 tabIndex={-1}>기록을 불러오지 못했어요</h1>
+        <p>연결 상태를 확인한 뒤 다시 불러와 주세요.</p>
         <button onClick={retry}>다시 불러오기</button>{" "}
         <Link to="/apps">내 앱</Link>
       </section>
     );
-  if (!data) return <section role="status" aria-busy="true" className="monitor-loading">기록을 불러오는 중<div aria-hidden="true" /></section>;
+  if (!data) return <section role="status" aria-busy="true" className="monitor-loading"><h1>기록을 불러오는 중</h1><div aria-hidden="true" /><div aria-hidden="true" /></section>;
   const incident = data.incidents.find((i) => i.id === issue);
   const selected = data.features.find(
     (f) => f.id === (feature ?? incident?.feature_id),
@@ -213,12 +205,8 @@ function Home({ data, base }: { data: Monitor; base: string }) {
         <h2>문제</h2>
         {data.incidents.length ? (
           data.incidents.map((i) => (
-            <p key={i.id}>
-              <Link to={base + "/issues/" + i.id}>
-                {title(find(i), i)} · <StatusBadge state={i.status} />
-              </Link>{" "}
-              {details(i, find(i))}
-            </p>
+            <IssueListItem key={i.id} href={base + "/issues/" + i.id}
+              summary={title(find(i), i)} state={i.status} metric={details(i, find(i))} />
           ))
         ) : (
           <p>열린 문제가 없어요.</p>
@@ -574,7 +562,7 @@ function Issue({
   const events = [
     {
       at: i.opened_at,
-      text: "처음 감지 · " + displayVersion(i.opened_version),
+      text: "버전 " + displayVersion(i.opened_version) + "에서 처음 감지했어요",
     },
     ...i.notifications
       .filter((n) => n.ok)
@@ -590,7 +578,7 @@ function Issue({
       text: "새 버전 감지 · " + displayVersion(fresh.version),
     });
   if (i.closed_at) events.push({ at: i.closed_at, text: status[i.status] +
-    (i.resolved_version != null ? " · " + displayVersion(i.resolved_version) : "") });
+    (i.resolved_version != null ? " · 버전 " + displayVersion(i.resolved_version) : "") });
   const versions = version != null
     ? [version, i.opened_version]
     : [
@@ -626,6 +614,23 @@ function Issue({
     errors: data.samples,
   };
   const prompt = buildIssuePrompt(input);
+  const hasFailureCounts = i.kind === "failure" && metric?.total != null && metric.failures != null;
+  function summaryTitle() {
+    if (i.status === "resolved") return verificationMessage();
+    if (hasFailureCounts && !i.metric_at_open?.consecutive) {
+      return displayText(f.name) + " " + displayText(String(metric.total)) + "건 중 " +
+        displayText(String(metric.failures)) + "건 실패";
+    }
+    return title(f, i);
+  }
+  function summaryDetail() {
+    if (i.status === "dismissed" && i.closed_at)
+      return when(new Date(Date.parse(i.closed_at) + day).toISOString()) + "까지 다시 알리지 않아요.";
+    if (i.status === "resolved") return "해결 전 기록 · " + details(i, f);
+    if (i.kind === "unconfirmed" && metric?.unconfirmed != null)
+      return "사용 결과를 확인하지 못한 기록 " + displayText(String(metric.unconfirmed)) + "건";
+    return hasFailureCounts && !i.metric_at_open?.consecutive ? "감지 구간 · 최근 30분" : details(i, f);
+  }
   async function close() {
     setBusy(true);
     try {
@@ -640,103 +645,100 @@ function Issue({
   }
   return (
     <>
-      <h1 tabIndex={-1}>{title(f, i)}</h1>
+      <h1 tabIndex={-1}>문제 상세</h1>
       {f.kind === "deep" && <section><h2>문제 감지 구간부터의 결과</h2><Outcomes stats={summarize(data.stats.filter(r => r.feature_id === f.id && Date.parse(r.bucket) <= Date.parse(i.closed_at ?? new Date(data.now).toISOString())))} /></section>}
-      <Hero badge={<StatusBadge state={i.status} />} mood={i.status === "open" ? "worried" : "relieved"} arrived={i.status === "resolved"} title={status[i.status]} detail={
-        i.status === "dismissed" && i.closed_at
-          ? when(new Date(Date.parse(i.closed_at) + day).toISOString()) + "까지 다시 알리지 않아요."
-          : details(i, f)} />
-      <p>
-        현재 상태 · {status[i.status]}　시작 {when(i.opened_at)}
-      </p>
-      <h2>지금까지 흐름</h2>
-      <ol>
-        {events
-          .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
-          .map((e, n) => (
-            <li key={n}>
-              {when(e.at)} · {e.text}
-            </li>
-          ))}
-      </ol>
-      {(i.status === "open" || i.status === "resolved") && <section id="verification" className="panel">
-        <h2>업데이트 후 확인</h2>
-        {version != null && <p>{i.status === "resolved" ? "해결 버전" : "확인 버전"} · {displayVersion(version)}</p>}
-        <p>{verificationMessage()}</p>
-        {i.status === "resolved" && <div className="resolved-fill" aria-hidden="true" />}
-      </section>}
-      <section className="panel">
-        <h2>코딩 AI에 맡기기</h2>
-        <p>
-          요청문에는 비밀 키가 들어가지 않아요. 이메일·전화번호 같은 개인정보는
-          가린 뒤 복사돼요.
-        </p>
-        <p>
-          복사하기 전에 전체 내용을 확인할 수 있어요. 코딩 AI가 바꾼 코드는 배포
-          전에 한 번 확인해 주세요.
-        </p>
-        {prompt.invalid && (
-          <p role="status">
-            앱이 보낸 버전 값이 형식에 맞지 않아요. 버전 줄은 데이터 표시 안에
-            넣어 보내요.
-          </p>
-        )}
-        {prompt.strongCount > 0 ? (
-          <p role="alert">
-            오류 기록에 지시처럼 보이는 문장이 {prompt.strongCount}줄 있어요. 앱
-            사용자가 일부러 넣었을 수 있어요.
-          </p>
-        ) : (
-          prompt.weakCount > 0 && (
-            <p role="status">
-              외부 주소나 명령어가 들어간 오류 기록이 {prompt.weakCount}줄
-              있어요. 보통은 정상 오류 메시지라 그대로 넣어요.
+      <Hero badge={<StatusBadge state={i.status} />}
+        mood={i.status === "open" ? "worried" : "relieved"} arrived={i.status === "resolved"}
+        title={summaryTitle()} detail={summaryDetail()} />
+      <div className="issue-columns">
+        <div className="issue-history">
+          <section>
+            <h2>지금까지 흐름</h2>
+            <Timeline events={events.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+              .map(event => ({ ...event, date: when(event.at) }))} />
+          </section>
+          {(i.status === "open" || i.status === "resolved") && <section id="verification" className="panel">
+            <h2>업데이트 후 확인</h2>
+            {version != null && <p>{i.status === "resolved" ? "해결 버전" : "확인 버전"} · {displayVersion(version)}</p>}
+            <p>{i.status === "resolved" ? "업데이트 후 최근 5건의 사용 기록으로 해결을 확인했어요." : verificationMessage()}</p>
+            {i.status === "resolved" && <div className="resolved-fill" aria-hidden="true" />}
+          </section>}
+        </div>
+        <div className="issue-actions">
+          <section className="panel">
+            <h2>코딩 AI에 맡기기</h2>
+            <p>
+              요청문에는 비밀 키가 들어가지 않아요. 이메일·전화번호 같은 개인정보는
+              가린 뒤 복사돼요.
             </p>
-          )
-        )}
-        {prompt.lines.map(
-          (s, n) =>
-            prompt.levels[n] !== "normal" && (
-              <p key={n}>
-                <mark>{prompt.levels[n] === "strong" ? "강함" : "약함"} · {s}</mark>
+            <p>
+              복사하기 전에 전체 내용을 확인할 수 있어요. 코딩 AI가 바꾼 코드는 배포
+              전에 한 번 확인해 주세요.
+            </p>
+            {prompt.invalid && (
+              <p role="status">
+                앱이 보낸 버전 값이 형식에 맞지 않아요. 버전 줄은 데이터 표시 안에
+                넣어 보내요.
               </p>
-            ),
-        )}
-        <details>
-          <summary>보낼 내용 미리 보기</summary>
-          <pre>{prompt.text}</pre>
-          {prompt.strongCount > 0 && (
+            )}
+            {prompt.strongCount > 0 ? (
+              <p role="alert">
+                오류 기록에 지시처럼 보이는 문장이 {prompt.strongCount}줄 있어요. 앱
+                사용자가 일부러 넣었을 수 있어요.
+              </p>
+            ) : (
+              prompt.weakCount > 0 && (
+                <p role="status">
+                  외부 주소나 명령어가 들어간 오류 기록이 {prompt.weakCount}줄
+                  있어요. 보통은 정상 오류 메시지라 그대로 넣어요.
+                </p>
+              )
+            )}
+            {prompt.lines.map(
+              (s, n) =>
+                prompt.levels[n] !== "normal" && (
+                  <p key={n}>
+                    <mark>{prompt.levels[n] === "strong" ? "강함" : "약함"} · {s}</mark>
+                  </p>
+                ),
+            )}
             <details>
-              <summary>그대로 복사할 내용</summary>
-              <pre>{buildIssuePrompt(input, true).text}</pre>
+              <summary>보낼 내용 미리 보기</summary>
+              <pre>{prompt.text}</pre>
+              {prompt.strongCount > 0 && (
+                <details>
+                  <summary>그대로 복사할 내용</summary>
+                  <pre>{buildIssuePrompt(input, true).text}</pre>
+                </details>
+              )}
             </details>
+            <Copy compact text={prompt.text} title={prompt.strongCount
+                ? "그 줄 빼고 복사"
+                : again
+                  ? "AI에 다시 보낼 내용 복사"
+                  : "AI에 보낼 내용 복사"} />
+            {prompt.strongCount > 0 && (
+              <><p>그대로 복사하면 강함으로 표시한 줄도 데이터 블록에 포함돼요.</p>
+              <Copy compact text={buildIssuePrompt(input, true).text} title="그대로 복사" /></>
+            )}
+          </section>
+          <details>
+            <summary>자세히</summary>
+            <p>{route(f)}</p>
+            {data.step && <p>실패한 단계 · {displayText(data.step)}</p>}
+            <Samples data={data} />
+          </details>
+          {i.status === "open" && !dismissed && (
+            <section>
+              <p>닫으면 같은 기능의 같은 문제는 24시간 동안 다시 열리지 않아요.</p>
+              <button className="secondary" disabled={busy} aria-busy={busy} onClick={close}>
+                {busy ? "닫는 중" : "문제 아님으로 닫기"}
+              </button>
+            </section>
           )}
-        </details>
-        <Copy compact text={prompt.text} title={prompt.strongCount
-            ? "그 줄 빼고 복사"
-            : again
-              ? "AI에 다시 보낼 내용 복사"
-              : "AI에 보낼 내용 복사"} />
-        {prompt.strongCount > 0 && (
-          <><p>그대로 복사하면 강함으로 표시한 줄도 데이터 블록에 포함돼요.</p>
-          <Copy compact text={buildIssuePrompt(input, true).text} title="그대로 복사" /></>
-        )}
-      </section>
-      <details>
-        <summary>자세히</summary>
-        <p>{route(f)}</p>
-        {data.step && <p>실패한 단계 · {displayText(data.step)}</p>}
-        <Samples data={data} />
-      </details>
-      {i.status === "open" && !dismissed && (
-        <section>
-          <p>닫으면 같은 기능의 같은 문제는 24시간 동안 다시 열리지 않아요.</p>
-          <button disabled={busy} aria-busy={busy} onClick={close}>
-            {busy ? "닫는 중" : "문제 아님으로 닫기"}
-          </button>
-        </section>
-      )}
-      <p role="status">{feedback}</p>
+          <p role="status">{feedback}</p>
+        </div>
+      </div>
     </>
   );
 }

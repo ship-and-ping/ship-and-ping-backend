@@ -253,7 +253,7 @@ it("S7을 열면 경고와 기본 복사 옵션을 자동으로 선택한다", a
       screen.queryByRole("button", { name: "문제 아님으로 닫기" }),
     ).toBeNull(),
   );
-  await screen.findByRole("heading", { name: "문제 아님으로 닫았어요" });
+  await waitFor(() => expect(container.querySelector(".hero-card .status-badge")?.textContent).toContain("문제 아님으로 닫았어요"));
   expect(container.querySelector("#verification")).toBeNull();
 });
 
@@ -271,6 +271,7 @@ it("되돌린 버전으로 홈 띠와 문제 흐름, 확인 결과, 요청문을
   expect(link.parentElement?.textContent).toContain("새 버전 v0 감지");
   fireEvent.click(link);
   await screen.findByText("업데이트 후 4건 성공, 1건 더 확인할게요");
+  expect(container.querySelector("ol li:last-child time")?.getAttribute("datetime")).toBeTruthy();
   expect(container.querySelector("ol li:last-child")?.textContent).toContain("새 버전 감지 · v0");
   expect(container.querySelector("pre")?.textContent).toContain("v0");
   expect(container.querySelector("pre")?.textContent).not.toContain("v3");

@@ -67,13 +67,13 @@ export function Notifications({ api, origin }: Props) {
       <h1 tabIndex={-1}>알림 설정</h1>
       {message && <p role="alert">{message}</p>}
       {!apps ? (
-        listFailed ? <div role="alert">
+        listFailed ? <div className="load-state" role="alert">
           앱 목록을 불러오지 못했어요.{" "}
           <button onClick={() => {
             setListFailed(false);
             setAttempt(n => n + 1);
           }}>앱 목록 다시 불러오기</button>
-        </div> : <p role="status">알림을 설정할 앱을 불러오는 중이에요.</p>
+        </div> : <div className="monitor-loading" role="status" aria-busy="true">알림을 설정할 앱을 불러오는 중이에요.<div aria-hidden="true" /><div aria-hidden="true" /></div>
       ) : !apps.length ? (
         <p>알림을 받을 앱이 아직 없어요. <Link to="/apps/new">앱 등록하기</Link></p>
       ) : (

@@ -14,11 +14,11 @@ figure{margin:0;flex:1;min-width:0}figcaption{font-weight:700}img{width:100%;hei
 <header><h1>쉽앤핑 화면 전후 비교</h1><form>
 <label>화면과 상태<select id="scene"></select></label>
 <label>보기 조건<select id="profile">
-<option value="1440-light">PC · 1440 · 밝게</option>
+<option value="1440-light" selected>PC · 1440 · 밝게</option>
 <option value="1280-dark">노트북 · 1280 · 어둡게</option>
 <option value="390-light">휴대폰 · 390 · 밝게</option>
-<option value="390-dark" selected>휴대폰 · 390 · 어둡게 · 글자 200% · 동작 줄이기</option>
-</select></label></form></header>
+<option value="390-dark">휴대폰 · 390 · 어둡게 · 글자 200% · 동작 줄이기</option>
+</select></label></form><p><a href="motion/landing.webm">소개 페이지 움직임 보기</a></p></header>
 <main><figure><figcaption>수정 전</figcaption><a id="old"><img alt="수정 전 원본 열기"></a></figure>
 <figure><figcaption>수정 후</figcaption><a id="updated"><img alt="수정 후 원본 열기"></a></figure></main>
 <script>
@@ -32,7 +32,7 @@ const scenes = [
 ];
 const scene = document.querySelector("#scene"), profile = document.querySelector("#profile");
 scenes.forEach(([label,state],i)=>scene.add(new Option(label,String(i).padStart(2,"0")+"-"+state)));
-scene.selectedIndex=5;
+scene.selectedIndex=0;
 function compare(){
   for(const [id,phase] of [["old","before"],["updated","after"]]){
     const link=document.getElementById(id);
