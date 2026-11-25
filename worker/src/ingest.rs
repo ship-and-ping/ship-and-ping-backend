@@ -12,12 +12,12 @@ const BOUNDS: [u32; 15] = [
 ];
 static PRIVATE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
-        r"(?i)(?:set-cookie|cookie)[ \t]*:[^\r\n]*",
-        r"|(?:bearer|basic)[ \t]+[^\s,;]+",
-        r"|(?:access_token|token|key|password)=[^&\s,;#]+",
-        r"|(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|sk_|eyJ)[a-z0-9_.=\-]+",
+        r"(?i)\b(?:set-cookie|cookie)[ \t]*:[^\r\n]*",
+        r"|\b(?:bearer|basic)(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;]+",
+        r"|\b(?:access_token|token|key|password)=[^&\s,;#]+",
+        r"|\b(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|sk_|eyJ)[a-z0-9_.=\-]+",
         r"|[a-z0-9._%+\-]+(?:@|%40)[a-z0-9.\-]+\.[a-z]{2,}",
-        r"|\+?\d(?:[ ().\-]*\d){8,14}",
+        r"|\+?\b\d(?:[ ().\-]*\d){8,14}\b",
     ))
     .expect("static redaction patterns")
 });
@@ -93,16 +93,14 @@ fn valid_kind(kind: &Option<String>) -> bool {
     kind.as_ref().is_none_or(|s| bounded(s, 80))
 }
 fn route(path: &str) -> String {
-    path.split(['?', '#'])
-        .next()
-        .unwrap_or("")
-        .split('/')
+    path.split('/')
         .map(|part| {
             let part = part.split(';').next().unwrap_or_default();
             let token = part.trim_end_matches('=');
             if !part.is_empty()
                 && (part.bytes().all(|b| b.is_ascii_digit())
                     || Uuid::try_parse(part).is_ok()
+                    || PRIVATE.is_match(part)
                     || (part.len() >= 16
                         && !token.is_empty()
                         && token
@@ -161,16 +159,17 @@ impl Aggregate {
                 error_kind,
                 error_message,
             } => {
+                let path = path.split(['?', '#']).next().unwrap_or_default();
                 require(
                     path.starts_with('/')
-                        && bounded(&path, 200)
+                        && bounded(path, 200)
                         && bounded(&method, 32)
                         && method.bytes().all(|b| b.is_ascii_uppercase() || b == b'-')
                         && (status == 0 || (100..600).contains(&status))
                         && duration_ms <= 600000
                         && valid_kind(&error_kind),
                 )?;
-                let path = route(&path);
+                let path = route(path);
                 let client = (400..500).contains(&status);
                 let failed = !client && (status == 0 || status >= 500 || error_kind.is_some());
                 if (failed || client) && (error_message.is_some() || error_kind.is_some()) {

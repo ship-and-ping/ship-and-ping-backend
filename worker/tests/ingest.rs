@@ -62,6 +62,7 @@ fn masks_credentials_in_attempt_results() {
         "key=demo",
         "access_token=demo",
         "password=demo",
+        "Bearer: fixture",
         "a%40example.test",
     ] {
         let row = json!({"type":"attempt_result","attempt_id":ID,"feature_key":"join","source":"browser","result":"failure","ts":AT,"error_message":message});
@@ -70,6 +71,89 @@ fn masks_credentials_in_attempt_results() {
             out["payload"]["attempts"][0]["error_message"], "[가림]",
             "{message}"
         );
+    }
+}
+
+#[test]
+fn validates_path_after_removing_query_and_fragment() {
+    let path200 = format!("/{}", "x/".repeat(99) + "x");
+    let cases = [
+        (
+            format!("{path200}?q={}", "x".repeat(80)),
+            Some(path200.as_str()),
+        ),
+        (format!("{path200}x"), None),
+        ("relative".into(), None),
+        (
+            "/short/123456789abcdef/123456789abcdefg#fragment".into(),
+            Some("/short/123456789abcdef/:id"),
+        ),
+    ];
+    for (route, expected) in cases {
+        let mut row = request();
+        row["route"] = json!(route);
+        let (bytes, count) =
+            prepare(KEY, &serde_json::to_vec(&batch(vec![row])).unwrap(), NOW).unwrap();
+        assert_eq!(count.accepted, usize::from(expected.is_some()));
+        let rpc: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(rpc["payload"]["stats"][0]["route"].as_str(), expected);
+    }
+}
+
+#[test]
+fn request_error_samples_and_status_bounds() {
+    let mut rows = vec![];
+    for (status, kind) in [
+        (99, None),
+        (100, None),
+        (200, None),
+        (200, Some("sk_private")),
+        (404, Some("sk_private")),
+        (599, None),
+        (600, None),
+    ] {
+        let mut r = request();
+        r["status"] = json!(status);
+        r["error_kind"] = json!(kind);
+        r["error_message"] = json!("task_queue");
+        rows.push(r);
+    }
+    let mut lower = request();
+    lower["method"] = json!("get");
+    rows.push(lower);
+    let (bytes, count) = prepare(KEY, &serde_json::to_vec(&batch(rows)).unwrap(), NOW).unwrap();
+    assert_eq!((count.accepted, count.dropped), (5, 3));
+    let rpc: Value = serde_json::from_slice(&bytes).unwrap();
+    let stats = &rpc["payload"]["stats"][0];
+    assert_eq!(stats["failures"], 2);
+    assert_eq!(stats["client_errors"], 1);
+    let samples = rpc["payload"]["error_samples"].as_array().unwrap();
+    assert_eq!(samples.len(), 3);
+    assert_eq!(samples[0]["error_kind"], "[가림]");
+    assert_eq!(samples[1]["error_kind"], "[가림]");
+    assert!(samples.iter().all(|s| s["message"] == "task_queue"));
+}
+
+#[test]
+fn deep_events_validate_fields_and_mask_result_details() {
+    let start = json!({"type":"attempt_start","feature_key":"join","attempt_id":ID,"ts":AT});
+    let end = json!({"type":"attempt_result","feature_key":"join","attempt_id":ID,"ts":AT,"source":"browser","result":"failure",
+        "step":"token=private","error_kind":"sk_private","error_message":"x%40example.test"});
+    let mut empty = start.clone();
+    empty["feature_key"] = json!(" ");
+    let mut late = start.clone();
+    late["ts"] = json!("2027-01-10T08:00:00Z");
+    let mut invalid = end.clone();
+    invalid["result"] = json!("unknown");
+    let data = serde_json::to_vec(&batch(vec![start, empty, late, invalid, end])).unwrap();
+    let (bytes, count) = prepare(KEY, &data, NOW).unwrap();
+    assert_eq!((count.accepted, count.dropped), (2, 3));
+    let rpc: Value = serde_json::from_slice(&bytes).unwrap();
+    let attempts = rpc["payload"]["attempts"].as_array().unwrap();
+    assert_eq!(attempts.len(), 2);
+    assert_eq!(attempts[0]["type"], "attempt_start");
+    for field in ["step", "error_kind", "error_message"] {
+        assert_eq!(attempts[1][field], "[가림]");
     }
 }
 
@@ -134,7 +218,9 @@ fn assigns_time_bins_and_classifies_errors() {
     let mut rows = vec![];
     for (status, ms) in [(200, 50), (500, 51), (404, 30000), (0, 600000)] {
         let mut r = request();
-        r["ts"] = json!("2027-01-15T08:04:59.999Z");
+        if status != 200 {
+            r["ts"] = json!("2027-01-15T08:04:59.999Z");
+        }
         r["status"] = json!(status);
         r["duration_ms"] = json!(ms);
         rows.push(r);

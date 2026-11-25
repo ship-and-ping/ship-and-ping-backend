@@ -18,7 +18,11 @@ impl Drop for Server {
 fn ingest_http_statuses() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
-    drop(listener);
+    let no_db = TcpListener::bind("127.0.0.1:0").unwrap();
+    let local = TcpListener::bind("127.0.0.1:0").unwrap();
+    let missing_addr = no_db.local_addr().unwrap();
+    let dry_addr = local.local_addr().unwrap();
+    drop((listener, no_db, local));
     let binary = std::env::var("WORKERD_BIN")
         .unwrap_or_else(|_| "target/workerd/node_modules/.bin/workerd".into());
     let mut server = Server(
@@ -28,6 +32,8 @@ fn ingest_http_statuses() {
                 "tests/http.capnp",
                 "--experimental",
                 &format!("--socket-addr=http={addr}"),
+                &format!("--socket-addr=unconfigured={missing_addr}"),
+                &format!("--socket-addr=local={dry_addr}"),
             ])
             .spawn()
             .unwrap(),
@@ -38,7 +44,7 @@ fn ingest_http_statuses() {
         assert!(Instant::now() < deadline, "workerd startup timeout");
         thread::sleep(Duration::from_millis(30));
     }
-    let send = |auth: &str, data: &str| {
+    let send_to = |addr: std::net::SocketAddr, auth: &str, data: &str| {
         let output = Command::new("curl")
             .args([
                 "--silent",
@@ -65,6 +71,7 @@ fn ingest_http_statuses() {
             serde_json::from_str::<Value>(body).unwrap(),
         )
     };
+    let send = |auth: &str, data: &str| send_to(addr, auth, data);
     let key = "Bearer sp_pub_fixture";
     assert_eq!(send("", "{}").0, 401);
     assert_eq!(send(key, "{").0, 400);
@@ -75,6 +82,11 @@ fn ingest_http_statuses() {
         "records":[{"type":"request","ts":now,"method":"GET","route":"/a","status":200,"duration_ms":1},null]});
     assert_eq!(
         send(key, &batch.to_string()),
+        (202, json!({"accepted":1,"dropped":1}))
+    );
+    assert_eq!(send_to(missing_addr, key, &batch.to_string()).0, 503);
+    assert_eq!(
+        send_to(dry_addr, key, &batch.to_string()),
         (202, json!({"accepted":1,"dropped":1}))
     );
     for (version, status) in [

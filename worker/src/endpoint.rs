@@ -11,6 +11,17 @@ impl From<worker::Error> for SinkError {
     }
 }
 
+fn rpc_status(status: u16) -> std::result::Result<(), SinkError> {
+    match status {
+        200..=299 => Ok(()),
+        401 => Err(SinkError(401, "invalid or expired key")),
+        400 => Err(SinkError(400, "invalid batch")),
+        status @ 402..=499 => Err(SinkError(status, "storage rejected request")),
+        500..=599 => Err(SinkError(503, "storage unavailable")),
+        _ => Err(SinkError(502, "unexpected storage response")),
+    }
+}
+
 trait BatchSink {
     async fn submit(&self, body: Vec<u8>, counts: Counts)
     -> std::result::Result<Counts, SinkError>;
@@ -33,11 +44,14 @@ impl BatchSink for Supabase<'_> {
             .ok()
             .map(|v| v.to_string())
             .unwrap_or_default();
-        if url.is_empty() && key.is_empty() {
-            return Ok(counts);
-        }
         if url.is_empty() || key.is_empty() {
-            return Err(SinkError(500, "incomplete storage configuration"));
+            let dry_run = env
+                .var("INGEST_DRY_RUN")
+                .is_ok_and(|flag| flag.to_string() == "true");
+            if dry_run && url.is_empty() && key.is_empty() {
+                return Ok(counts);
+            }
+            return Err(SinkError(503, "storage unavailable"));
         }
         let h = Headers::new();
         h.set("apikey", &key)?;
@@ -58,14 +72,7 @@ impl BatchSink for Supabase<'_> {
             .send()
             .await
             .map_err(|_| SinkError(503, "storage unavailable"))?;
-        match response.status_code() {
-            200..=299 => {}
-            401 => return Err(SinkError(401, "invalid or expired key")),
-            400 => return Err(SinkError(400, "invalid batch")),
-            status @ 402..=499 => return Err(SinkError(status, "storage rejected request")),
-            500..=599 => return Err(SinkError(503, "storage unavailable")),
-            _ => return Err(SinkError(502, "unexpected storage response")),
-        }
+        rpc_status(response.status_code())?;
         let mut result: Counts = response
             .json()
             .await
