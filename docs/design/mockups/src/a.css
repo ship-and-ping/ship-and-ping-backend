@@ -1,0 +1,96 @@
+/* ===== 시안 A — 조용한 상태 보드 ===== */
+.opt-a{--e:cubic-bezier(.23,1,.32,1);font-family:"IBM Plex Sans KR",system-ui,sans-serif;font-size:15px;line-height:1.55;letter-spacing:-0.005em;font-feature-settings:"tnum"}
+.opt-a[data-theme="light"]{--bg:#F6F4FA;--surface:#FFFFFF;--surface-2:#EFEBF6;--ink:#261B40;--ink-2:#5A5170;--line:#E2DCEC;--accent:#C3A6FF;--accent-ink:#5B3FA8;--on-accent:#261B40;--btn:#261B40;--on-btn:#FFFFFF;--ok:#76E7C4;--ok-ink:#0B6B50;--ok-fill:#DDF8EF;--warn-ink:#9A4A00;--warn-fill:#FFEBCF;--warn-line:#F2C98F;--wait-ink:#5A5170;--wait-fill:#ECE8F3;--focus:#5B3FA8;--side:#EFEBF6}
+.opt-a[data-theme="dark"]{--bg:#17102A;--surface:#221838;--surface-2:#2B2045;--ink:#F3EFFC;--ink-2:#BDB3D6;--line:#382B58;--accent:#C3A6FF;--accent-ink:#C3A6FF;--on-accent:#261B40;--btn:#C3A6FF;--on-btn:#1B1230;--ok:#76E7C4;--ok-ink:#76E7C4;--ok-fill:rgba(118,231,196,.12);--warn-ink:#FFB861;--warn-fill:rgba(255,184,97,.12);--warn-line:rgba(255,184,97,.35);--wait-ink:#BDB3D6;--wait-fill:rgba(189,179,214,.12);--focus:#C3A6FF;--side:#1E1533}
+.opt-a *:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:6px}
+.opt-a button{font:inherit;cursor:pointer}
+.opt-a .tile{width:32px;height:32px;border-radius:8px;flex:none;display:block}
+.opt-a .hdr{display:flex;align-items:center;gap:10px;padding:8px 16px 12px;border-bottom:1px solid var(--line);background:var(--bg);min-height:56px}
+.opt-a .hdr .t{font-weight:600;font-size:17px;flex:1}
+.opt-a .ibtn{width:44px;height:44px;display:inline-grid;place-items:center;border:0;background:transparent;color:var(--ink-2);border-radius:10px}
+.opt-a .wrap{padding:16px 16px 20px;display:flex;flex-direction:column;gap:16px}
+.opt-a h1{font-size:24px;line-height:1.3;margin:0;font-weight:700;letter-spacing:-0.015em}
+.opt-a h2{font-size:15px;margin:0;font-weight:600;color:var(--ink-2)}
+.opt-a p{margin:0}
+.opt-a .sub{color:var(--ink-2)}
+.opt-a .small{font-size:13px;color:var(--ink-2)}
+.opt-a .card{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+/* 상태 표시: 색 + 모양 아이콘 + 글자 (색만으로 구분하지 않음) */
+.opt-a .pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px 0 9px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap}
+.opt-a .pill.ok{background:var(--ok-fill);color:var(--ok-ink)}
+.opt-a .pill.bad{background:var(--warn-fill);color:var(--warn-ink)}
+.opt-a .pill.wait{background:var(--wait-fill);color:var(--wait-ink)}
+.opt-a .swap{display:inline-grid}.opt-a .swap>*{grid-area:1/1}
+.opt-a .swap .from{opacity:0}
+.opt-a .stline{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.opt-a .steps{display:flex;gap:6px;list-style:none;margin:0;padding:0}
+.opt-a .steps li{flex:1;display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink-2);line-height:1.35}
+.opt-a .steps li i{height:4px;border-radius:2px;background:var(--ok)}
+.opt-a .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 18px;border-radius:10px;border:0;background:var(--btn);color:var(--on-btn);font-weight:600;font-size:16px;transition:transform 160ms var(--e)}
+.opt-a .btn:active{transform:scale(.97)}
+.opt-a .btn.full{width:100%}
+.opt-a .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.opt-a .btn[data-done]{background:var(--ok);color:#13372B}
+.opt-a .link{background:none;border:0;padding:0;color:var(--accent-ink);font-weight:600;text-decoration:underline;text-underline-offset:3px;min-height:44px}
+/* 이름표 확인 행 */
+.opt-a .names{list-style:none;margin:0;padding:0}
+.opt-a .names li{padding:10px 12px 8px;border-top:1px solid var(--line)}
+.opt-a .names li:first-child{border-top:0}
+.opt-a .names .r1{display:flex;gap:6px;align-items:center}
+.opt-a .names input{flex:1;min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px;padding:0 12px}
+.opt-a details summary{cursor:pointer;color:var(--ink-2);font-size:13px;list-style:none;display:inline-flex;align-items:center;gap:2px;min-height:28px}
+.opt-a details summary::-webkit-details-marker{display:none}
+.opt-a details summary::after{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);margin:-3px 0 0 6px}
+.opt-a details[open] summary::after{transform:rotate(225deg);margin-top:3px}
+.opt-a code,.opt-a pre{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12.5px}
+.opt-a details code{display:block;margin-top:2px;color:var(--ink-2)}
+.opt-a pre{white-space:pre-wrap;background:var(--surface-2);border-radius:8px;padding:12px;margin:8px 0 0;color:var(--ink);line-height:1.5}
+/* 기능 목록 */
+.opt-a .flist{list-style:none;margin:0;padding:0}
+.opt-a .flist li{display:grid;grid-template-columns:22px 1fr auto;gap:2px 10px;align-items:center;padding:12px 14px;border-top:1px solid var(--line)}
+.opt-a .flist li:first-child{border-top:0}
+.opt-a .flist .nm{font-weight:600}
+.opt-a .flist .meta{grid-column:2;font-size:13px;color:var(--ink-2)}
+.opt-a .flist .tm{grid-row:1/3;grid-column:3;text-align:right;font-size:15px;font-weight:600}
+.opt-a .flist .tm small{display:block;font-size:12.5px;font-weight:400;color:var(--ink-2)}
+.opt-a .si{grid-row:1/3;display:grid;place-items:center}
+.opt-a .si.ok{color:var(--ok-ink)}.opt-a .si.bad{color:var(--warn-ink)}.opt-a .si.wait{color:var(--wait-ink)}
+.opt-a .tag{display:inline-block;font-size:12px;font-weight:600;color:var(--accent-ink);border:1px solid var(--line);border-radius:6px;padding:0 6px;margin-left:6px;vertical-align:1px}
+.opt-a .prob{background:var(--warn-fill);border:1px solid var(--warn-line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.opt-a .prob .big{font-size:19px;font-weight:700;line-height:1.35}
+.opt-a .nums{font-size:16px}
+.opt-a .nums b{font-weight:700}
+/* 해결 확인 */
+.opt-a .marks{display:grid;grid-template-columns:repeat(15,1fr);gap:4px;margin:4px 0 2px}
+.opt-a .marks i{height:22px;border-radius:4px;background:var(--ok)}
+.opt-a .tl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.opt-a .tl li{display:grid;grid-template-columns:48px 1fr;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.opt-a .tl li:first-child{border-top:0}
+.opt-a .tl time{color:var(--ink-2);font-weight:600}
+.opt-a .sec{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+/* PC */
+.opt-a .side{width:236px;flex:none;background:var(--side);border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:4px}
+.opt-a .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;padding:0 6px 16px}
+.opt-a .nav a{display:flex;align-items:center;gap:10px;padding:10px;border-radius:8px;color:var(--ink-2);text-decoration:none;font-size:15px;min-height:44px}
+.opt-a .nav a[aria-current]{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 0 0 1px var(--line)}
+.opt-a .main{flex:1;padding:28px 36px 40px;display:flex;flex-direction:column;gap:20px;min-width:0}
+.opt-a .cols{display:grid;grid-template-columns:1fr 300px;gap:24px;align-items:start}
+.opt-a .ftable{width:100%;border-collapse:collapse;font-size:15px}
+.opt-a .ftable th{font-size:13px;font-weight:600;color:var(--ink-2);text-align:left;padding:10px 14px;border-bottom:1px solid var(--line)}
+.opt-a .ftable td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+.opt-a .ftable tr:last-child td{border-bottom:0}
+.opt-a .ftable .n{text-align:right;white-space:nowrap}
+.opt-a .pc-h1{font-size:30px}
+/* 움직임: 첫 기록 도착(S4), 해결(S7) — 드물게 일어나는 순간이라 한 번만, 짧게 */
+.opt-a [data-anim].play .swap .from{animation:a-out 200ms var(--e) 500ms both}
+.opt-a [data-anim].play .swap .to{animation:a-in 220ms var(--e) 500ms both}
+.opt-a [data-anim].play .rise{animation:a-rise 240ms var(--e) both;animation-delay:calc(650ms + var(--i,0) * 40ms)}
+.opt-a [data-anim].play .marks i{animation:a-mark 180ms var(--e) both;animation-delay:calc(200ms + var(--i,0) * 24ms)}
+@keyframes a-out{from{opacity:1}to{opacity:0}}
+@keyframes a-in{from{opacity:0}to{opacity:1}}
+@keyframes a-rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes a-mark{from{opacity:.2;transform:scaleY(.5)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){
+  .opt-a [data-anim].play .rise,.opt-a [data-anim].play .marks i{animation:a-in 150ms linear both;animation-delay:0ms}
+  .opt-a .btn{transition:none}
+}

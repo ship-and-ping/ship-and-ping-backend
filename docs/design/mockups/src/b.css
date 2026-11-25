@@ -1,0 +1,86 @@
+/* ===== 시안 B — 양이 먼저 말해 줘요 ===== */
+.opt-b{--e:cubic-bezier(.23,1,.32,1);font-family:"Gowun Dodum",system-ui,sans-serif;font-size:16px;line-height:1.6}
+.opt-b[data-theme="light"]{--bg:#EEE8FB;--surface:#FFFFFF;--bubble:#FFFFFF;--ink:#261B40;--ink-2:#5C5274;--line:#DDD3F2;--btn:#261B40;--on-btn:#FFFFFF;--chip:#F6F2FF;--ok:#76E7C4;--ok-ink:#0B6B50;--ok-fill:#D9F7EC;--bad-ink:#A3123F;--bad-fill:#FFE0E8;--bad-bar:#E0456F;--wait-ink:#5C5274;--wait-fill:#E9E3F5;--focus:#5B3FA8;--mine:#261B40;--on-mine:#FFFFFF;--shadow:0 6px 18px -8px rgba(38,27,64,.25)}
+.opt-b[data-theme="dark"]{--bg:#1C1433;--surface:#251B42;--bubble:#2F2452;--ink:#F5F1FF;--ink-2:#C4B9DE;--line:#3E3166;--btn:#C3A6FF;--on-btn:#1C1433;--chip:#352960;--ok:#76E7C4;--ok-ink:#76E7C4;--ok-fill:rgba(118,231,196,.14);--bad-ink:#FF9DB5;--bad-fill:rgba(255,157,181,.14);--bad-bar:#FF9DB5;--wait-ink:#C4B9DE;--wait-fill:rgba(196,185,222,.12);--focus:#C3A6FF;--mine:#C3A6FF;--on-mine:#1C1433;--shadow:0 6px 18px -8px rgba(0,0,0,.6)}
+.opt-b *:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.opt-b button{font:inherit;cursor:pointer}
+.opt-b .jua{font-family:"Jua",system-ui,sans-serif;font-weight:400}
+.opt-b .av{width:36px;height:36px;border-radius:12px;flex:none;display:block;position:relative}
+.opt-b .avw{position:relative;flex:none;width:36px;height:36px;border-radius:12px}
+.opt-b .avw::after{content:"";position:absolute;inset:-4px;border-radius:15px;border:3px solid var(--ok);opacity:0;pointer-events:none}
+.opt-b .hdr{display:flex;align-items:center;gap:10px;padding:6px 12px 12px 16px;background:var(--bg)}
+.opt-b .hdr .t{flex:1;display:flex;flex-direction:column;line-height:1.25}
+.opt-b .hdr .t b{font-family:"Jua",sans-serif;font-weight:400;font-size:20px}
+.opt-b .hdr .t span{font-size:13px;color:var(--ink-2)}
+.opt-b .ibtn{width:44px;height:44px;display:inline-grid;place-items:center;border:0;background:var(--surface);color:var(--ink);border-radius:14px}
+.opt-b .thread{display:flex;flex-direction:column;gap:14px;padding:8px 14px 20px}
+.opt-b .msg{display:flex;gap:8px;align-items:flex-end;max-width:100%}
+.opt-b .msg .col{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}
+.opt-b .bub{background:var(--bubble);border-radius:20px 20px 20px 6px;padding:12px 14px;box-shadow:var(--shadow);align-self:flex-start;max-width:100%}
+.opt-b .bub.wide{align-self:stretch}
+.opt-b .bub p{margin:0}
+.opt-b .bub .h{font-family:"Jua",sans-serif;font-size:21px;line-height:1.35;margin-bottom:2px}
+.opt-b .time{font-size:12.5px;color:var(--ink-2);padding-left:4px}
+.opt-b .mine{align-self:flex-end;display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.opt-b .reply{min-height:48px;padding:0 18px;border-radius:24px;border:2px solid var(--mine);background:transparent;color:var(--ink);font-size:16px;display:inline-flex;align-items:center;gap:6px;transition:transform 160ms var(--e)}
+.opt-b .reply.primary{background:var(--mine);color:var(--on-mine)}
+.opt-b .reply:active,.opt-b .btn:active{transform:scale(.97)}
+.opt-b .btn{min-height:48px;padding:0 18px;border-radius:16px;border:0;background:var(--btn);color:var(--on-btn);font-size:16px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform 160ms var(--e);width:100%}
+.opt-b .btn[data-done],.opt-b .reply[data-done]{background:var(--ok);color:#13372B;border-color:var(--ok)}
+.opt-b .chips{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.opt-b .chip{display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:44px;padding:0 12px;border-radius:14px;border:0;background:var(--chip);color:var(--ink);font-size:15.5px;text-align:left}
+.opt-b .chip svg{color:var(--ink-2);flex:none}
+.opt-b details summary{cursor:pointer;color:var(--ink-2);font-size:14px;min-height:36px;display:inline-flex;align-items:center;gap:6px;list-style:none}
+.opt-b details summary::-webkit-details-marker{display:none}
+.opt-b details summary::before{content:"+";display:inline-grid;place-items:center;width:20px;height:20px;border-radius:7px;background:var(--chip);color:var(--ink)}
+.opt-b details[open] summary::before{content:"−"}
+.opt-b code,.opt-b pre{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12.5px}
+.opt-b .map{font-size:13px;color:var(--ink-2);display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:4px 0 0}
+.opt-b pre{white-space:pre-wrap;background:var(--chip);border-radius:12px;padding:12px;margin:6px 0 0;line-height:1.5;color:var(--ink)}
+.opt-b .badge{display:inline-flex;align-items:center;gap:5px;font-size:14px;padding:3px 10px 3px 7px;border-radius:999px;margin-bottom:6px}
+.opt-b .badge.bad{background:var(--bad-fill);color:var(--bad-ink)}
+.opt-b .badge.ok{background:var(--ok-fill);color:var(--ok-ink)}
+.opt-b .badge.wait{background:var(--wait-fill);color:var(--wait-ink)}
+.opt-b .swap{display:grid}.opt-b .swap>*{grid-area:1/1}.opt-b .swap .from{opacity:0}
+/* 평소 대비 막대 */
+.opt-b .bars{display:flex;flex-direction:column;gap:8px;margin:10px 0 6px}
+.opt-b .bar{display:grid;grid-template-columns:86px 1fr auto;gap:8px;align-items:center;font-size:14px}
+.opt-b .bar i{display:block;height:14px;border-radius:7px;background:var(--wait-fill)}
+.opt-b .bar i b{display:block;height:100%;border-radius:7px;background:var(--ok)}
+.opt-b .bar.slow i b{background:var(--bad-bar)}
+.opt-b .bar span:last-child{font-family:"Jua",sans-serif;font-size:18px}
+/* 기능 타일 */
+.opt-b .tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.opt-b .ft{background:var(--surface);border-radius:16px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-height:76px}
+.opt-b .ft .n{display:flex;align-items:center;gap:6px;font-family:"Jua",sans-serif;font-size:16.5px}
+.opt-b .ft .n.ok{color:var(--ok-ink)}.opt-b .ft .n.bad{color:var(--bad-ink)}.opt-b .ft .n.wait{color:var(--wait-ink)}
+.opt-b .ft .n span{color:var(--ink)}
+.opt-b .ft small{font-size:13px;color:var(--ink-2);line-height:1.4}
+.opt-b .dots{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 4px}
+.opt-b .dots i{width:14px;height:14px;border-radius:50%;background:var(--ok)}
+.opt-b .resolved{background:var(--ok-fill)}
+.opt-b .resolved .h{color:var(--ok-ink)}
+/* PC */
+.opt-b .top{display:flex;align-items:center;gap:12px;padding:14px 28px;border-bottom:1px solid var(--line);background:var(--bg)}
+.opt-b .top .brand{font-family:"Jua",sans-serif;font-size:20px}
+.opt-b .appsw{margin-left:16px;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px;border-radius:12px;background:var(--surface);border:0;color:var(--ink)}
+.opt-b .pcbody{display:grid;grid-template-columns:minmax(0,680px) 1fr;gap:32px;padding:24px 32px 40px;align-items:start}
+.opt-b .panel{background:var(--surface);border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.opt-b .panel h2{font-family:"Jua",sans-serif;font-weight:400;font-size:19px;margin:0}
+.opt-b .panel .tiles .ft{background:var(--chip)}
+/* 움직임: 새 말풍선이 8px 떠오르며 나타남, 해결 때 양 아이콘에 민트 고리 한 번 */
+.opt-b [data-anim].play .in{animation:b-in 260ms var(--e) both;animation-delay:calc(var(--d,0) * 1ms)}
+.opt-b [data-anim].play .swap .from{animation:b-out 200ms var(--e) 500ms both}
+.opt-b [data-anim].play .swap .to{animation:b-fade 220ms var(--e) 520ms both}
+.opt-b [data-anim].play .dots i{animation:b-dot 200ms var(--e) both;animation-delay:calc(1400ms + var(--i,0) * 26ms)}
+.opt-b [data-anim].play .ring::after{animation:b-ring 700ms var(--e) 1900ms both}
+@keyframes b-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes b-out{from{opacity:1}to{opacity:0}}
+@keyframes b-fade{from{opacity:0}to{opacity:1}}
+@keyframes b-dot{from{opacity:.2;transform:scale(.6)}to{opacity:1;transform:none}}
+@keyframes b-ring{0%{opacity:0;transform:scale(.92)}30%{opacity:1}100%{opacity:0;transform:scale(1.18)}}
+@media (prefers-reduced-motion: reduce){
+  .opt-b [data-anim].play .in,.opt-b [data-anim].play .dots i{animation:b-fade 150ms linear both;animation-delay:0ms}
+  .opt-b [data-anim].play .ring::after{animation:none}
+  .opt-b .reply,.opt-b .btn{transition:none}
+}

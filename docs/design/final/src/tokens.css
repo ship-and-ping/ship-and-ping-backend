@@ -1,0 +1,114 @@
+/* =====================================================================
+   쉽앤핑 디자인 토큰 — docs/design-system.md 와 같은 이름·같은 값
+   React 구현: 이 파일을 그대로 web/ 전역 CSS로 가져가 .sp 대신 :root 에 둔다.
+   어두운 모드: [data-theme="dark"] (또는 prefers-color-scheme: dark 에서 같은 값)
+   글자 크기: 실제 앱은 rem(1rem = 16px)으로 쓴다. 시안에서는 화면 프레임마다
+   200% 글자를 보여 주려고 --sp-scale 을 곱한다.
+   ===================================================================== */
+.sp {
+  --sp-scale: 1;
+
+  /* 바탕·글자 */
+  --sp-bg: #FAF9FC;
+  --sp-surface: #FFFFFF;
+  --sp-surface-2: #F1EEF6;      /* 스켈레톤, 미리 보기 상자 */
+  --sp-ink: #1E1535;
+  --sp-ink-2: #5D5673;          /* 보조 글자 */
+  --sp-line: #E6E1EF;           /* 구분선(장식) */
+  --sp-line-strong: #8A8299;    /* 입력 칸 테두리·스위치 꺼짐: 바탕과 3:1 이상 */
+  --sp-focus: #5B3FA8;
+  --sp-btn: #261B40;            /* 기본 버튼 */
+  --sp-on-btn: #FFFFFF;
+
+  /* 큰 문장 카드(두 모드 공통 퍼플) */
+  --sp-hero: #261B40;
+  --sp-hero-line: #261B40;
+  --sp-hero-ink: #FFFFFF;
+  --sp-hero-ink-2: #CFC5E8;
+  --sp-hero-btn: #C3A6FF;
+  --sp-on-hero-btn: #261B40;
+  --sp-hero-shadow: 0 24px 40px -24px rgba(38, 27, 64, .55);
+
+  /* 상태 3가지 — 색만으로 구분하지 않는다(아이콘 모양 + 글자 함께) */
+  --sp-ok: #76E7C4;             /* 괜찮아요: 채움·그래픽·카드 안 글자 */
+  --sp-ok-ink: #0B6B50;         /* 괜찮아요: 밝은 바탕 위 글자 */
+  --sp-ok-soft: #DDF8EF;
+  --sp-on-ok: #13372B;          /* 민트 채움 위 글자 */
+  --sp-bad: #FF8A65;            /* 문제 있어요: 카드 안 글자·그래픽 */
+  --sp-bad-ink: #B3261E;        /* 문제 있어요: 밝은 바탕 위 글자 */
+  --sp-bad-soft: #FDE7E4;
+  --sp-wait: #CFC5E8;           /* 기록을 기다려요: 카드 안 */
+  --sp-wait-ink: #5D5673;
+  --sp-wait-soft: #EEEBF3;
+
+  /* 글꼴 — Noto Sans KR 하나 (SIL OFL 1.1) */
+  --sp-font: "Noto Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif;
+  --sp-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;   /* 주소·오류 원문·요청문만 */
+  --sp-text-xs: calc(13px * var(--sp-scale));    /* 보조 설명, 시각 */
+  --sp-text-sm: calc(14px * var(--sp-scale));    /* 행 보조 줄, 칩 */
+  --sp-text-md: calc(16px * var(--sp-scale));    /* 본문, 버튼 */
+  --sp-text-lg: calc(18px * var(--sp-scale));    /* 구역 제목 */
+  --sp-text-xl: calc(22px * var(--sp-scale));    /* 화면 제목(카드 없는 화면) */
+  --sp-text-headline: calc(30px * var(--sp-scale));  /* 큰 문장(휴대폰) */
+  --sp-text-headline-pc: calc(44px * var(--sp-scale));
+  --sp-text-num: calc(52px * var(--sp-scale));   /* 큰 숫자(휴대폰) */
+  --sp-text-num-pc: calc(84px * var(--sp-scale));
+  --sp-lh-body: 1.6;
+  --sp-lh-title: 1.3;
+  --sp-lh-headline: 1.25;
+  --sp-lh-num: 1;
+  --sp-weight-regular: 400;
+  --sp-weight-medium: 500;
+  --sp-weight-bold: 700;
+  --sp-weight-num: 800;
+  --sp-weight-headline: 900;
+
+  /* 간격 (4의 배수) */
+  --sp-space-1: 4px;
+  --sp-space-2: 8px;
+  --sp-space-3: 12px;
+  --sp-space-4: 16px;
+  --sp-space-5: 20px;
+  --sp-space-6: 24px;
+  --sp-space-8: 32px;
+  --sp-space-10: 40px;
+  --sp-touch: 44px;            /* 누르는 곳 최소 크기 */
+
+  /* 모서리 */
+  --sp-radius-sm: 8px;         /* 입력 안 작은 상자, 스켈레톤 */
+  --sp-radius-md: 12px;        /* 버튼, 입력, 띠 알림, 오류 안내 */
+  --sp-radius-lg: 14px;        /* 카드 안 큰 버튼 */
+  --sp-radius-xl: 24px;        /* 큰 문장 카드 */
+  --sp-radius-tail: 6px;       /* 양이 말하는 쪽 모서리(말풍선 꼬리) */
+  --sp-radius-pill: 999px;
+
+  /* 움직임 */
+  --sp-ease-out: cubic-bezier(.23, 1, .32, 1);
+  --sp-dur-press: 160ms;
+  --sp-dur-swap: 200ms;
+  --sp-dur-rise: 280ms;
+  --sp-dur-fill: 700ms;
+  --sp-dur-ring: 700ms;
+}
+.sp[data-theme="dark"] {
+  --sp-bg: #0F0A1C;
+  --sp-surface: #1A1330;
+  --sp-surface-2: #241B3D;
+  --sp-ink: #F1EDF9;
+  --sp-ink-2: #B8AED0;
+  --sp-line: #2C2346;
+  --sp-line-strong: #6E6390;
+  --sp-focus: #C3A6FF;
+  --sp-btn: #C3A6FF;
+  --sp-on-btn: #1B1230;
+  --sp-hero-line: #3B2C63;
+  --sp-hero-shadow: none;
+  --sp-ok-ink: #76E7C4;
+  --sp-ok-soft: rgba(118, 231, 196, .12);
+  --sp-bad-ink: #FF8A65;
+  --sp-bad-soft: rgba(255, 138, 101, .12);
+  --sp-wait-ink: #B8AED0;
+  --sp-wait-soft: rgba(184, 174, 208, .12);
+}
+/* 200% 글자 시연용 */
+.sp.text-200 { --sp-scale: 2; }
