@@ -24,7 +24,7 @@
     var e = E[i];
     var frames = view === 'pc' ? '<div class="pcs">' + pcFrames(e) + '</div>'
       : '<div class="frames">' + SP.phone('light', e.mobile(), { anim: e.anim, big: e.big }) + SP.phone('dark', e.mobile(), { anim: e.anim, big: e.big }) + '</div>';
-    return '<article class="entry" id="' + e.id + '" aria-labelledby="h-' + e.id + '"><h1 id="h-' + e.id + '" tabindex="-1">' + e.title + '</h1><p class="desc">' + e.desc + '</p><p class="desc"><a href="live.html#' + e.id + '" target="_blank" rel="noopener">이 화면을 실제 브라우저 창 너비로 열기</a> — 창을 1023px·639px 아래로 줄이면 태블릿·휴대폰 배치로 바뀌어요.</p>' + (e.anim ? '<p><button class="pg-btn" data-replay>움직임 다시 보기</button></p>' : '') + frames + '</article>';
+    return '<article class="entry" id="' + e.id + '" aria-labelledby="h-' + e.id + '"><h1 id="h-' + e.id + '" tabindex="-1">' + SP.show(e.title) + '</h1><p class="desc">' + SP.show(e.desc) + '</p><p class="desc"><a href="live.html#' + e.id + '" target="_blank" rel="noopener">이 화면을 실제 브라우저 창 너비로 열기</a> — 창을 1023px·639px 아래로 줄이면 태블릿·휴대폰 배치로 바뀌어요.</p>' + (e.anim ? '<p><button class="pg-btn" data-replay>움직임 다시 보기</button></p>' : '') + frames + '</article>';
   }
   function render() {
     var m = document.getElementById('mount');
@@ -46,7 +46,8 @@
   }
   SP.initIndex = function () {
     var nav = document.getElementById('list'), g = '', out = '';
-    E.forEach(function (e, i) { if (e.group !== g) { g = e.group; out += '<h2>' + g + '</h2>'; } out += '<a href="#' + e.id + '" data-i="' + i + '">' + e.title.replace(g + ': ', '').replace(/^S\d+ /, '') + '</a>'; });
+    /* 갤러리 목록·본문의 제목·설명에도 앱 이름이 들어가므로(독서노트 등 동적 화면) 화면과 같은 SP.show로만 넣는다 */
+    E.forEach(function (e, i) { if (e.group !== g) { g = e.group; out += '<h2>' + SP.show(g) + '</h2>'; } out += '<a href="#' + SP.show(e.id) + '" data-i="' + i + '">' + SP.show(e.title.replace(g + ': ', '').replace(/^S\d+ /, '')) + '</a>'; });
     nav.innerHTML = out;
     nav.addEventListener('click', function (ev) { var a = ev.target.closest('a[data-i]'); if (!a) return; ev.preventDefault(); mode = 'one'; setMode(); go(+a.getAttribute('data-i')); });
     document.getElementById('prev').addEventListener('click', function () { go(cur - 1); });

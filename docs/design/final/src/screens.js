@@ -338,13 +338,18 @@
 
   /* 확인 입력 + 위험 단추: 칸은 비어 있게 시작하고, 적은 값이 want와 정확히 같을 때만 단추가 눌린다(kit.js input 처리).
      go: 눌렀을 때 목업이 넘어갈 화면. value/disabled는 진행 중·실패 화면에서 이미 적은 값을 보여 줄 때만 */
+  /* 비교 기준(매니저 결정, 기능명세서 6.0·S10·S11):
+     - 기본(S10 앱 삭제): 화면에 보이는 앱 이름(SP.mask 결과 = SP.show가 보여 주는 글자)과 비교. 가린 부분이 있으면 "보이는 그대로 입력" 안내를 한 줄 더.
+     - o.raw(S11 탈퇴의 로그인 이메일): 회원 자신의 계정 정보라 가리지 않고 그대로 보여 주고 그대로 비교(이스케이프만) */
   var confirmField = function (label, want, btnText, go, o) {
     o = o || {};
     var bid = 'cb' + (SP.uid = (SP.uid || 0) + 1);
-    /* want(앱 이름·이메일)는 회원 입력이라 화면 글자는 SP.show로. 비교용 data-confirm에는 원본을 속성 이스케이프로만 */
-    var field = K.field({ label: label, value: o.value || '', help: '"' + SP.show(want) + '"를 똑같이 적어야 단추가 눌려요', attr: ' autocomplete="off" data-confirm="' + esc(want) + '" data-confirm-btn="' + bid + '"' + (o.locked ? ' disabled' : '') });
+    var visible = o.raw ? String(want) : SP.mask(want);            /* 화면에 보이는 글자 = 비교 기준 */
+    var masked = !o.raw && visible !== String(want);
+    var help = '"' + esc(visible) + '"를 똑같이 적어야 단추가 눌려요' + (masked ? '. 이름 일부가 [가림]으로 가려져 있어요. 화면에 보이는 그대로([가림] 포함) 입력해 주세요' : '');
+    var field = K.field({ label: label, value: o.value || '', help: help, attr: ' autocomplete="off" data-confirm="' + esc(visible) + '" data-confirm-btn="' + bid + '"' + (o.locked ? ' disabled' : '') });
     if (o.noButton) return field;
-    return field + '<button class="sp-btn danger block" id="' + bid + '" data-go="' + go + '" aria-disabled="' + (o.value === want ? 'false' : 'true') + '">' + SP.show(btnText) + '</button>';
+    return field + '<button class="sp-btn danger block" id="' + bid + '" data-go="' + go + '" aria-disabled="' + (o.value === visible ? 'false' : 'true') + '">' + (o.raw ? esc(btnText) : SP.show(btnText)) + '</button>';
   };
 
   /* ---------------- S10 앱 설정 ---------------- */
@@ -372,7 +377,7 @@
   /* 앱마다 그 앱의 알림 설정 화면으로 간다: 모임모아 → s9, 독서노트 → s9-dokseo, 우리동네 장터 → s9-none */
   var appAlert = function (name, line, href) { return '<li><a class="sp-frow" href="#' + href + '"><span class="si none">' + ic.bell(18) + '</span><span class="nm">' + SP.show(name) + '<small>' + line + '</small></span><span class="go">' + ic.chev(18) + '</span></a></li>'; };
   var s11Parts = {
-    account: function () { return sec('<h2>계정</h2><dl class="sp-kv"><div><dt>로그인한 이메일</dt><dd>' + EMAIL + '</dd></div><div><dt>로그인 방식</dt><dd>Google</dd></div></dl>'); },
+    account: function () { return sec('<h2>계정</h2><dl class="sp-kv"><div><dt>로그인한 이메일</dt><dd>' + esc(EMAIL) + '</dd></div><div><dt>로그인 방식</dt><dd>Google</dd></div></dl>'); },
     alerts: function (none) {
       if (none) return sec('<h2>알림 받을 곳</h2>' + K.empty('등록한 앱이 없어요', '알림은 앱마다 정해요. 앱을 등록하면 여기에 앱마다 슬랙·이메일 연결 상태가 나와요.'));
       return sec('<h2>알림 받을 곳</h2><p class="sp-sub">알림은 앱마다 정해요. 누르면 그 앱의 알림 설정으로 가요.</p><ul class="sp-list">' + appAlert('모임모아', '슬랙 #모임모아-알림, 이메일 켜짐', 's9') + appAlert('독서노트', '슬랙 연결 안 됨, 이메일 켜짐', 's9-dokseo') + appAlert('우리동네 장터', '받을 곳 없음, 설정해 주세요', 's9-none') + '</ul>');
@@ -406,13 +411,13 @@
        진행: 적은 값 그대로 잠금 + "탈퇴하는 중" 단추 하나
        실패: 적은 값 유지 + 오류 안내 안의 [다시 시도] 하나(따로 탈퇴 단추를 두지 않음) */
     var label = '확인을 위해 로그인 이메일을 적어 주세요';
-    var locked = function () { return confirmField(label, EMAIL, '', '', { value: EMAIL, locked: true, noButton: true }); };
+    var locked = function () { return confirmField(label, EMAIL, '', '', { value: EMAIL, locked: true, noButton: true, raw: true }); };
     var spinBtn = function (t) { return '<button class="sp-btn danger block" aria-busy="true" aria-disabled="true"><span class="sp-spin" aria-hidden="true"></span>' + t + '</button>'; };
     var body;
     if (state === 'busy') body = locked() + spinBtn('탈퇴하는 중') + '<p class="sp-sub" role="status">' + (none ? '계정을 지우고 있어요.' : '앱 3개와 기록을 지우고 있어요.') + ' 보통 10초 안에 끝나요. 이 화면을 닫아도 계속 진행돼요.</p>';
     else if (state === 'checking') body = locked() + spinBtn('탈퇴 결과를 확인하는 중') + '<p class="sp-sub" role="status">응답이 중간에 끊겼어요. 탈퇴는 서버에서 계속 진행 중일 수 있어서 바로 실패로 보지 않아요. 10초마다 계정이 남아 있는지 다시 확인하고(최대 2분), 계정이 없어지면 탈퇴가 끝난 거예요.</p>';
     else if (state === 'error') body = locked() + K.error('탈퇴를 마치지 못했어요', '2분 동안 다시 확인해도 계정이 남아 있어요(또는 서버가 실패를 알려 왔어요). 로그인도 그대로 돼요. 다시 시도하면 남은 삭제를 이어서 해요.', '<button class="sp-btn danger" data-go="s11-deleting">' + ic.retry(16) + '다시 시도</button>') + '<a class="sp-btn text" href="#s11">나중에 하기</a>';
-    else body = confirmField(label, EMAIL, none ? '계정을 지우고 탈퇴' : '모든 앱과 기록을 지우고 탈퇴', none ? 's11-done-noapps' : 's11-deleting') + '<a class="sp-btn text" href="#' + (none ? 's11-noapps' : 's11') + '">탈퇴하지 않고 돌아가기</a>';
+    else body = confirmField(label, EMAIL, none ? '계정을 지우고 탈퇴' : '모든 앱과 기록을 지우고 탈퇴', none ? 's11-done-noapps' : 's11-deleting', { raw: true }) + '<a class="sp-btn text" href="#' + (none ? 's11-noapps' : 's11') + '">탈퇴하지 않고 돌아가기</a>';
     return wrap(K.hdr('회원 탈퇴', null, '내 계정으로', '') + sec('<h1>탈퇴하면 이렇게 돼요</h1>' + gone) + sec(body));
   };
   add({ id: 's11-delete', group: 'S11 내 계정', title: 'S11 탈퇴 확인',
