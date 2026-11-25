@@ -19,7 +19,7 @@
 |---|---|
 | 제출 산출물 | 레포 루트에서 `bash scripts/check-deliverables.sh` |
 | 비밀값 | Gitleaks CLI 설치 시 `gitleaks git --redact --no-banner`. PR의 `ci`에서도 검사한다. |
-| Worker 빌드·실행·테스트 | T2에서 추가 |
+| Worker 빌드·실행·테스트 | `worker/`에서 `worker-build --release`, `npx --yes wrangler@4.168.0 dev --local --var INGEST_DRY_RUN:true`, `cargo test --locked`. HTTP 통합 테스트는 [Worker README](worker/README.md) 참고 |
 | Supabase 로컬 실행·테스트 | T3에서 추가 |
 | 웹 실행·빌드·테스트 | T5에서 추가 |
 
