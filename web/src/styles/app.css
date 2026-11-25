@@ -532,6 +532,56 @@ summary {
     padding-block: 20px;
   }
 }
+.monitor {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.monitor h1,
+.monitor h2,
+.monitor h3 {
+  margin-block: 0 0.5rem;
+}
+.monitor .app-card {
+  display: block;
+  margin-block: 0.5rem;
+}
+.monitor table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.monitor th,
+.monitor td {
+  padding: 0.5em;
+  border-bottom: 1px solid var(--sp-line);
+  text-align: start;
+}
+.monitor summary {
+  cursor: pointer;
+  padding-block: 0.75em;
+}
+.monitor pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.monitor textarea {
+  width: 100%;
+  min-height: 10rem;
+}
+.monitor button[aria-pressed="false"] {
+  background: var(--sp-surface);
+  color: var(--sp-ink);
+}
+@media (max-width: 639px) {
+  .monitor th,
+  .monitor td {
+    padding: 0.3em;
+  }
+  .monitor .panel {
+    min-width: 0;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
