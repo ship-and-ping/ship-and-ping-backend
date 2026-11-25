@@ -10,7 +10,7 @@ insert into features(app_id,kind,method,route,name)
 insert into app_versions(app_id,version) select id,'v1' from apps;
 insert into stats_5m
  select app_id,id,'v1',date_bin('5 minutes',now(),'epoch')-n*interval '5 minutes',5,0,0,500,
- array[0,5]||array_fill(0,array[14]) from features cross join generate_series(0,5) n;
+ array[0,5]||array_fill(0,array[14]) from features cross join generate_series(0,2015) n;
 analyze features;
 analyze stats_5m;
 create function pg_temp.measure() returns text language plpgsql as $$
@@ -19,8 +19,8 @@ begin
  perform evaluate_all();
  return round(extract(epoch from clock_timestamp()-started)*1000,2)||' ms';
 end $$;
-select diag('20 apps x 15 features x 6 buckets, first evaluation: '||pg_temp.measure());
-select is((select count(*) from baselines),300::bigint,'all 300 features evaluated');
+select diag('20 apps x 15 features x 2016 buckets, first evaluation: '||pg_temp.measure());
+select is((select count(*) from baselines where p50_ms is not null and sample_count=10080),300::bigint,'seven-day baselines computed');
 select diag('same data, next evaluation: '||pg_temp.measure());
 select is((select count(*) from incidents),0::bigint,'healthy traffic stays quiet');
 select * from finish();

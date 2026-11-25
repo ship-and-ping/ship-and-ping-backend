@@ -9,19 +9,16 @@ language sql set search_path='' as $$
  with due as materialized (
   select f.id,b.first_sample_at from public.features f left join public.baselines b on b.feature_id=f.id
   where b.p50_ms is null or b.computed_at<=now()-interval '6 hours'
- ), deep_bins as (
-  select a.feature_id,private.duration_bin(a.duration_ms) bin,count(*)::int n,
-   min(a.ended_at) stamp,min(a.duration_ms) lo,max(a.duration_ms) hi
+ ), deep as (
+  select a.feature_id,count(*)::int n,min(a.ended_at) stamp,min(a.duration_ms) lo,max(a.duration_ms) hi,
+   percentile_cont(array[0.5,0.9]) within group(order by a.duration_ms) quantiles
   from public.attempts a join due d on a.feature_id=d.id
   where a.status='success' and a.duration_ms is not null and a.ended_at between now()-interval '7 days' and now()
-  group by 1,2
+  group by 1
  ), samples as (
   select s.feature_id,s.bucket as stamp,s.success_hist h,s.min_ms,s.max_ms
   from private.speed_buckets s join due d on s.feature_id=d.id
   where s.bucket between now()-interval '7 days' and now()
-  union all
-  select feature_id,stamp,array(select case when i=bin then n else 0 end
-    from generate_series(1,16) i order by i),lo,hi from deep_bins
  ), totals as (
   select feature_id,private.sum_hist(h) h,min(min_ms) lo,max(max_ms) hi,min(stamp) first_recent
   from samples group by feature_id
@@ -38,20 +35,20 @@ language sql set search_path='' as $$
  ), history as (
   select feature_id,sum(n) n,min(lo) lo,max(hi) hi,min(first_stamp) first_stamp from older group by 1
  ), observations as (
-  select d.id,t.h,least(t.lo,h.lo) lo,greatest(t.hi,h.hi) hi,
-   coalesce((select sum(n) from unnest(t.h) n),0)::int recent_n,coalesce(h.n,0)::int older_n,
-   least(d.first_sample_at,t.first_recent,h.first_stamp,
+  select d.id,t.h,a.quantiles,least(t.lo,h.lo,a.lo) lo,greatest(t.hi,h.hi,a.hi) hi,
+   coalesce((select sum(n) from unnest(t.h) n),a.n,0)::int recent_n,coalesce(h.n,0)::int older_n,
+   least(d.first_sample_at,t.first_recent,h.first_stamp,a.stamp,
      case when d.first_sample_at is null then (select min(bucket) from public.stats_5m where feature_id=d.id) end,
      case when d.first_sample_at is null then (select min(started_at) from public.attempts where feature_id=d.id) end,
      case when d.first_sample_at is null then (select min(ended_at) from public.attempts where feature_id=d.id) end) first_stamp
-  from due d left join totals t on t.feature_id=d.id left join history h on h.feature_id=d.id
+  from due d left join totals t on t.feature_id=d.id left join history h on h.feature_id=d.id left join deep a on a.feature_id=d.id
  ), eligible as (
   select *,recent_n+older_n>=30 and first_stamp<=now()-interval '3 days' and recent_n>0 ready from observations
  )
  insert into public.baselines(feature_id,first_sample_at,sample_count,observed_min_ms,observed_max_ms,p50_ms,p90_ms,computed_at)
  select id,first_stamp,case when ready then recent_n else recent_n+older_n end,lo,hi,
-  case when ready then private.hist_percentile(h,0.5) end,
-  case when ready then private.hist_percentile(h,0.9) end,now()
+  case when ready then coalesce(round(quantiles[1])::int,private.hist_percentile(h,0.5)) end,
+  case when ready then coalesce(round(quantiles[2])::int,private.hist_percentile(h,0.9)) end,now()
  from eligible where first_stamp<=now()
  on conflict(feature_id) do update set first_sample_at=excluded.first_sample_at,sample_count=excluded.sample_count,
   observed_min_ms=excluded.observed_min_ms,observed_max_ms=excluded.observed_max_ms,
@@ -65,9 +62,9 @@ create view private.evaluation_signals as
   where closed_at>=now()-interval '1 hour' and status in ('resolved','quiet') group by 1,2
  ), kinds(kind) as (values ('failure'),('slow')), auto as (
   select s.feature_id,k.kind,sum(s.total-s.client_errors) results,sum(s.failures) failures,
-   sum(s.total) timed,private.hist_percentile(private.sum_hist(s.hist),0.5) p50,
+   sum(s.total-s.client_errors) timed,private.hist_percentile(private.sum_hist(s.success_hist),0.5) p50,
    sum(case when s.threshold_ms=f.slow_threshold_ms and s.result_count=s.total-s.client_errors then s.slow_count
-    else (select coalesce(sum(n),0) from unnest(s.hist) with ordinality bins(n,pos)
+    else (select coalesce(sum(n),0) from unnest(case when s.client_errors=0 then s.hist else s.success_hist end) with ordinality bins(n,pos)
           where pos>private.duration_bin(f.slow_threshold_ms)) end) slow,
    max(s.bucket) latest,(array_agg(s.version order by s.bucket desc,s.version))[1] version
   from private.speed_buckets s join public.features f on f.id=s.feature_id cross join kinds k
@@ -76,7 +73,7 @@ create view private.evaluation_signals as
    and (c.closed_at is null or s.bucket>c.closed_at) group by s.feature_id,k.kind
  ), deep as (
   select a.feature_id,k.kind,count(*) results,count(*) filter(where status='failure') failures,
-   count(duration_ms) timed,percentile_disc(0.5) within group(order by duration_ms) p50,
+   count(duration_ms) timed,percentile_cont(0.5) within group(order by duration_ms) filter(where status='success') p50,
    count(*) filter(where duration_ms>f.slow_threshold_ms) slow,
    (array_agg(status order by ended_at desc,attempt_id))[1:3]=array['failure','failure','failure'] streak,
    max(ended_at) latest,(array_agg(version order by ended_at desc,attempt_id))[1] version
@@ -99,10 +96,10 @@ create view private.evaluation_signals as
    when 'slow' then r.timed>=5 and case when b.p50_ms is null then r.slow*2>=r.timed else r.p50>=2*b.p50_ms end
    else m.tried>=10 and m.missing*2>=m.tried end as breached,
   case k.kind when 'failure' then r.failures::numeric/nullif(r.results,0)
-   when 'slow' then case when b.p50_ms is null then r.slow::numeric/nullif(r.timed,0) else r.p50::numeric/nullif(b.p50_ms,0) end
+   when 'slow' then r.p50::numeric/f.slow_threshold_ms
    else m.missing::numeric/nullif(m.tried,0) end severity,
   case k.kind when 'failure' then jsonb_build_object('total',r.results,'failures',r.failures)
-   when 'slow' then jsonb_build_object('total',r.timed,'p50',r.p50,'baseline',b.p50_ms,'slow',r.slow)
+   when 'slow' then jsonb_build_object('total',r.timed,'p50',r.p50,'baseline',b.p50_ms,'slow',r.slow,'threshold',f.slow_threshold_ms)
    else jsonb_build_object('total',m.tried,'unconfirmed',m.missing) end metric,
   case when k.kind='unconfirmed' then m.version else r.version end version,
   case when k.kind='unconfirmed' then m.latest else r.latest end latest
@@ -115,27 +112,22 @@ language sql stable set search_path='' as $$
  select v.version from public.app_versions v join public.features f on f.id=issue.feature_id
  left join public.baselines b on b.feature_id=f.id
  cross join lateral (
-  select count(*)=5 and bool_and(success and (issue.kind<>'slow' or ms<=coalesce(b.p50_ms*1.5,f.slow_threshold_ms))) recovered
+  select count(*)=5 and bool_and(success and (issue.kind<>'slow' or coalesce(ms<=coalesce(b.p50_ms*1.5,f.slow_threshold_ms),false))) recovered
   from (
    select success,ms from (
-    select a.ended_at stamp,a.status='success' success,a.duration_ms ms
+    select a.result_received_at stamp,0::bigint position,a.status='success' success,a.duration_ms ms
     from public.attempts a where a.feature_id=f.id and a.version=v.version and a.status in ('success','failure')
-     and a.ended_at between issue.opened_at and now()
+     and a.result_received_at>issue.opened_at
     union all
-    select (t->>0)::timestamptz,(t->>2)::boolean,(t->>1)::int
-    from private.latest_results r cross join lateral jsonb_array_elements(r.tail) t
+    select r.received_at,r.position,r.success,r.ms
+    from private.latest_results r
     where r.app_id=v.app_id and r.feature_id=f.id and r.version=v.version
-    union all
-    -- Legacy mixed buckets have unknown ordering. A failure breaks the streak.
-    select s.bucket,s.failures=0,private.hist_percentile(s.hist,1)
-    from private.speed_buckets s cross join lateral generate_series(1,least(5,s.total-s.client_errors)) n
-    where s.app_id=v.app_id and s.feature_id=f.id and s.version=v.version and s.bucket>=issue.opened_at
-     and s.result_count is distinct from s.total-s.client_errors
-   ) events where stamp between issue.opened_at and now() order by stamp desc,success,ms desc limit 5
+     and r.received_at>issue.opened_at
+   ) events order by stamp desc,position desc,success,ms desc limit 5
   ) last_results
  ) proof
- where v.app_id=issue.app_id and v.first_seen_at>issue.opened_at and v.first_seen_at<=now() and proof.recovered
- order by v.first_seen_at,v.version limit 1
+ where v.app_id=issue.app_id and v.version<>issue.opened_version and v.last_seen_at>issue.opened_at and proof.recovered
+ order by v.last_seen_at desc,v.version limit 1
 $$;
 
 create function public.evaluate_all() returns jsonb
@@ -146,7 +138,7 @@ declare
  recovered text;
  change text;
  metric jsonb;
- channel_name text;
+ channels text[];
  events jsonb := '[]';
 begin
  if not pg_try_advisory_xact_lock(62911006) then return events; end if;
@@ -173,6 +165,14 @@ begin
      where id=issue.id;
     change := 'resolved';
    elsif signal.breached then
+    if issue.kind='failure' and (issue.metric_at_open->>'severity')::numeric>0.5 then
+     -- Express current failure count relative to its opening count on the original scale.
+     signal.severity := (issue.metric_at_open->>'severity')::numeric *
+      (signal.metric->>'failures')::numeric/(issue.metric_at_open->>'failures')::numeric;
+    elsif issue.kind='slow' then
+     signal.severity := (signal.metric->>'p50')::numeric/(issue.metric_at_open->>'threshold')::numeric;
+    end if;
+    metric := signal.metric || jsonb_build_object('severity',signal.severity);
     if signal.severity>=2*(issue.metric_at_open->>'severity')::numeric
      and (issue.last_worse_severity is null or signal.severity>issue.last_worse_severity)
      and issue.last_notified_at<=now()-interval '6 hours' then
@@ -182,7 +182,7 @@ begin
      last_worse_severity=case when change='worse' then signal.severity else last_worse_severity end,
      metric_worst=case when signal.severity>(metric_worst->>'severity')::numeric then metric else metric_worst end,
      last_notified_at=case when change='worse' then now() else last_notified_at end where id=issue.id;
-   elsif not exists(select from public.app_versions where app_id=issue.app_id and first_seen_at>issue.opened_at) then
+   elsif not exists(select from public.app_versions where app_id=issue.app_id and version<>issue.opened_version and last_seen_at>issue.opened_at) then
     if issue.below_since is null then
      update public.incidents set below_since=now() where id=issue.id;
     elsif issue.below_since<=now()-interval '2 hours' then
@@ -191,14 +191,14 @@ begin
    end if;
   end if;
   if change is not null then
-   select case when c.slack_webhook_secret_id is not null then 'slack'
-    when coalesce(c.email_enabled,true) then 'email' end into channel_name
-   from public.apps a left join public.alert_channels c on c.owner_id=a.owner_id where a.id=issue.app_id;
-   if channel_name is not null then
-    insert into public.notifications(incident_id,channel,event,sent_at,ok) values(issue.id,channel_name,change,null,null);
-   end if;
+   with queued as (
+    insert into public.notifications(incident_id,channel,event,sent_at,ok)
+    select issue.id,ch.name,change,null,null from public.apps a join public.alert_channels c using(owner_id)
+    cross join lateral (values ('slack',c.slack_webhook_secret_id is not null),('email',c.email_enabled)) ch(name,enabled)
+    where a.id=issue.app_id and ch.enabled returning channel
+   ) select array(select channel from queued order by channel) into channels;
    events := events||jsonb_build_object('incident_id',issue.id,'app_id',issue.app_id,'feature_id',issue.feature_id,
-    'kind',issue.kind,'event',change,'channel',channel_name);
+    'kind',issue.kind,'event',change,'channels',channels);
   end if;
  end loop;
  return events;

@@ -7,12 +7,12 @@ insert into apps(owner_id,name) values ('00000000-0000-0000-0000-000000000006','
 insert into app_keys(app_id,kind,prefix,key_hash) select id,'pub','fixture',repeat('0',64) from apps;
 create function pg_temp.batch(v text,good int,bad int,age interval) returns jsonb language sql as $$
  with events as (
-  select now()-age-n*interval '1 millisecond' stamp,n>good failed,case when n>good then 7100 else 7000 end ms
+  select now()-age-n*interval '1 millisecond' stamp,good+bad-n position,n>good failed,case when n>good then 7100 else 7000 end ms
   from generate_series(1,good+bad) n
  ), bins as (
   select date_bin('5 minutes',stamp,'epoch') bucket,count(*) total,count(*) filter(where failed) failures,
    sum(ms) duration_sum_ms,array_fill(0,array[11])||array[count(*)::int,0,0,0,0] hist,
-   jsonb_agg(jsonb_build_array(stamp,ms,not failed)) timings from events group by 1
+   jsonb_agg(jsonb_build_array(position,ms,not failed) order by position) timings from events group by 1
  )
  select jsonb_build_object('batch_id',gen_random_uuid(),'app_version',v,'stats',
   (select jsonb_agg(to_jsonb(bins)||jsonb_build_object('method','GET','route','/f','client_errors',0)) from bins))
@@ -26,14 +26,20 @@ select ingest_batch(repeat('0',64),pg_temp.batch('old',81,21,'4 minutes'));
 -- 40 / 202 < 20%; two more failures cross the threshold.
 select ingest_batch(repeat('0',64),pg_temp.batch('old',0,2,'3 minutes'));
 select is(evaluate_all()->0->>'kind','failure','mixed bucket crosses threshold');
+insert into app_versions(app_id,version,first_seen_at,last_seen_at)
+select id,'new',now()-interval '7 days',now()-interval '6 days' from apps;
 update incidents set opened_at=now()-interval '2 minutes';
 select ingest_batch(repeat('0',64),pg_temp.batch('new',4,1,'30 seconds'));
 select is(evaluate_all(),'[]'::jsonb,'new version ends with only four successes');
 select ingest_batch(repeat('0',64),pg_temp.batch('new',1,0,'10 seconds'));
-select is(evaluate_all()->0->>'event','resolved','fifth success in mixed bucket proves recovery');
+select is(evaluate_all()->0->>'event','resolved','fifth success in reappearing older release proves recovery');
 select ingest_batch(repeat('0',64),pg_temp.batch('new',0,5,'10 minutes'));
-select results_eq($q$select jsonb_array_length(tail),bool_and((t->>2)::boolean)
- from private.latest_results cross join lateral jsonb_array_elements(tail) t where version='new' group by tail$q$,
- 'select 5,true','out-of-order batch preserves only the latest five results per version');
+select results_eq($q$select count(*),bool_or(success) from
+ (select success from private.latest_results where version='new' order by received_at desc,position desc limit 5) r$q$,
+ 'select 5::bigint,false','later receipt wins despite earlier client clocks');
+select is((select count(*) from private.latest_results where version='old'),20::bigint,'per-version tail capped');
+update private.latest_results set received_at=now()-interval '31 days' where version='old';
+select cleanup_daily();
+select is((select count(*) from private.latest_results where version='old'),0::bigint,'tail expires by receipt');
 select * from finish();
 rollback;

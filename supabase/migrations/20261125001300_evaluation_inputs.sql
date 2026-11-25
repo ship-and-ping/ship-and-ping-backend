@@ -16,13 +16,6 @@ language sql immutable strict parallel safe set search_path='' as $$
   from unnest(h) with ordinality as bins(n,pos)
  ) b where total>0 and running>=fraction*total order by pos limit 1
 $$;
-create function private.last_five(items jsonb) returns jsonb
-language sql immutable strict set search_path='' as $$
- select coalesce(jsonb_agg(jsonb_build_array(stamp,ms,success) order by stamp desc,success,ms desc),'[]') from (
-  select (item->>0)::timestamptz stamp,(item->>2)::boolean success,(item->>1)::int ms
-  from jsonb_array_elements(items) item where item->>2 is not null order by stamp desc,success,ms desc limit 5
- ) latest
-$$;
 create table private.evaluation_buckets (
  app_id uuid, feature_id uuid, version text, bucket timestamptz,
  success_hist integer[] not null, min_ms integer,max_ms integer,
@@ -31,10 +24,22 @@ create table private.evaluation_buckets (
  foreign key(app_id,feature_id,version,bucket) references public.stats_5m on delete cascade
 );
 create table private.latest_results (
- app_id uuid, feature_id uuid, version text, bucket timestamptz not null, tail jsonb not null,
- primary key(app_id,feature_id,version),
- foreign key(app_id,feature_id,version,bucket) references public.stats_5m on delete cascade
+ app_id uuid, feature_id uuid, version text, received_at timestamptz, position bigint,
+ ms integer not null, success boolean not null,
+ primary key(app_id,feature_id,version,received_at,position),
+ foreign key(app_id,feature_id) references public.features(app_id,id) on delete cascade,
+ foreign key(app_id,version) references public.app_versions on delete cascade
 );
+alter table public.attempts add column result_received_at timestamptz;
+create function private.stamp_result() returns trigger language plpgsql set search_path='' as $$
+begin
+ if new.ended_at is not null and (tg_op='INSERT' or old.ended_at is null) then
+  new.result_received_at := clock_timestamp();
+ end if;
+ return new;
+end $$;
+create trigger stamp_result before insert or update of ended_at on public.attempts
+ for each row execute function private.stamp_result();
 create index on public.stats_5m(feature_id,bucket);
 create index on public.attempts(feature_id,ended_at);
 create index on public.attempts(feature_id,started_at);
@@ -50,6 +55,9 @@ declare
  item jsonb;
  feature uuid;
  threshold integer;
+ received timestamptz := clock_timestamp();
+ version_name text := trim(payload->>'app_version');
+ legacy_offset bigint := 0;
 begin
  -- The original function owns the per-app lock and returns zero for retries.
  if (result->>'accepted')::integer=0 then return result; end if;
@@ -65,7 +73,7 @@ begin
   )
   select app,feature,trim(payload->>'app_version'),(item->>'bucket')::timestamptz,
    array(select coalesce(n,0)::integer from generate_series(1,16) g left join bins on g=bin order by g),
-   min(ms) filter(where success),max(ms) filter(where success),count(success),count(*) filter(where ms>threshold),
+   min(ms) filter(where success),max(ms) filter(where success),count(success),count(*) filter(where success is not null and ms>threshold),
    threshold
   from timings
   on conflict(app_id,feature_id,version,bucket) do update set
@@ -73,11 +81,15 @@ begin
    min_ms=least(b.min_ms,excluded.min_ms),max_ms=greatest(b.max_ms,excluded.max_ms),
    result_count=b.result_count+excluded.result_count,slow_count=b.slow_count+excluded.slow_count,
    threshold_ms=case when b.threshold_ms=excluded.threshold_ms then b.threshold_ms else -1 end;
-  insert into private.latest_results as r
-   select app,feature,trim(payload->>'app_version'),(item->>'bucket')::timestamptz,tail
-   from (select private.last_five(item->'timings') tail) batch where tail<>'[]'::jsonb
-   on conflict(app_id,feature_id,version) do update set
-    bucket=greatest(r.bucket,excluded.bucket),tail=private.last_five(r.tail||excluded.tail);
+  insert into private.latest_results
+   select app,feature,version_name,received,
+    case when jsonb_typeof(t->0)='number' then (t->>0)::bigint else legacy_offset+n end,
+    (t->>1)::int,(t->>2)::boolean
+   from jsonb_array_elements(item->'timings') with ordinality as rows(t,n) where t->>2 is not null;
+  legacy_offset := legacy_offset + jsonb_array_length(item->'timings');
+  delete from private.latest_results r where r.app_id=app and r.feature_id=feature and r.version=version_name
+   and (r.received_at,r.position) in (select received_at,position from private.latest_results
+    where app_id=app and feature_id=feature and version=version_name order by received_at desc,position desc offset 20);
  end loop;
  return result;
 end $$;

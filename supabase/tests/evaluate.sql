@@ -35,7 +35,7 @@ select is(jsonb_array_length(evaluate_all()),1,'fifth result opens at exactly 20
 select is((select p50_ms from baselines join features on id=feature_id where name='fail'),null::int,'recent feature has no baseline');
 select ok((select p50_ms is not null from baselines join features on id=feature_id where name='learn'),'C8 30 successes after three days');
 select is(evaluate_all(),'[]'::jsonb,'same incident once');
-select is((select count(*) from notifications where sent_at is null and ok is null),4::bigint,'pending deliveries');
+select is((select count(*) from notifications),0::bigint,'no channel settings means dashboard only');
 select pg_temp.results('fail','old','success',3,100,'10 seconds');
 select pg_temp.results('fail','old','failure',2,100,'10 seconds');
 update incidents set last_notified_at=now()-interval '6 hours';
@@ -50,14 +50,24 @@ update incidents set last_notified_at=now()-interval '6 hours';
 select is(evaluate_all(),'[]'::jsonb,'unchanged severity is not a new worsening');
 update incidents set status='dismissed',dismissed_until=now()+interval '24 hours' where kind='unconfirmed';
 select is(evaluate_all(),'[]'::jsonb,'dismissed incident suppressed');
+update incidents set dismissed_until=now()-interval '1 second' where status='dismissed';
+select is(evaluate_all()->0->>'event','open','dismissal expires');
 delete from attempts where feature_id=(select id from features where name='streak');
 select evaluate_all();
+update incidents set below_since=now()-interval '119 minutes' where feature_id=(select id from features where name='streak');
+select evaluate_all();
+select is((select status from pg_temp.problems where name='streak'),'open','before two hours');
 update incidents set below_since=now()-interval '2 hours' where feature_id=(select id from features where name='streak');
 select is(evaluate_all(),'[]'::jsonb,'quiet produces no delivery');
 select is((select status from pg_temp.problems where name='streak'),'quiet','two continuous hours below threshold');
 update incidents set opened_at=now()-interval '30 minutes';
 insert into app_versions(app_id,version,first_seen_at) select id,'new',now()-interval '5 minutes' from apps;
 select is(evaluate_all(),'[]'::jsonb,'C7 waits for new version usage');
+update incidents set below_since=now()-interval '2 hours' where kind='failure' and status='open';
+delete from attempts where feature_id=(select id from features where name='fail');
+select pg_temp.results('fail','old','success',5,100,'2 minutes');
+select evaluate_all();
+select is((select status from pg_temp.problems where name='fail'),'open','new version blocks quiet and original version cannot resolve');
 select pg_temp.results('fail','new','success',4,100,'2 minutes');
 select is(evaluate_all(),'[]'::jsonb,'four new successes insufficient');
 select pg_temp.results('fail','new','failure',1,100,'1 minute');
@@ -73,11 +83,11 @@ select pg_temp.results('slow','new','success',5,150,'10 seconds');
 select is(evaluate_all()->0->>'event','resolved','five results at exactly 1.5 times baseline');
 select pg_temp.results('learn','new','success',40,900,'10 seconds');
 select evaluate_all();
-select is((select p50_ms from baselines join features on id=feature_id where name='learn'),100,'baseline stays fixed for six hours');
+select is((select p50_ms from baselines join features on id=feature_id where name='learn'),77,'baseline stays fixed for six hours');
 update baselines set computed_at=now()-interval '6 hours' where feature_id=(select id from features where name='learn');
 select evaluate_all();
 select results_eq($q$select p50_ms,p90_ms from baselines join features on id=feature_id where name='learn'$q$,
- 'select 1000,1000','six-hour refresh updates both histogram percentiles');
+ 'select 900,900','six-hour refresh updates both interpolated percentiles');
 select ok(not has_function_privilege('authenticated','evaluate_all()','execute')
  and not has_function_privilege('anon','evaluate_all()','execute')
  and has_function_privilege('service_role','evaluate_all()','execute'),'Worker-only RPC');
