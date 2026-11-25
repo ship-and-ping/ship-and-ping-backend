@@ -39,8 +39,8 @@ const title = (f: Feature | undefined, i: Incident) =>
   displayText(f?.name ?? "기능") +
   {
     slow: "이 느려졌어요",
-    failure: "에서 실패가 늘었어요",
-    unconfirmed: "의 결과 기록이 끊겼을 수 있어요",
+    failure: i.metric_at_open?.consecutive ? "에서 3건 연속 실패했어요" : "에서 실패가 늘었어요",
+    unconfirmed: "의 기록 전송이 끊겼을 수 있어요",
   }[i.kind];
 const route = (f: Feature) =>
   displayText(
@@ -157,6 +157,10 @@ function MonitorPage({
     </div>
   );
 }
+function Outcomes({stats}: {stats:ReturnType<typeof summarize>}) {
+  const rate = stats.eligible ? Math.round(stats.failures / stats.eligible * 100) + "%" : "기록 없음";
+  return <p>성공 {stats.successes}건 · 실패 {stats.failures}건 · 중단 {stats.abandoned}건 · 결과 미확인 {stats.unconfirmed}건 · 실패율 {rate}</p>;
+}
 function Home({ data, base }: { data: Monitor; base: string }) {
   const open = data.incidents.filter((i) => i.status === "open");
   const find = (i: Incident) =>
@@ -221,6 +225,7 @@ function Home({ data, base }: { data: Monitor; base: string }) {
       </section>
       <section id="features">
         <h2>기능 · 최근 24시간</h2>
+        <Link className="button" to={base + "/features/deep/new"}>깊게 볼 기능 추가</Link>
         {rows.length ? (
           rows.map(({ f, s }) => {
             const issue = open.find((i) => i.feature_id === f.id);
@@ -234,6 +239,7 @@ function Home({ data, base }: { data: Monitor; base: string }) {
                 to={base + "/features/" + f.id}
               >
                 <h3>{displayText(f.name)}</h3>
+                {f.kind === "deep" && <Outcomes stats={s} />}
                 <span className={"feature-status " + (issue ? "problem" : s.total ? "healthy" : "")}>
                   <span aria-hidden="true">{issue ? "⚠ " : s.total ? "✓ " : "◷ "}</span>
                   {issue
@@ -416,6 +422,7 @@ function FeaturePage({
   return (
     <>
       <h1 tabIndex={-1}>{displayText(f.name)}</h1>
+      {f.kind === "deep" && <><Outcomes stats={summary} /><Link to={"../deep/" + encodeURIComponent(f.id)} relative="path">추가 연결 요청과 첫 결과 보기</Link></>}
       <Hero
         title={
           summary.total
@@ -474,6 +481,7 @@ function FeaturePage({
         <summary>자세히</summary>
         <p>{route(f)}</p>
         <h3>오류 종류별 기록</h3>
+        {data.step && <p>실패한 단계 · {displayText(data.step)}</p>}
         {[...kinds].map(([k, n]) => (
           <p key={k}>
             {k} {n}건
@@ -601,6 +609,9 @@ function Issue({
     route: f.route ?? "",
     versions,
     step: data.step,
+    kind: i.kind,
+    consecutive: i.metric_at_open?.consecutive,
+    unconfirmed: metric?.unconfirmed,
     opened: i.opened_at,
     mode: again
       ? ("again" as const)
@@ -629,6 +640,7 @@ function Issue({
   return (
     <>
       <h1 tabIndex={-1}>{title(f, i)}</h1>
+      {f.kind === "deep" && <section><h2>문제 감지 구간부터의 결과</h2><Outcomes stats={summarize(data.stats.filter(r => r.feature_id === f.id && Date.parse(r.bucket) <= Date.parse(i.closed_at ?? new Date(data.now).toISOString())))} /></section>}
       <Hero badge={<StatusBadge state={i.status} />} arrived={i.status === "resolved"} title={status[i.status]} detail={
         i.status === "dismissed" && i.closed_at
           ? when(new Date(Date.parse(i.closed_at) + day).toISOString()) + "까지 다시 알리지 않아요."
@@ -712,6 +724,7 @@ function Issue({
       <details>
         <summary>자세히</summary>
         <p>{route(f)}</p>
+        {data.step && <p>실패한 단계 · {displayText(data.step)}</p>}
         <Samples data={data} />
       </details>
       {i.status === "open" && !dismissed && (

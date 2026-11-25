@@ -22,11 +22,14 @@ select pg_temp.results('missing','old','pending',5,0,'10 minutes');
 select pg_temp.results('missing','old','success',5,100,'12 minutes');
 select pg_temp.results('learn','old','success',29,77,'4 days');
 select pg_temp.results('streak','old','failure',3,100,'1 minute');
+insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist)
+ select app_id,id,'old',date_bin('5 minutes',now(),'epoch'),5,5,0,100,array[5]||array_fill(0,array[15]) from features where name='streak';
 select is(jsonb_array_length(evaluate_all()),3,'C6 slow x2, ten attempts half missing, three consecutive failures');
 select results_eq('select name,kind from pg_temp.problems order by name',
  $q$values ('missing','unconfirmed'),('slow','slow'),('streak','failure')$q$,'C6 kinds and features');
 select is((select count(*) from pg_temp.problems where name='fail'),0::bigint,'four results below minimum');
 select is((select count(*) from attempts where status='unconfirmed'),5::bigint,'timeout at ten minutes');
+select is((select metric_at_open->>'consecutive' from pg_temp.problems where name='streak'),'true','incident retains three consecutive failures');
 select is((select p50_ms from baselines join features on id=feature_id where name='learn'),null::int,'C8 29 successes');
 select results_eq($q$select sample_count,observed_min_ms,observed_max_ms from baselines join features on id=feature_id where name='learn'$q$,'select 29,77,77','observations before learning');
 select pg_temp.results('learn','old','success',1,77,'1 minute');

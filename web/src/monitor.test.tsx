@@ -12,6 +12,30 @@ import { MonitorRoute } from "./Monitor";
 import { gateway } from "./data";
 
 afterEach(cleanup);
+it("깊게 보기 카드는 네 결과를 구분하고 확정 결과만 실패율에 포함한다", async () => {
+  setup("/apps/a", [], rows => {
+    Object.assign((rows.features as object[])[0], {kind:"deep",method:null,route:null});
+    rows.stats_5m = [];
+    rows.attempts = ["success","failure","abandon","unconfirmed","pending"].map(status => ({
+      status,feature_id:"f",version:"v1",started_at:new Date().toISOString(),
+      ended_at:["success","failure","abandon"].includes(status) ? new Date().toISOString() : null,
+      duration_ms:100,
+    }));
+    Object.assign((rows.incidents as object[])[0], {metric_at_open:{total:3,failures:3,consecutive:true}});
+  });
+  expect((await screen.findByText(/성공 1건 · 실패 1건 · 중단 1건 · 결과 미확인 1건/)).textContent).toContain("실패율 50%");
+  expect(screen.getAllByText(/3건 연속 실패/).length).toBeGreaterThan(0);
+  expect(screen.getByText(/사용 4건 중 1건/)).toBeTruthy();
+});
+it("대기 중인 시도만 있는 기능은 사용을 기다린다", async () => {
+  setup("/apps/a", [], rows => {
+    Object.assign((rows.features as object[])[0], { kind: "deep" });
+    rows.incidents = [];
+    rows.attempts = [{ status: "pending", feature_id: "f", started_at: new Date().toISOString() }];
+  });
+  expect(await screen.findByText(/사용 0건 중 0건/)).toBeTruthy();
+  expect(screen.getByText(/사용을 기다려요/)).toBeTruthy();
+});
 function setup(
   path: string,
   messages: string[] = ["fetch failed"],

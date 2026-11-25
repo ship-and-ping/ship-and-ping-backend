@@ -45,6 +45,7 @@ date: 2026-11-24
 | route | text null | auto: 주소 형태 (`/api/meetings/:id/join`) |
 | method | text null | auto |
 | feature_key | text null | deep: 전송에 쓰는 키 |
+| create_request_id | uuid null | 깊게 보기 등록을 재시도할 때 같은 기능을 찾는 클라이언트 요청 ID. 앱 안에서 유일 |
 | name | text | 화면 이름 |
 | name_source | text (`suggested` / `confirmed` / `route`) | 이름표 제안·확인 여부 |
 | start_definition, success_definition | text null | deep만 |
@@ -109,7 +110,7 @@ stats_5m과 같은 열, bucket = 1시간. 매일 Cron이 30일 지난 5분 요�
 | opened_at, closed_at | timestamptz | |
 | opened_version | text | 문제 시작 때 버전 |
 | resolved_version | text null | |
-| metric_at_open, metric_worst | jsonb | 예: `{"total":24,"failures":6}` / `{"p50":3400,"baseline":1100}` |
+| metric_at_open, metric_worst | jsonb | 실패 판정은 total·failures·consecutive를 저장한다. 개설 당시 최근 3건이 연속 실패했는지는 metric_at_open.consecutive로 확인한다. 느림 판정에는 p50·baseline 등이 들어간다. |
 | last_notified_at | timestamptz | |
 | dismissed_until | timestamptz null | 문제 아님 → 24시간 |
 
@@ -143,7 +144,16 @@ stats_5m과 같은 열, bucket = 1시간. 매일 Cron이 30일 지난 5분 요�
 |---|---|
 | id, app_id, method, route, name, received_at, applied bool | |
 
-## RPC 함수 (Worker 전용, `security definer`, 회원 실행 권한 없음)
+## 깊게 보기 회원 RPC
+
+로그인한 소유자만 자기 앱의 기능을 관리한다.
+
+| 함수 | 동작 |
+|---|---|
+| `save_deep_feature(p_app,p_feature,p_name,p_start,p_success,p_request_id)` | 추가할 때 p_feature는 null이며 같은 앱·요청 ID로 재시도하면 기존 기능과 feature_key를 반환한다. 수정할 때는 기능 ID를 지정하며 feature_key는 유지한다. |
+| `delete_deep_feature(p_app,p_feature)` | 지정한 깊게 보기 기능과 종속 기록을 삭제한다. |
+
+## 수집·판정·알림 RPC
 | 함수 | 하는 일 |
 |---|---|
 | `ingest_batch(app_key_hash, payload jsonb)` | 키 확인, 중복 묶음 무시, 버전·기능 등록, stats_5m upsert, 시도·오류 예시 저장. 결과 `{accepted, dropped}` |

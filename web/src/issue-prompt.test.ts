@@ -118,6 +118,14 @@ it("복사 직전에 키와 개인정보를 가리고 5건 × 300자로 자른�
   }
 });
 
+it("결과 미확인과 연속 실패의 판정 근거를 요청문에 넣는다", () => {
+  const missing = buildIssuePrompt({ ...base, kind: "unconfirmed", total: 12, unconfirmed: 7 });
+  expect(missing.text).toContain("최근 1시간 12건");
+  expect(missing.text).toContain("결과 미확인 7건");
+  expect(missing.text).toContain("결과 기록 전송이 끊기는지 조사");
+  expect(buildIssuePrompt({ ...base, kind: "failure", consecutive: true }).text).toContain("3건 연속 실패");
+});
+
 it("나눈 지시는 기본 복사에서 빼고 정상 진단은 포함한다", () => {
   const prompt = buildIssuePrompt({
     feature: "결제",

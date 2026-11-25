@@ -561,6 +561,7 @@ summary {
   cursor: pointer;
   padding-block: 0.75em;
 }
+.deep-page pre,
 .monitor pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -682,6 +683,19 @@ summary {
   background: var(--sp-ok-ink);
 }
 .notification-switch[aria-checked="true"] span::after { background: var(--sp-knob-on); }
+
+.deep-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: .5rem;
+}
+.deep-results > div {
+  padding: .75rem;
+  border: 1px solid var(--sp-line);
+  border-radius: var(--sp-radius-md);
+}
+.deep-results dd { margin: .25rem 0 0; font-weight: 700; }
+.deep-page small { display: block; }
 
 .notification-warning {
   display: flex;

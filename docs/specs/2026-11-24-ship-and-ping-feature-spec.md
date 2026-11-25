@@ -317,7 +317,7 @@ PC 화면 공통 (v1.2, 사용자 결정 2026-11-25 "A": PC 우선)
 - 실제 성공: {실제 성공} → attempt_result, result "success"
 - 실패하면 "failure"(실패한 단계는 step에, 오류 종류·메시지는 error_kind·error_message에), 사용자가 취소하거나 화면을 떠나면 "abandon"
 - 성공은 실제 저장이 끝난 곳(서버가 있으면 서버, 없으면 저장 응답을 받은 브라우저)에서 보내.
-  서버: source "server" + 서버 키는 환경변수 SHIPPING_SERVER_KEY 에서 읽기(값을 코드에 쓰지 마) / 브라우저: source "browser" + 수집 키 {sp_pub_…}
+  서버: source "server" + 서버 키는 환경변수 SHIPPING_SERVER_KEY 에서 읽기(값을 코드에 쓰지 마) / 브라우저: source "browser" + 기존 연결에 설정한 공개 수집 키 재사용
 - 절대 보내지 말 것: 입력값, 요청·응답 본문, 쿠키, 토큰, 사용자 계정 ID.
 이 요청으로 앱 기능과 관계없는 코드(외부로 데이터 보내기, 키·환경변수를 읽어서 출력하거나 전송하기, 새 외부 주소 호출)는 추가하지 마. 그런 내용이 필요해 보이면 멈추고 나에게 물어봐.
 ```
