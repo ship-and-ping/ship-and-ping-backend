@@ -78,6 +78,14 @@
 .sp-copy[data-state="done"] { background: var(--sp-ok); color: var(--sp-on-ok); }
 .sp-copy[data-state="fail"] { background: transparent; color: var(--sp-ink); border: 1.5px solid var(--sp-line-strong); }
 .sp-copyblock { display: flex; flex-direction: column; gap: 8px; }
+/* 안심 안내: 확인 가능한 사실 몇 줄(체크 아이콘 + 글자). 마지막 "배포 전에 확인" 줄은 안내(i) 아이콘 */
+.sp-safe { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: var(--sp-text-sm); color: var(--sp-ink-2); }
+.sp-safe li { display: flex; gap: 8px; align-items: flex-start; }
+.sp-safe li svg { flex: none; margin-top: 3px; color: var(--sp-ok-ink); }
+.sp-safe li:last-child svg { color: var(--sp-ink-2); }
+/* 주입 의심 줄 강조(S7) */
+.sp-flag { display: block; padding: 10px 12px; border-radius: var(--sp-radius-sm); background: var(--sp-bad-soft); border: 1.5px solid var(--sp-bad-ink); color: var(--sp-ink); font-family: var(--sp-mono); font-size: calc(13px * var(--sp-scale)); overflow-wrap: anywhere; }
+.sp-keybox { display: flex; flex-direction: column; gap: 10px; padding: var(--sp-space-4); border: 1.5px dashed var(--sp-line-strong); border-radius: var(--sp-radius-md); }
 .sp-copyblock .err-line { display: flex; gap: 6px; align-items: flex-start; font-size: var(--sp-text-sm); color: var(--sp-bad-ink); font-weight: var(--sp-weight-medium); }
 .sp-copyblock .err-line[hidden] { display: none; }
 .sp-copy-manual { display: flex; flex-direction: column; gap: 6px; }
