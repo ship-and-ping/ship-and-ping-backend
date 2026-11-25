@@ -28,6 +28,9 @@ window.SP = window.SP || {};
     exit: function (s) { return I('<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="m10 16-4-4 4-4"/><path d="M6 12h10"/>', s); },
     question: function (s) { return I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.4"/><path d="M12 16.8v.1"/>', s); },
     user: function (s) { return I('<circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>', s); },
+    apps: function (s) { return I('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>', s); },
+    home: function (s) { return I('<path d="M4 11 12 4l8 7"/><path d="M6 10v10h12V10"/>', s); },
+    list: function (s) { return I('<path d="M9 7h11M9 12h11M9 17h11"/><path d="M4.5 7h.1M4.5 12h.1M4.5 17h.1"/>', s); },
     menu: function (s) { return I('<path d="M4 7h16M4 12h16M4 17h16"/>', s); },
     google: function (s) { return I('<path d="M20.5 12.2c0-.6-.1-1.2-.2-1.7H12v3.3h4.8a4.2 4.2 0 0 1-1.8 2.7v2.2h2.9c1.7-1.6 2.6-3.9 2.6-6.5z"/><path d="M12 21c2.4 0 4.5-.8 5.9-2.2L15 16.5c-.8.5-1.8.9-3 .9-2.3 0-4.3-1.6-5-3.7H4v2.3A9 9 0 0 0 12 21z"/><path d="M7 13.7a5.4 5.4 0 0 1 0-3.4V8H4a9 9 0 0 0 0 8z"/><path d="M12 6.6c1.3 0 2.5.5 3.4 1.3L18 5.4A9 9 0 0 0 4 8l3 2.3c.7-2.1 2.7-3.7 5-3.7z"/>', s); }
   };
@@ -194,10 +197,12 @@ window.SP = window.SP || {};
     opts = opts || {};
     return '<figure class="t-' + theme + '" style="margin:0"><figcaption class="cap">휴대폰, ' + (theme === 'light' ? '밝은 모드' : '어두운 모드') + (opts.big ? ', 글자 200%' : '') + '</figcaption><div class="phone"><div class="sp' + (opts.big ? ' text-200' : '') + '" data-theme="' + theme + '"' + (opts.anim ? ' data-anim="' + opts.anim + '"' : '') + '><div class="sb" aria-hidden="true"><span>9:41</span><span class="island"></span><span class="ic">' + sbIcons + '</span></div><div class="scr">' + inner + '</div><div class="home" aria-hidden="true"><i></i></div></div></div></figure>';
   };
-  SP.browser = function (theme, inner, path, anim) {
-    return '<figure class="t-' + theme + '" style="margin:0"><figcaption class="cap">PC 브라우저, ' + (theme === 'light' ? '밝은 모드' : '어두운 모드') + '</figcaption><div class="pc-fit"><div class="browser' + (theme === 'dark' ? ' dark' : '') + '"><div class="chrome" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">' + ic.lock(12) + 'ship-and-ping.pages.dev' + path + '</span><span style="width:52px"></span></div><div class="sp" data-theme="' + theme + '"' + (anim ? ' data-anim="' + anim + '"' : '') + '>' + inner + '</div></div></div></figure>';
+  /* PC 브라우저 창(주소창 포함). o = { width: 1440 | 1280 | 720, big: 글자 200%, cap: 덧붙일 설명 } — 높이는 900 기준(내용이 길면 늘어남) */
+  SP.browser = function (theme, inner, path, anim, o) {
+    o = o || {}; var w = o.width || 1440;
+    return '<figure class="t-' + theme + '" style="margin:0"><figcaption class="cap">PC 브라우저 ' + w + '×900, ' + (theme === 'light' ? '밝은 모드' : '어두운 모드') + (o.cap ? ', ' + o.cap : '') + '</figcaption><div class="pc-fit"><div class="browser' + (theme === 'dark' ? ' dark' : '') + '" data-w="' + w + '" style="width:' + w + 'px"><div class="chrome" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">' + ic.lock(12) + 'ship-and-ping.pages.dev' + path + '</span><span style="width:52px"></span></div><div class="sp' + (o.big ? ' text-200' : '') + '" data-theme="' + theme + '"' + (anim ? ' data-anim="' + anim + '"' : '') + '>' + inner + '</div></div></div></figure>';
   };
-  SP.fit = function () { document.querySelectorAll('.pc-fit').forEach(function (w) { var b = w.firstElementChild; if (b) b.style.zoom = Math.min(1, w.clientWidth / 1240); }); };
+  SP.fit = function () { document.querySelectorAll('.pc-fit').forEach(function (w) { var b = w.firstElementChild; if (b) b.style.zoom = Math.min(1, w.clientWidth / (+b.getAttribute('data-w') || 1440)); }); };
   window.addEventListener('resize', function () { SP.fit(); });
 
   /* ---------- 동작: 복사(성공·실패 구분, 중복 누름 방지), 스위치, 움직임 다시 보기 ---------- */

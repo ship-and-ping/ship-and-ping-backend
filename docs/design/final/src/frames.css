@@ -40,11 +40,11 @@ body { background: var(--pg-bg); color: var(--pg-ink); font-family: "Noto Sans K
 .phone .home i { width: 134px; height: 5px; border-radius: 3px; background: var(--sp-ink); opacity: .85; }
 
 /* PC 브라우저 (1240px) */
-.browser { width: 1240px; border-radius: 12px; overflow: hidden; background: #E9E6EF; box-shadow: 0 0 0 1px rgba(0,0,0,.12), 0 30px 60px -30px rgba(0,0,0,.35); }
+.browser { width: 1440px; border-radius: 12px; overflow: hidden; background: #E9E6EF; box-shadow: 0 0 0 1px rgba(0,0,0,.12), 0 30px 60px -30px rgba(0,0,0,.35); }
 .browser.dark { background: #2A2533; }
 .browser .chrome { height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 14px; font: 13px/1 -apple-system, system-ui, sans-serif; color: #4a4458; }
 .browser.dark .chrome { color: #cfc8dc; }
 .browser .dots { display: flex; gap: 8px; } .browser .dots i { width: 12px; height: 12px; border-radius: 50%; background: #FF5F57; } .browser .dots i:nth-child(2) { background: #FEBC2E; } .browser .dots i:nth-child(3) { background: #28C840; }
 .browser .url { flex: 1; max-width: 560px; margin: 0 auto; height: 28px; border-radius: 8px; background: rgba(255,255,255,.75); display: flex; align-items: center; justify-content: center; gap: 6px; }
 .browser.dark .url { background: rgba(255,255,255,.08); }
-.browser > .sp { min-height: 760px; display: flex; flex-direction: column; }
+.browser > .sp { min-height: 856px; display: flex; flex-direction: column; }   /* 900 - 주소창 44 */

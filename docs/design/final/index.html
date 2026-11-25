@@ -10,12 +10,13 @@
 <link rel="stylesheet" href="src/frames.css">
 <link rel="stylesheet" href="src/tokens.css">
 <link rel="stylesheet" href="src/components.css">
+<link rel="stylesheet" href="src/desk.css">
 </head>
 <body>
 <div class="pg">
 <nav class="nav" aria-label="화면 목록">
 <div class="brand"><img src="../brand/ship-and-ping-sheep.png" alt="" width="40" height="40">쉽앤핑 최종 화면</div>
-<p style="font-size:13px;color:var(--pg-ink-2);margin:0 6px">고른 방향: 시안 C(한 문장 알림 카드) + B의 양 아바타를 가볍게. 디자인 값은 <code>docs/design-system.md</code>.</p>
+<p style="font-size:13px;color:var(--pg-ink-2);margin:0 6px">고른 방향: 시안 C(한 문장 알림 카드) + B의 양 아바타를 가볍게. 디자인 값은 <code>docs/design-system.md</code>. 기준 화면은 PC 브라우저(1440×900, 1280에서도 확인)이고, 휴대폰은 같은 내용의 반응형 화면이에요.</p>
 <div id="list"></div>
 </nav>
 <div class="main">
@@ -24,6 +25,8 @@
 <span id="pos" aria-live="polite" style="font-size:14px;min-width:70px;text-align:center"></span>
 <button class="pg-btn" id="next" aria-label="다음 화면">다음 →</button>
 <span class="grow"></span>
+<span class="seg" role="group" aria-label="기기"><button data-view="pc" aria-pressed="true">PC</button><button data-view="mobile" aria-pressed="false">휴대폰</button></span>
+<span class="seg" role="group" aria-label="PC 창 너비"><button data-pcw="1440" aria-pressed="true">1440</button><button data-pcw="1280" aria-pressed="false">1280</button></span>
 <span class="seg" role="group" aria-label="보는 방식"><button data-mode="one" aria-pressed="true">한 장씩</button><button data-mode="all" aria-pressed="false">모두 펼치기</button></span>
 <span class="seg" role="group" aria-label="화면 모드"><button data-pt="both" aria-pressed="true">밝은·어두운</button><button data-pt="light" aria-pressed="false">밝은</button><button data-pt="dark" aria-pressed="false">어두운</button></span>
 </div>
@@ -32,6 +35,7 @@
 </div>
 </div>
 <script src="src/kit.js"></script>
+<script src="src/desk.js"></script>
 <script src="src/screens.js"></script>
 <script src="src/index.js"></script>
 <script>SP.initIndex();</script>
