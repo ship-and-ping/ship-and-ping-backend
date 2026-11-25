@@ -295,6 +295,10 @@ fn masks_overlaps_nested_prefixes_and_ascii_phone_neighbors() {
         (nested, format!("x{}_[가림]", short_key())),
         (format!("token={}", short_key()), "token=[가림]".into()),
         ("a01012345678z".into(), "a[가림]z".into()),
+        (
+            "1234567890123456 01012345678".into(),
+            "1234567890123456 [가림]".into(),
+        ),
     ];
     for (message, expected) in cases {
         let mut row = request();

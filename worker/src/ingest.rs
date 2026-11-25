@@ -162,12 +162,43 @@ fn boundary(text: &str, start: usize) -> bool {
 fn phones(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
     static PHONE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"\+?[0-9](?:[ ().\-]*[0-9]){8,14}").expect("phone pattern"));
-    PHONE.find_iter(text).filter_map(move |hit| {
-        let (start, end) = (hit.start(), hit.end());
-        let bytes = text.as_bytes();
-        ((start == 0 || !bytes[start - 1].is_ascii_digit())
-            && !bytes.get(end).is_some_and(u8::is_ascii_digit))
-        .then_some(start..end)
+    let bytes = text.as_bytes();
+    let mut cursor = 0;
+    std::iter::from_fn(move || {
+        loop {
+            let hit = PHONE.find_at(text, cursor)?;
+            let (start, mut end) = (hit.start(), hit.end());
+            if start == 0 || !bytes[start - 1].is_ascii_digit() {
+                if bytes.get(end).is_some_and(u8::is_ascii_digit) {
+                    // The last digit group continues beyond the limit. Try the preceding group.
+                    while end > start && bytes[end - 1].is_ascii_digit() {
+                        end -= 1;
+                    }
+                    while end > start && !bytes[end - 1].is_ascii_digit() {
+                        end -= 1;
+                    }
+                    if bytes[start..end]
+                        .iter()
+                        .filter(|b| b.is_ascii_digit())
+                        .count()
+                        < 9
+                    {
+                        end = start;
+                    }
+                }
+                if end > start {
+                    cursor = end;
+                    return Some(start..end);
+                }
+            }
+            // Skip the rejected start, retaining later candidates after punctuation or whitespace.
+            cursor = start + 1;
+            if bytes[start].is_ascii_digit() {
+                while bytes.get(cursor).is_some_and(u8::is_ascii_digit) {
+                    cursor += 1;
+                }
+            }
+        }
     })
 }
 fn private_segment(part: &str) -> bool {
