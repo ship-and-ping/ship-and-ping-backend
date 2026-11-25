@@ -80,7 +80,7 @@ it("받을 곳 없음, 연결 끊김, 연결됨 상태와 시험 알림을 표�
     channel: "#모임",
   });
   fireEvent.click(screen.getByRole("switch"));
-  await screen.findByText("슬랙 연결이 끊겼어요. 다시 연결해 주세요.");
+  expect((await screen.findByText("연결이 끊겼어요")).classList.contains("bad")).toBe(true);
   vi.mocked(api.settings).mockResolvedValue({
     email: false,
     broken: false,

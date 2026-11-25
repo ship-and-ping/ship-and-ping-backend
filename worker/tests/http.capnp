@@ -12,6 +12,7 @@ const config :Workerd.Config = (
       bindings = [
         (name = "SUPABASE_URL", text = "https://rpc.test"),
         (name = "SUPABASE_SECRET_KEY", text = "fixture"),
+        (name = "NO_ORIGIN", service = "no-origin"),
         (name = "WEB_ORIGIN", text = "https://web.test"),
         (name = "SLACK_CLIENT_ID", text = "fixture"),
         (name = "SLACK_CLIENT_SECRET", text = "fixture"),
@@ -20,6 +21,9 @@ const config :Workerd.Config = (
       ],
       globalOutbound = "rpc"
     )),
+    (name = "no-origin", worker = (compatibilityDate = "2026-11-24", modules = .ingestModules,
+      bindings = [(name = "SUPABASE_URL", text = "https://rpc.test"),
+                  (name = "SUPABASE_SECRET_KEY", text = "fixture")], globalOutbound = "rpc")),
     (name = "unconfigured", worker = (compatibilityDate = "2026-11-24", modules = .ingestModules)),
     (name = "local", worker = (compatibilityDate = "2026-11-24", modules = .ingestModules,
       bindings = [(name = "INGEST_DRY_RUN", text = "true")])),

@@ -131,7 +131,7 @@ stats_5m과 같은 열, bucket = 1시간. 매일 Cron이 30일 지난 5분 요�
 | slack_webhook_secret_id | uuid null | Vault에 암호화 저장된 webhook 주소 |
 | slack_channel_name | text null | |
 | slack_destination, broken, tested_at | text, bool, timestamptz | 워크스페이스·채널 식별자, 연결 끊김, 마지막 시험 요청 |
-| email_enabled | bool default true | |
+| email_enabled | bool default true | 새 앱에는 이메일을 켠 행을 생성하고, 기존 앱에서 누락된 행도 같은 값으로 보정 |
 
 ### ingest_batches — 중복 방지 (24시간)
 | 열 | 형식 |
@@ -153,7 +153,7 @@ stats_5m과 같은 열, bucket = 1시간. 매일 Cron이 30일 지난 5분 요�
 | `claim_notifications(limit)` | 등록 순으로 대기 행 선점. 잠긴 행은 건너뛰며 10분 지난 선점은 재시도 가능 |
 | `complete_notification(id, token, ok, error)` | 현재 토큰으로만 완료. 일시 오류는 1·2·4분 후 재시도하고 오류의 URL·키를 가린다 |
 | `slack_failed`, `connect_slack` | 현재 연결의 폐기를 확인해 이메일로 대체하거나 새 webhook을 Vault에 저장한다. 복호화 값은 서비스 전용 선점 RPC에서만 전달한다 |
-| `reserve_mail`, `defer_mail` | 서비스 전체의 한국 시간 일별 발송 슬롯을 원자적으로 예약하고 초과분을 다음 날 09시로 미룬다 |
+| `reserve_mail(app)`, `defer_mail` | 앱 소유자를 기준으로 UTC 하루 회원 20건·전체 90건을 함께 예약한다. 초과분은 다음 UTC 자정(한국 오전 9시)부터 묶어 보낸다 |
 | `notification_settings`, `set_notification_email`, `disconnect_slack`, `queue_test_notification` | 회원 세션으로 자기 앱의 설정 조회·변경 및 분당 한 번 시험 알림 예약 |
 | `start_slack_state`, `consume_slack_state` | 로그인 회원의 앱에 일회용 OAuth state 발급 및 소비 |
 | `dismiss_incident(incident_id)` | 회원이 자기 앱의 열린 문제를 24시간 숨기고 선점 전 대기 알림을 취소한다. 이미 닫힌 문제에 다시 호출하면 기존 상태를 유지한다 |

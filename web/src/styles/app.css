@@ -682,3 +682,14 @@ summary {
   background: var(--sp-ok-ink);
 }
 .notification-switch[aria-checked="true"] span::after { background: var(--sp-knob-on); }
+
+.notification-warning {
+  display: flex;
+  gap: .6rem;
+  padding: .8rem 1rem;
+  border-inline-start: 4px solid var(--sp-bad-ink);
+}
+.notification-warning, .badge.bad {
+  background: var(--sp-bad-soft);
+  color: var(--sp-bad-ink);
+}

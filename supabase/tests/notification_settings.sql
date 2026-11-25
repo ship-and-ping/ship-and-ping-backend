@@ -7,6 +7,9 @@ insert into auth.users(id,email) values
  ('00000000-0000-0000-0000-000000000062','other@example.invalid');
 insert into apps(owner_id,name) select id,'fixture' from auth.users;
 select set_config('test.app',id::text,true) from apps where owner_id='00000000-0000-0000-0000-000000000061';
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000061',true);
+select is(notification_settings(current_setting('test.app')::uuid)->>'email','true','new apps receive email by default');
+select set_notification_email(current_setting('test.app')::uuid,false);
 select connect_slack(current_setting('test.app')::uuid,'fixture','#fixture','T/C');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000061',true);
@@ -32,9 +35,13 @@ select slack_failed(id,claim_token,secret_id) from slack_claim;
 select ok((notification_settings(current_setting('test.app')::uuid)->>'broken')::boolean,'revocation visible to member');
 create temp table email_claim as select * from claim_notifications(1);
 select is((select channel||' '||email from email_claim),'email member@example.invalid','revocation uses login email even with email off');
-select is((select count(*) from generate_series(1,91) n where reserve_mail()),90::bigint,'global budget allows 90 reservations');
+select is((select count(*) from generate_series(1,21) where reserve_mail(current_setting('test.app')::uuid)),20::bigint,'member daily cap');
+select is((select used from private.mail_quota where day=(now() at time zone 'UTC')::date),20,'member overflow consumes no global slots');
+update private.mail_quota set used=89;
+select ok(reserve_mail((select id from apps where owner_id='00000000-0000-0000-0000-000000000062')),'another member can claim last global slot');
+select ok(not reserve_mail((select id from apps where owner_id='00000000-0000-0000-0000-000000000062')),'global cap');
 select defer_mail(id,claim_token) from email_claim;
-select ok((select digest and claim_token is null and available_at=((now() at time zone 'Asia/Seoul')::date+1+time '09:00') at time zone 'Asia/Seoul' from notifications),'excess waits for next morning');
+select ok((select digest and claim_token is null and available_at=((now() at time zone 'UTC')::date+1)::timestamp at time zone 'UTC' from notifications),'excess waits for next morning');
 select is_empty('select * from claim_notifications(1)','digest not ready yet');
 insert into notifications(test_app,channel,event,ok,sent_at,digest)
  select current_setting('test.app')::uuid,'email','test',null,null,true from generate_series(1,13);

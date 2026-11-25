@@ -5,8 +5,7 @@ set search_path=public,extensions;
 select no_plan();
 insert into auth.users(id) values ('00000000-0000-0000-0000-000000000006');
 insert into apps(owner_id,name) select id,'delivery' from auth.users;
-insert into alert_channels(app_id,owner_id,slack_webhook_secret_id,email_enabled)
- select id,owner_id,vault.create_secret('fixture'),true from apps;
+update alert_channels set slack_webhook_secret_id=vault.create_secret('fixture');
 insert into app_versions(app_id,version) select id,'v1' from apps;
 insert into features(app_id,kind,method,route,name) select id,'auto','GET','/','test' from apps;
 insert into stats_5m select app_id,id,'v1',date_bin('5 minutes',now(),'epoch'),15,1,10,1500,array[0,15]||array_fill(0,array[14]) from features;
@@ -47,6 +46,6 @@ select cleanup_daily();
 select is((select count(*) from notifications),0::bigint,'expired pending and completed deleted');
 select ok(bool_and(has_function_privilege('service_role',fn,'execute') and not has_function_privilege('anon',fn,'execute')
  and not has_function_privilege('authenticated',fn,'execute')),'delivery RPCs restricted')
- from unnest(array['claim_notifications(integer)','complete_notification(uuid,uuid,boolean,text)','connect_slack(uuid,text,text,text)','reserve_mail()']) fn;
+ from unnest(array['claim_notifications(integer)','complete_notification(uuid,uuid,boolean,text)','connect_slack(uuid,text,text,text)','reserve_mail(uuid)']) fn;
 select * from finish();
 rollback;

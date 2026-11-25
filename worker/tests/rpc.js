@@ -8,8 +8,8 @@ let stateIssued=false;
 function rows() {
   round++;
   return [1,2].map(n=>({id:id(n),claim_token:id(3),app:id(4),incident:id(n),event:"open",
-    kind:"failure",feature:"신청 "+sensitive,metric:{total:10,failures:2,raw:"private-body"},raw_route:"/private-route",
-    channel:round===1?"slack":"email",hook,destination:"T/C",secret_id:id(7),email:"member@example.invalid",digest:round>1}));
+    kind:"slow",feature:"신청 "+sensitive,metric:{total:10,p50:n===1?3400.5:null,baseline:n===1?1100:null,raw:"private-body"},raw_route:"/private-route",
+    channel:round===2?"email":"slack",hook,destination:"T/C",secret_id:id(7),email:"member@example.invalid",digest:round>1}));
 }
 async function fixtureHash(suffix) {
   const raw = new TextEncoder().encode(["sp","pub",suffix].join("_"));
@@ -23,8 +23,9 @@ export default {
     if(url.hostname==="hooks.slack.com" || url.hostname==="api.resend.com") {
       const payload=await request.json();
       report.safe &&= ![sensitive,"private-body","private-route",hook].some(value=>payload.text.includes(value))
-        && [1,2].every(n=>payload.text.includes("https://web.test/apps/"+id(4)+"/issues/"+id(n)));
-      if(url.hostname==="hooks.slack.com"){ report.slack++; return new Response("channel_not_found",{status:404}); }
+        && payload.text.includes("3.4초") && payload.text.includes("평소 1.1초") && !payload.text.includes("0.0초")
+        && (round===3 ? !payload.text.includes("쉽앤핑에서 보기") : [1,2].every(n=>payload.text.includes("https://web.test/apps/"+id(4)+"/issues/"+id(n))));
+      if(url.hostname==="hooks.slack.com"){ report.slack++; return new Response("action_prohibited",{status:403}); }
       report.safe &&= payload.to[0]==="member@example.invalid" && payload.subject.includes("모아") && payload.text.includes("12건 더");
       report.mail++;return Response.json({});
     }
@@ -36,11 +37,12 @@ export default {
     const path = new URL(request.url).pathname;
     const body = await request.json();
     switch(path.split("/").pop()){
-      case "evaluate_all": return Response.json([]);
+      case "evaluate_all": return new Response(null,{status:503});
       case "claim_notifications": return Response.json(rows());
       case "slack_failed": report.broken++;return Response.json(null);
-      case "complete_notification": report.completed+=Number(body.ok && body.token===id(3));return Response.json(null);
-      case "reserve_mail": return Response.json(true);
+      case "complete_notification": if(body.id===id(1)) return new Response(null,{status:503});
+        report.completed+=Number(body.ok && body.token===id(3));return Response.json(null);
+      case "reserve_mail": return Response.json(body.app===id(4));
       case "expand_mail_digest": return Response.json(12);
       case "start_slack_state": stateIssued=true;return Response.json(id(8));
       case "consume_slack_state":{

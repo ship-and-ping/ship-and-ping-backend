@@ -144,9 +144,8 @@ function Settings({ app, api, origin }: Props & { app: string }) {
       {settings ? (
         <>
           {!settings.email && !settings.connected && !settings.broken && (
-            <p className="panel" role="alert">
-              <strong>알림을 받을 곳이 없어요.</strong> 슬랙을 연결하거나 이메일
-              알림을 켜세요.
+            <p className="notification-warning" role="alert">
+              <span aria-hidden="true">⚠</span><span><strong>알림을 받을 곳이 없어요.</strong> 문제가 생겨도 이 화면을 열기 전에는 알 수 없어요. 슬랙을 연결하거나 이메일 알림을 켜세요.</span>
             </p>
           )}
           <div className="even">
@@ -185,9 +184,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                 <>
                   {settings.broken ? (
                     <>
-                      <strong role="alert">
-                        슬랙 연결이 끊겼어요. 다시 연결해 주세요.
-                      </strong>
+                      <strong className="badge bad" role="alert"><span aria-hidden="true">⚠ </span>연결이 끊겼어요</strong>
                       <p>
                         {displayText(settings.channel ?? "")} 채널에 다시 연결할
                         때까지 로그인 이메일로 보내요.

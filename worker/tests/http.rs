@@ -105,8 +105,11 @@ fn ingest_http_statuses() {
     let digest = fixture("/fixture/cron", None);
     assert_eq!(
         digest,
-        json!({"slack":1,"broken":2,"mail":1,"completed":2,"connected":1,"safe":true})
+        json!({"slack":1,"broken":2,"mail":1,"completed":1,"connected":1,"safe":true})
     );
+    let no_origin = fixture("/fixture/no-origin", None);
+    assert_eq!(no_origin["slack"], 2);
+    assert_eq!(no_origin["safe"], true);
     let post = |addr: std::net::SocketAddr, mime: &str, auth: &str, data: &str| {
         let mut child = Command::new("curl")
             .args([

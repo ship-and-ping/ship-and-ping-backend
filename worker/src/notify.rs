@@ -74,11 +74,16 @@ fn sentence(n: &Notice) -> String {
             count("total"),
             count("failures")
         ),
-        (_, Some("slow")) => format!(
-            "{name} 기능이 느려졌어요. 최근 30분 보통 {:.1}초 걸렸어요 ({}건).",
-            count("p50") as f64 / 1000.,
-            count("total")
-        ),
+        (_, Some("slow")) => {
+            let mut text = format!("{name} 기능이 느려졌어요.");
+            if let Some(ms) = n.metric["baseline"].as_f64() {
+                text.push_str(&format!(" 평소 {:.1}초.", ms / 1000.0));
+            }
+            if let Some(ms) = n.metric["p50"].as_f64() {
+                text.push_str(&format!(" 최근 30분 보통 {:.1}초.", ms / 1000.0));
+            }
+            format!("{text} ({}건)", count("total"))
+        }
         _ => format!(
             "{name} 결과를 확인하지 못한 기록이 {}건이에요.",
             count("unconfirmed")
@@ -101,12 +106,19 @@ enum Outcome {
     Deferred,
 }
 
-async fn email(db: &Supabase, env: &Env, to: &str, body: String, digest: bool) -> Result<Outcome> {
+async fn email(
+    db: &Supabase,
+    env: &Env,
+    app: uuid::Uuid,
+    to: &str,
+    body: String,
+    digest: bool,
+) -> Result<Outcome> {
     let (Some(key), Some(from)) = (setting(env, "RESEND_API_KEY"), setting(env, "MAIL_FROM"))
     else {
         return Ok(Outcome::Failed("설정 필요"));
     };
-    if !rpc(db, "reserve_mail", json!({}))
+    if !rpc(db, "reserve_mail", json!({"app":app}))
         .await?
         .json::<bool>()
         .await?
@@ -145,7 +157,8 @@ async fn slack(hook: &str, body: String) -> Outcome {
     };
     let status = response.status_code();
     let result = response.text().await.unwrap_or_default();
-    if matches!(status, 404 | 410) || matches!(result.trim(), "channel_not_found" | "invalid_token")
+    if matches!(status, 403 | 404 | 410)
+        || matches!(result.trim(), "channel_not_found" | "invalid_token")
     {
         Outcome::Broken
     } else if (200..300).contains(&status) && result.trim() == "ok" {
@@ -182,10 +195,13 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
     let origin = setting(env, "WEB_ORIGIN");
     for (_, rows) in groups {
         let first = &rows[0];
-        let outcome = if let Some(origin) = &origin {
+        let outcome = {
             let mut body = rows
                 .iter()
                 .map(|n| {
+                    let Some(origin) = &origin else {
+                        return sentence(n);
+                    };
                     let path = n
                         .incident
                         .map(|id| format!("/apps/{}/issues/{id}", n.app))
@@ -211,13 +227,16 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
                         .json::<u32>()
                         .await?;
                         if extra > 0 {
-                            body.push_str(&format!(
-                                "\n\n미뤄 둔 알림이 {extra}건 더 있어요.\n쉽앤핑에서 보기 {}/apps",
-                                origin.trim_end_matches('/')
-                            ));
+                            body.push_str(&format!("\n\n미뤄 둔 알림이 {extra}건 더 있어요."));
+                            if let Some(origin) = &origin {
+                                body.push_str(&format!(
+                                    "\n쉽앤핑에서 보기 {}/apps",
+                                    origin.trim_end_matches('/')
+                                ));
+                            }
                         }
                     }
-                    email(db, env, to, body, first.digest).await?
+                    email(db, env, first.app, to, body, first.digest).await?
                 } else {
                     Outcome::Failed("받을 곳 없음")
                 }
@@ -228,8 +247,6 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
             } else {
                 Outcome::Failed("받을 곳 없음")
             }
-        } else {
-            Outcome::Failed("설정 필요")
         };
         for n in &rows {
             let mut args = json!({"id":n.id,"token":n.claim_token});
@@ -249,7 +266,9 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
                     "complete_notification"
                 }
             };
-            rpc(db, method, args).await?;
+            if rpc(db, method, args).await.is_err() {
+                console_error!("Notification completion failed");
+            }
         }
     }
     Ok(())
