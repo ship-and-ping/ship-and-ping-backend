@@ -92,5 +92,19 @@
 .sp-landing.m .lt { font-size: calc(24px * var(--sp-scale)); }
 .sp-landing.m .shot { padding: 12px; }
 
-/* 글자 200% 확대(창 1440 → 실제 폭 720, 태블릿 배치): 휴대폰 머리말과 [메뉴]를 그대로 쓴다 */
-.sp-tabletwrap { max-width: 720px; width: 100%; margin: 0 auto; }
+/* ---------- 태블릿 640~1023: 왼쪽 메뉴를 접고 위쪽 줄 [메뉴]로, 본문 한 열 ---------- */
+.sp-desk.tab { display: flex; flex-direction: column; }
+.sp-tbar { display: flex; align-items: center; gap: 12px; padding: 10px 24px; border-bottom: 1px solid var(--sp-line); background: var(--sp-surface); }
+.sp-tbar .brand { display: flex; align-items: center; gap: 8px; font-weight: var(--sp-weight-bold); color: var(--sp-ink); text-decoration: none; }
+.sp-tbar .where { margin-left: auto; color: var(--sp-ink-2); font-size: var(--sp-text-sm); }
+.sp-desk.tab .sp-side { border-right: 0; border-bottom: 1px solid var(--sp-line); padding: 12px 24px; }
+.sp-desk.tab .sp-side[hidden] { display: none; }
+.sp-desk.tab .sp-side .brand, .sp-desk.tab .sp-side .grow { display: none; }
+.sp-desk.tab .sp-main { padding: 24px 24px 48px; }
+.tab .sp-cols, .tab .sp-cols.even, .tab .sp-grid3, .tab .sp-hero.pc { grid-template-columns: minmax(0, 1fr); }
+.tab .sp-cols > .side { position: static; }
+.sp-public.tab .sp-wrap.pub { padding: 24px 24px 48px; }
+.sp-public.tab .sp-pubbar { padding: 12px 24px; }
+
+/* ---------- 휴대폰 <640: 휴대폰 화면 그대로 ---------- */
+.sp-phonewrap { width: 100%; display: flex; flex-direction: column; flex: 1; }

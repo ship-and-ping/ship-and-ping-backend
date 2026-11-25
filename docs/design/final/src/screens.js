@@ -18,7 +18,7 @@
   var s1 = function (banner) {
     return wrap('<header class="sp-hdr"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="Ship &amp; Ping 쉽앤핑" width="40" height="40" style="width:40px;height:40px;border-radius:10px"><span class="t">쉽앤핑</span></header>' + (banner || '') +
       K.say({ meta: '<span>무료 베타</span>', headline: '<p class="sp-headline">내 앱이 괜찮은지, 24시간 대신 지켜볼게요</p>', body: '<p class="hsub">문제가 생기면 "분석이 느려졌어요"처럼 쉬운 말로 알려 드리고, 코딩 AI에 보낼 내용까지 챙겨 드려요.</p>' }) +
-      sec('<button class="sp-btn block">' + ic.google(18) + 'Google로 시작하기</button><button class="sp-btn line block">' + ic.mail(18) + '이메일 링크로 시작하기</button><p class="sp-sub">이메일 링크는 비밀번호 없이 메일에 온 링크를 눌러 들어오는 방식이에요.</p>') +
+      sec('<button class="sp-btn block">' + ic.google(18) + 'Google로 시작하기</button><button class="sp-btn line block">' + ic.mail(18) + '이메일 링크로 시작하기</button><p class="sp-sub">이메일 링크는 비밀번호 없이 메일에 온 링크를 눌러 들어오는 방식이에요.</p><a class="sp-btn text" href="#s0">' + ic.back(16) + '쉽앤핑 소개로 돌아가기</a>') +
       sec('<h2>이렇게 써요</h2>' + K.steps(['연결 요청을 코딩 AI에 붙여넣어요', '문제가 생기면 슬랙이나 메일로 알려 드려요', '고친 버전을 배포하면 해결됐는지 확인해 드려요'], 0, -1)));
   };
   add({ id: 's1', group: 'S1 첫 화면·로그인', title: 'S1 첫 화면·로그인',
@@ -29,7 +29,7 @@
   add({ id: 's2', group: 'S2 내 앱 목록', title: 'S2 내 앱 목록 (앱 3개, 한도 도달)',
     desc: '앱 카드마다 상태·열린 문제 수·마지막 기록 시각. 문제 있는 앱이 맨 위. 무료 베타 한도(앱 3개)에 닿으면 등록 단추를 비활성으로 두고 이유를 바로 옆에 쓴다. 휴대폰은 머리말 오른쪽 사람 아이콘이 S11 내 계정으로 가는 길이고, PC는 왼쪽 메뉴의 "내 계정"이다. PC에서는 앱 카드를 3열로 놓는다.',
     mobile: function () {
-      var card = function (name, st, line) { return '<a class="sp-appcard" href="#s5"><span class="r"><b>' + name + '</b>' + K.status(st) + '</span><span class="sp-sub">' + line + '</span></a>'; };
+      var card = function (name, st, line) { return '<a class="sp-appcard" href="#' + SP.APPS[name].home + '"><span class="r"><b>' + name + '</b>' + K.status(st) + '</span><span class="sp-sub">' + line + '</span></a>'; };
       return wrap(K.hdr('내 앱', '쉽앤핑', null, '<a class="sp-ibtn" href="#s11" aria-label="내 계정">' + ic.user(22) + '</a>') +
         sec('<h1>앱 3개</h1>' + card('모임모아', 'bad', '열린 문제 1개, 마지막 기록 1분 전') + card('독서노트', 'ok', '마지막 기록 12분 전') + card('우리동네 장터', 'wait', '연결을 마치면 첫 기록이 와요') +
           '<button class="sp-btn line block" aria-disabled="true" aria-describedby="lim">' + ic.plus(18) + '앱 등록하기</button><p class="sp-sub" id="lim">무료 베타는 앱 3개까지예요. 앱을 지우면 새로 등록할 수 있어요.</p>' +
@@ -110,8 +110,8 @@
     } });
 
   /* ---------------- S5 앱 홈 ---------------- */
-  var s5Hero = function (pc) {
-    return K.say({ pc: pc, meta: problemMeta(), headline: '<p class="sp-headline">분석이 느려졌어요</p>',
+  var s5Hero = function (pc, noAv) {
+    return K.say({ pc: pc, noAv: noAv, meta: problemMeta(), headline: '<p class="sp-headline">분석이 느려졌어요</p>',
       body: (pc ? '' : K.cmp(['평소', '1.1'], ['최근 30분', '3.4'])) + '<p class="hsub">최근 30분 동안 24건, 보통 걸린 시간이 평소의 3배예요. 슬랙으로 알림을 보냈어요.</p>' + (pc ? '<div><a class="sp-hbtn" href="#s7-open" style="display:inline-flex;text-decoration:none">문제 살펴보고 AI에 맡기기</a></div>' : '<a class="sp-hbtn" href="#s7-open" style="text-decoration:none">문제 살펴보고 AI에 맡기기</a>'),
       side: pc ? K.cmp(['평소', '1.1'], ['최근 30분', '3.4']) : '' });
   };
@@ -415,7 +415,28 @@
      D4: PC 본문(왼쪽 메뉴·제목은 desk.js가 붙임). 넓은 화면에서 다시 배치하는 화면만 여기서 정하고,
      나머지는 휴대폰 내용을 본문 폭에 맞춰 넣는다(SP.deskHtml).
      ===================================================================== */
+  /* 앱 문맥: 고른 앱의 이름·기능·문제로. 독서노트(괜찮음)·우리동네 장터(기록 대기) 홈, 앱 0개 내 앱 목록 */
+  var insertAfter = function (id, entry) { for (var i = 0; i < E.length; i++) { if (E[i].id === id) { E.splice(i + 1, 0, entry); return; } } E.push(entry); };
+  var dokFeatures = [
+    { name: '책 목록', uses: 420, fail: 0, now: '0.3초', usual: '0.3초', st: 'ok', nolink: true },
+    { name: '메모 쓰기', uses: 96, fail: 0, now: '0.5초', usual: '0.5초', st: 'ok', nolink: true },
+    { name: '로그인', uses: 61, fail: 1, now: '0.6초', usual: '0.6초', st: 'ok', nolink: true },
+    { name: '책 검색', uses: 58, fail: 0, now: '0.8초', usual: '0.7초', st: 'ok', nolink: true }
+  ];
+  insertAfter('s5-big-menu', { id: 's5-dokseo', app: '독서노트', probs: 0, group: 'S5 앱 홈', title: 'S5 다른 앱의 홈: 독서노트 (모두 괜찮아요)', path: '/apps/dokseo',
+    desc: 'S2에서 독서노트를 고르면 오는 홈. 왼쪽 메뉴의 앱 이름, 앱 안 메뉴, 열린 문제 수(0이라 숫자 없음), 기능 목록이 모두 독서노트 것으로 바뀐다. 독서노트의 기능 상세·문제·설정 화면은 모임모아(S6·S7·S10)와 같은 틀이라 따로 그리지 않았고, 이 시안에서는 행을 링크로 두지 않았다.',
+    mobile: function () { return wrap(K.hdr('독서노트', '마지막 기록 12분 전', '내 앱 목록으로', '') + K.say({ meta: K.status('ok') + '<span>지금</span>', headline: '<p class="sp-headline">모두 괜찮아요</p>', body: '<p class="hsub">기능 4개를 지켜보고 있어요. 문제가 생기면 메일로 바로 알려 드릴게요.</p>' }) + sec('<h2>기능 4개</h2><p class="sp-sub">최근 24시간, 사용 많은 순</p>' + K.featList(dokFeatures))); } });
+  insertAfter('s5-dokseo', { id: 's5-jangteo', app: '우리동네 장터', probs: 0, group: 'S5 앱 홈', title: 'S5 다른 앱의 홈: 우리동네 장터 (첫 기록 대기)', path: '/apps/jangteo',
+    desc: '아직 연결을 마치지 않은 앱. 왼쪽 메뉴와 제목이 우리동네 장터로 바뀌고, 기록이 없어 열린 문제 수도 없다. 큰 문장 카드는 "기록을 기다려요" 상태로 무엇을 하면 되는지 말한다.',
+    mobile: function () { return wrap(K.hdr('우리동네 장터', '아직 기록이 없어요', '내 앱 목록으로', '') + K.say({ meta: K.status('wait') + '<span>어제 등록함</span>', headline: '<p class="sp-headline">첫 기록을 기다리고 있어요</p>', body: '<p class="hsub">연결 요청문을 코딩 AI에 붙여넣고 배포한 뒤, 앱을 한 번 써 보면 여기에 기능 목록이 생겨요.</p>' }) + sec(K.empty('기능 목록이 비어 있어요', '첫 기록이 오면 코딩 AI가 붙인 기능 이름으로 채워져요.'))); } });
+  insertAfter('s2', { id: 's2-empty', group: 'S2 내 앱 목록', title: 'S2 내 앱 목록: 앱 0개', path: '/apps',
+    desc: '처음 가입했거나 앱을 모두 지운 뒤. 빈 화면이 이유와 다음 행동([앱 등록하기] → S3 앱 등록)을 함께 말한다. PC 왼쪽 메뉴에는 앱 안 메뉴가 없다.',
+    mobile: function () { return wrap(K.hdr('내 앱', '쉽앤핑', null, '<a class="sp-ibtn" href="#s11-noapps" aria-label="내 계정">' + ic.user(22) + '</a>') + sec('<h1>앱 0개</h1>' + K.empty('아직 등록한 앱이 없어요', '앱을 등록하면 코딩 AI에 붙여넣을 연결 요청문을 드려요.', '<a class="sp-btn" href="#s3" style="text-decoration:none">' + ic.plus(18) + '앱 등록하기</a>') + '<p class="sp-sub">무료 베타는 앱 3개까지 등록할 수 있어요.</p>')); },
+    pc: function () { return K.empty('아직 등록한 앱이 없어요', '앱을 등록하면 코딩 AI에 붙여넣을 연결 요청문을 드려요. 요청문을 붙여넣고 배포하면 쉽앤핑이 지켜보기 시작해요.', '<a class="sp-btn" href="#s3" style="text-decoration:none">' + ic.plus(18) + '앱 등록하기</a>') + '<p class="sp-sub">무료 베타는 앱 3개까지 등록할 수 있어요.</p>'; } });
+
   var byId = {}; E.forEach(function (e) { byId[e.id] = e; });
+  /* 열린 문제가 없는 화면은 왼쪽 메뉴 "문제" 옆 숫자를 쓰지 않는다 */
+  ['s4-copy', 's4-copy-fail', 's4-wait', 's4-empty', 's4', 's4-loading', 's4-error', 's5-ok', 's5-empty', 's7', 's7-quiet', 's7-dismissed'].forEach(function (id) { if (byId[id]) byId[id].probs = 0; });
   var setPc = function (ids, f) { ids.forEach(function (id) { byId[id].pc = f; }); };
   var cols = function (main, side, cls) { return '<div class="sp-cols' + (cls ? ' ' + cls : '') + '"><div>' + main + '</div><div class="side">' + side + '</div></div>'; };
   var panel = function (inner) { return '<section class="sp-panel">' + inner + '</section>'; };
@@ -430,7 +451,7 @@
   /* S2: 앱 카드를 3열로 */
   setPc(['s2'], function () {
     var card = function (name, st, line, href) { return '<a class="sp-appcard" href="#' + href + '"><span class="r"><b>' + name + '</b>' + K.status(st) + '</span><span class="sp-sub">' + line + '</span></a>'; };
-    return '<div class="sp-grid3">' + card('모임모아', 'bad', '열린 문제 1개, 마지막 기록 1분 전', 's5') + card('독서노트', 'ok', '마지막 기록 12분 전', 's5-ok') + card('우리동네 장터', 'wait', '연결을 마치면 첫 기록이 와요', 's4-wait') + '</div>' +
+    return '<div class="sp-grid3">' + card('모임모아', 'bad', '열린 문제 1개, 마지막 기록 1분 전', 's5') + card('독서노트', 'ok', '마지막 기록 12분 전', 's5-dokseo') + card('우리동네 장터', 'wait', '연결을 마치면 첫 기록이 와요', 's5-jangteo') + '</div>' +
       '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><button class="sp-btn line" aria-disabled="true" aria-describedby="limpc">' + ic.plus(18) + '앱 등록하기</button><p class="sp-sub" id="limpc">무료 베타는 앱 3개까지예요. 앱을 지우면 새로 등록할 수 있어요.</p></div>';
   });
 
@@ -465,7 +486,7 @@
     var errs = '<ul style="margin:4px 0 0;padding-left:18px">' + D.errors.map(function (x) { return '<li><code>' + esc(x) + '</code></li>'; }).join('') + '</ul>';
     return K.say({ pc: true, meta: problemMeta(), headline: '<p class="sp-headline">분석이 평소보다 느려요</p>', body: '<div><a class="sp-hbtn" href="#s7-open" style="display:inline-flex;text-decoration:none">열린 문제 보기</a></div>', side: K.cmp(['평소', '1.1'], ['최근 30분', '3.4']) }) +
       cols(sec(seg) + s6Panel('24h', !week) + s6Panel('7d', week),
-        panel(flat(verTable())) + panel('<h2>자세히</h2><code style="display:block;color:var(--sp-ink-2)">주소 형태: POST /api/analyze<br>오류 종류: TimeoutError 4건, SlowQuery 1건</code><p class="sp-sub">최근 오류 예시 5개 (개인정보 가림)</p>' + errs) +
+        panel(flat(verTable())) + panel('<h2>주소와 오류 기록</h2><p class="sp-sub">코딩 AI에 직접 물어볼 때만 필요해요.</p><details><summary>자세히</summary><code style="display:block;color:var(--sp-ink-2)">주소 형태: POST /api/analyze<br>오류 종류: TimeoutError 4건, SlowQuery 1건</code><p class="sp-sub" style="margin-top:6px">최근 오류 예시 5개 (개인정보 가림)</p>' + errs + '</details>') +
         panel(K.field({ label: '느림 기준', value: '5초', help: '평소 속도가 아직 없을 때만 써요. 지금은 평소 속도(1.1초)로 판단하고 있어요.' })));
   };
   setPc(['s6'], function () { return s6Pc(false); });
@@ -501,7 +522,7 @@
       [['요청문 복사', '앱을 등록하면 연결 요청문을 드려요'], ['코딩 AI에 붙여넣기', '쓰던 코딩 AI 대화창에 붙여넣으면 AI가 기록 전송 코드를 넣어요'], ['배포', '배포하고 앱을 한 번 써 보면 첫 기록이 와요']].map(function (r, i) {
         return '<li class="sp-panel"><span class="n" aria-hidden="true">' + (i + 1) + '</span><h3>' + r[0] + '</h3><p class="sp-sub">' + r[1] + '</p></li>';
       }).join('') + '</ol></section>';
-    var shot = '<section class="lsec"><h2 class="lt">실제 화면은 이렇게 생겼어요</h2><p class="sp-sub">앱 홈 화면 예시예요(예시 데이터).</p><div class="shot">' + s5Hero(!m) + K.featList(D.features.slice(0, 4)) + '</div></section>';
+    var shot = '<section class="lsec"><h2 class="lt">실제 화면은 이렇게 생겼어요</h2><p class="sp-sub">앱 홈 화면 예시예요(예시 데이터).</p><div class="shot">' + s5Hero(!m, true) + K.featList(D.features.slice(0, 4)) + '</div></section>';
     var alerts = '<section class="lsec"><h2 class="lt">알림은 슬랙이나 메일로</h2><div class="three two">' +
       '<div class="sp-panel note"><p class="from">' + ic.slack(18) + '슬랙 #모임모아-알림</p><p><b>쉽앤핑</b></p><p>모임모아: 분석이 느려졌어요. 평소 1.1초 → 최근 30분 3.4초 (24건)</p><p class="lnk">쉽앤핑에서 보기</p></div>' +
       '<div class="sp-panel note"><p class="from">' + ic.mail(18) + '메일</p><p><b>[쉽앤핑] 모임모아: 분석이 느려졌어요</b></p><p>평소 1.1초 → 최근 30분 3.4초 (24건). 고친 버전을 배포하면 쉽앤핑이 실제 사용으로 확인해 드려요.</p><p class="lnk">쉽앤핑에서 보기</p></div>' +

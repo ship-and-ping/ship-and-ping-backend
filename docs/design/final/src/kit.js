@@ -129,7 +129,8 @@ window.SP = window.SP || {};
   K.swapStatus = function (a, at, b, bt) { return '<span class="sp-swap"><span class="from">' + K.status(a, at) + '</span><span class="to">' + K.status(b, bt) + '</span></span>'; };
   /* 큰 문장 카드 + 양: o = { meta, headline, body, ring, pc, side } */
   K.say = function (o) {
-    var av = '<span class="sp-av' + (o.ring ? ' ring' : '') + '"><img src="' + SP.IMG.sheep + '" alt="" width="36" height="36"></span>';
+    /* noAv: 한 화면에 큰 문장 카드가 둘 이상일 때(S0 예시 화면) 두 번째부터는 양을 빼서 양이 한 번만 나오게 */
+    var av = o.noAv ? '' : '<span class="sp-av' + (o.ring ? ' ring' : '') + '"><img src="' + SP.IMG.sheep + '" alt="" width="36" height="36"></span>';
     var main = '<div class="meta">' + (o.meta || '') + '</div>' + o.headline + (o.body || '');
     var card = o.pc ? '<div class="sp-hero pc"><div style="display:flex;flex-direction:column;gap:14px;min-width:0">' + main + '</div>' + (o.side || '') + '</div>' : '<div class="sp-hero">' + main + (o.side || '') + '</div>';
     return '<section class="sp-say" aria-label="쉽앤핑이 알려 드려요">' + av + card + '</section>';
@@ -141,6 +142,8 @@ window.SP = window.SP || {};
   K.frow = function (f, focus) {
     var rt = f.st === 'wait' ? '<span class="rt"><small>아직 없어요</small></span>' : f.learning ? '<span class="rt"><small>평소 속도<br>익히는 중</small></span>' : '<span class="rt">' + f.now + '<small>평소 ' + f.usual + '</small></span>';
     var sub = f.st === 'wait' ? '아직 사용 기록이 없어요' : f.learning ? f.learning : f.deep ? '사용 ' + f.uses + '건: 성공 ' + f.deep.ok + ', 실패 ' + f.deep.fail + ', 중단 ' + f.deep.stop + ', 결과 미확인 ' + f.deep.unk : '사용 ' + f.uses.toLocaleString() + '건, 실패 ' + f.fail + '건';
+    /* f.nolink: 상세 화면을 그리지 않은 앱(독서노트)의 행 — 다른 앱 화면으로 잘못 보내지 않게 링크 없이 */
+    if (f.nolink) return '<li><div class="sp-frow ' + f.st + '"><span class="si ' + f.st + '">' + ic[f.st](20) + '<span class="sr">' + stTxt[f.st] + '</span></span><span class="nm">' + f.name + '<small>' + sub + '</small></span>' + rt + '</div></li>';
     return '<li><a class="sp-frow ' + f.st + (focus ? ' is-focus' : '') + '" href="#' + (f.deep ? 's8-result' : 's6') + '"><span class="si ' + f.st + '">' + ic[f.st](20) + '<span class="sr">' + stTxt[f.st] + '</span></span><span class="nm">' + f.name + (f.deep ? ' <span class="tag">깊게 보기</span>' : '') + '<small>' + sub + '</small></span>' + rt + '<span class="go">' + ic.chev(18) + '</span></a></li>';
   };
   K.featList = function (list, focusFirst) { return '<ul class="sp-list">' + list.map(function (f, i) { return K.frow(f, focusFirst && i === 0); }).join('') + '</ul>'; };

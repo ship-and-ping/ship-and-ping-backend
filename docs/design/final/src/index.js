@@ -4,17 +4,18 @@
   function pcFrames(e) {
     var path = SP.deskPath(e);
     if (e.deskBig) {
-      /* 창 1440을 브라우저에서 200%로 확대하면 실제로 쓰는 폭은 720 → 태블릿 배치 */
-      var t = function (th) { return SP.browser(th, '<div class="sp-tabletwrap">' + e.mobile() + '</div>', path, e.anim, { width: 720, big: true, cap: '창 1440을 200%로 확대(실제 폭 720, 태블릿 배치)' }); };
+      /* 창 1440을 브라우저에서 200%로 확대하면 실제로 쓰는 폭은 720 → 태블릿 배치(메뉴 접힘, 한 열) */
+      var t = function (th) { return SP.browser(th, SP.deskHtml(e, 720), path, e.anim, { width: 720, big: true, cap: '창 1440을 200%로 확대(실제 폭 720, 태블릿 배치)' }); };
       return t('light') + t('dark');
     }
-    return SP.browser('light', SP.deskHtml(e), path, e.anim, { width: pcw }) + SP.browser('dark', SP.deskHtml(e), path, e.anim, { width: pcw });
+    var lay = pcw >= 1024 ? 'PC 배치' : pcw >= 640 ? '태블릿 배치' : '휴대폰 배치';
+    return SP.browser('light', SP.deskHtml(e, pcw), path, e.anim, { width: pcw, cap: lay }) + SP.browser('dark', SP.deskHtml(e, pcw), path, e.anim, { width: pcw, cap: lay });
   }
   function draw(i) {
     var e = E[i];
     var frames = view === 'pc' ? '<div class="pcs">' + pcFrames(e) + '</div>'
       : '<div class="frames">' + SP.phone('light', e.mobile(), { anim: e.anim, big: e.big }) + SP.phone('dark', e.mobile(), { anim: e.anim, big: e.big }) + '</div>';
-    return '<article class="entry" id="' + e.id + '" aria-labelledby="h-' + e.id + '"><h1 id="h-' + e.id + '">' + e.title + '</h1><p class="desc">' + e.desc + '</p>' + (e.anim ? '<p><button class="pg-btn" data-replay>움직임 다시 보기</button></p>' : '') + frames + '</article>';
+    return '<article class="entry" id="' + e.id + '" aria-labelledby="h-' + e.id + '"><h1 id="h-' + e.id + '" tabindex="-1">' + e.title + '</h1><p class="desc">' + e.desc + '</p>' + (e.anim ? '<p><button class="pg-btn" data-replay>움직임 다시 보기</button></p>' : '') + frames + '</article>';
   }
   function render() {
     var m = document.getElementById('mount');
@@ -27,7 +28,13 @@
     document.querySelectorAll('[data-pcw]').forEach(function (b) { b.disabled = view !== 'pc'; });
     SP.fit();
   }
-  function go(i, push) { cur = Math.max(0, Math.min(E.length - 1, i)); if (push !== false) { try { history.replaceState(null, '', '#' + E[cur].id); } catch (err) {} } render(); window.scrollTo(0, 0); }
+  /* 화면을 바꾸면 초점을 새 화면 제목(h1)으로 옮긴다(BODY로 돌아가지 않게). 처음 열 때(focus=false)는 옮기지 않음 */
+  function go(i, push, focus) {
+    cur = Math.max(0, Math.min(E.length - 1, i));
+    if (push !== false) { try { history.replaceState(null, '', '#' + E[cur].id); } catch (err) {} }
+    render(); window.scrollTo(0, 0);
+    if (focus !== false) { var h = document.getElementById('h-' + E[cur].id); if (h) { try { h.focus({ preventScroll: true }); } catch (err) { h.focus(); } } }
+  }
   SP.initIndex = function () {
     var nav = document.getElementById('list'), g = '', out = '';
     E.forEach(function (e, i) { if (e.group !== g) { g = e.group; out += '<h2>' + g + '</h2>'; } out += '<a href="#' + e.id + '" data-i="' + i + '">' + e.title.replace(g + ': ', '').replace(/^S\d+ /, '') + '</a>'; });
@@ -50,6 +57,6 @@
     window.addEventListener('hashchange', function () { var id = location.hash.replace('#', ''); E.forEach(function (e, i) { if (e.id === id) { mode = 'one'; setMode(); go(i, false); } }); });
     var h = location.hash.replace('#', ''), idx = 0;
     E.forEach(function (e, i) { if (e.id === h) idx = i; });
-    go(idx, false);
+    go(idx, false, false);
   };
 })(window.SP);
