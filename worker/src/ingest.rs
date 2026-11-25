@@ -236,7 +236,7 @@ fn short_keys(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
             .map(|start| start..hit.end())
     })
 }
-fn mask(text: &str) -> String {
+pub(crate) fn mask(text: &str) -> String {
     let normalized = normalize(text);
     let mut short = short_keys(&normalized).peekable();
     let mut phone = phones(&normalized).peekable();

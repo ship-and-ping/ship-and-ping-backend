@@ -13,6 +13,7 @@ import { validateApp } from "./domain";
 import { displayText } from "./normalize";
 import { Hero, Landing, PublicBar, Shell } from "./Layout";
 import { MonitorRoute } from "./Monitor";
+import { Notifications } from "./Notifications";
 import { Connect } from "./Connect";
 
 function useApps(api: Gateway) {
@@ -419,6 +420,8 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
             >
               <Routes>
                 <Route index element={<Apps api={api} />} />
+                <Route path="notifications" element={<Notifications api={api} origin={ingest} />} />
+                <Route path=":id/notifications" element={<Notifications api={api} origin={ingest} />} />
                 <Route
                   path="new"
                   element={

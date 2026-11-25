@@ -1,4 +1,16 @@
 let missingLookups = 0;
+const id = n => "00000000-0000-4000-8000-" + String(n).padStart(12,"0");
+const hook = ["https:/","hooks.slack.com","services","fixture"].join("/");
+const sensitive = ["sp","srv","example"].join("_");
+const report = { slack:0, mail:0, broken:0, completed:0, connected:0, safe:true };
+let round=0;
+let stateIssued=false;
+function rows() {
+  round++;
+  return [1,2].map(n=>({id:id(n),claim_token:id(3),app:id(4),incident:id(n),event:"open",
+    kind:"slow",feature:"신청 "+sensitive,metric:{total:10,p50:n===1?3400.5:null,baseline:n===1?1100:null,raw:"private-body"},raw_route:"/private-route",
+    channel:round===2?"email":"slack",hook,destination:"T/C",secret_id:id(7),email:"member@example.invalid",digest:round>1}));
+}
 async function fixtureHash(suffix) {
   const raw = new TextEncoder().encode(["sp","pub",suffix].join("_"));
   const digest = await crypto.subtle.digest("SHA-256", raw);
@@ -6,9 +18,39 @@ async function fixtureHash(suffix) {
 }
 export default {
   async fetch(request) {
+    const url=new URL(request.url);
+    if(url.pathname==="/fixture-report") return Response.json(report);
+    if(url.hostname==="hooks.slack.com" || url.hostname==="api.resend.com") {
+      const payload=await request.json();
+      report.safe &&= ![sensitive,"private-body","private-route",hook].some(value=>payload.text.includes(value))
+        && payload.text.includes("3.4초") && payload.text.includes("평소 1.1초") && !payload.text.includes("0.0초")
+        && (round===3 ? !payload.text.includes("쉽앤핑에서 보기") : [1,2].every(n=>payload.text.includes("https://web.test/apps/"+id(4)+"/issues/"+id(n))));
+      if(url.hostname==="hooks.slack.com"){ report.slack++; return new Response("action_prohibited",{status:403}); }
+      report.safe &&= payload.to[0]==="member@example.invalid" && payload.subject.includes("모아") && payload.text.includes("12건 더");
+      report.mail++;return Response.json({});
+    }
+    if(url.hostname==="slack.com"){
+      const code=(await request.formData()).get("code");
+      return Response.json(code==="denied"?{ok:false,error:"action_prohibited"}:{ok:true,team:{id:"T"},incoming_webhook:{url:hook,channel:"#test",channel_id:"C"}});
+    }
     if (request.headers.get("apikey") !== "fixture") return new Response(null, {status: 500});
     const path = new URL(request.url).pathname;
     const body = await request.json();
+    switch(path.split("/").pop()){
+      case "evaluate_all": return new Response(null,{status:503});
+      case "claim_notifications": return Response.json(rows());
+      case "slack_failed": report.broken++;return Response.json(null);
+      case "complete_notification": if(body.id===id(1)) return new Response(null,{status:503});
+        report.completed+=Number(body.ok && body.token===id(3));return Response.json(null);
+      case "reserve_mail": return Response.json(body.app===id(4));
+      case "expand_mail_digest": return Response.json(12);
+      case "start_slack_state": stateIssued=true;return Response.json(id(8));
+      case "consume_slack_state":{
+        if(!stateIssued || body.ticket!==id(8))return Response.json(null);
+        stateIssued=false;return Response.json(id(4));
+      }
+      case "connect_slack":report.connected+=Number(body.hook===hook && body.app===id(4));return Response.json(null);
+    }
     if (!/^[a-f0-9]{64}$/.test(body.app_key_hash)) return new Response(null, {status: 400});
     if (path === "/rest/v1/rpc/lookup_key_app") {
       if (body.app_key_hash === await fixtureHash("missing")) {

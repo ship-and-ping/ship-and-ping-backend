@@ -652,3 +652,44 @@ summary {
   .resolved-fill { animation: verification-fill .5s ease-out; }
   @keyframes verification-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 }
+.notification-switch {
+  display: inline-flex;
+  gap: 1rem;
+  align-items: center;
+  background: var(--sp-surface);
+  color: var(--sp-ink);
+  border: 1px solid var(--sp-line-strong);
+}
+.notification-switch span {
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  width: 2.5rem;
+  height: 1.5rem;
+  padding-inline: .2rem;
+  border-radius: 1rem;
+  background: var(--sp-line-strong);
+}
+.notification-switch span::after {
+  content: "";
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--sp-surface);
+}
+.notification-switch[aria-checked="true"] span {
+  justify-content: flex-end;
+  background: var(--sp-ok-ink);
+}
+.notification-switch[aria-checked="true"] span::after { background: var(--sp-knob-on); }
+
+.notification-warning {
+  display: flex;
+  gap: .6rem;
+  padding: .8rem 1rem;
+  border-inline-start: 4px solid var(--sp-bad-ink);
+}
+.notification-warning, .badge.bad {
+  background: var(--sp-bad-soft);
+  color: var(--sp-bad-ink);
+}

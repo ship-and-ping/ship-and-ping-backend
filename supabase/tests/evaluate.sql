@@ -35,7 +35,7 @@ select is(jsonb_array_length(evaluate_all()),1,'fifth result opens at exactly 20
 select is((select p50_ms from baselines join features on id=feature_id where name='fail'),null::int,'recent feature has no baseline');
 select ok((select p50_ms is not null from baselines join features on id=feature_id where name='learn'),'C8 30 successes after three days');
 select is(evaluate_all(),'[]'::jsonb,'same incident once');
-select is((select count(*) from notifications),0::bigint,'no channel settings means dashboard only');
+select is((select count(*) from notifications where channel='email'),4::bigint,'new app queues email for each incident');
 select pg_temp.results('fail','old','success',3,100,'10 seconds');
 select pg_temp.results('fail','old','failure',2,100,'10 seconds');
 update incidents set last_notified_at=now()-interval '6 hours';
