@@ -24,18 +24,20 @@ function copyWithEvent(text: string) {
   }
 }
 
-function Copy({
+export function Copy({
   text,
   title,
   secret = false,
   publicKey,
   onCopy,
+  compact = false,
 }: {
   text: string;
   title: string;
   secret?: boolean;
   publicKey?: string;
   onCopy?: () => void;
+  compact?: boolean;
 }) {
   const [state, setState] = useState<"ready" | "busy" | "done" | "fail">(
     "ready",
@@ -87,7 +89,7 @@ function Copy({
           ? "복사했어요"
           : state === "fail"
             ? "다시 복사"
-            : title}
+            : state === "busy" ? "복사하는 중" : title}
       </button>
       <span role="status">
         {state === "done"
@@ -100,7 +102,7 @@ function Copy({
               : "자동 복사가 막혔어요. 아래 상자를 누르면 전부 선택돼요."
             : ""}
       </span>
-      {!secret && (
+      {!secret && (!compact || state === "fail") && (
         <textarea
           aria-label={title + " 전문"}
           ref={area}

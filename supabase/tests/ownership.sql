@@ -25,7 +25,6 @@ begin
     insert into baselines(feature_id,sample_count) values(feature,0);
     insert into incidents(app_id,feature_id,kind,status,opened_at,opened_version) values(app,feature,'slow','open',now(),'v1') returning id into incident;
     insert into notifications(incident_id,channel,event,ok) values(incident,'email','open',true);
-    insert into alert_channels(owner_id) values(account);
     insert into ingest_batches(app_id,batch_id) values(app,account);
     insert into feature_map_suggestions(app_id,method,route,name) values(app,'GET','/a','A');
   end loop;
