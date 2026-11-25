@@ -365,6 +365,10 @@ figcaption {
 .app-card:hover {
   border-color: var(--sp-line-strong);
 }
+.app-card h2,
+.compact > span {
+  overflow-wrap: anywhere;
+}
 .badge {
   padding: 4px 10px;
   justify-self: start;
