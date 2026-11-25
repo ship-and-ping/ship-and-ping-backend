@@ -150,6 +150,7 @@ stats_5m과 같은 열, bucket = 1시간. 매일 Cron이 30일 지난 5분 요�
 | `claim_notifications(limit)` | 등록 순으로 대기 행 선점. 잠긴 행은 건너뛰며 10분 지난 선점은 재시도 가능 |
 | `complete_notification(id, ok, error)` | 선점한 행의 발송 결과를 기록하고 오류에 포함된 URL과 민감 정보를 가린다 |
 | `dismiss_incident(incident_id)` | 회원이 자기 앱의 열린 문제를 24시간 숨기고 선점 전 대기 알림을 취소한다. 이미 닫힌 문제에 다시 호출하면 기존 상태를 유지한다 |
+| `incident_verification(incident_id)` | 회원이 자기 앱의 문제 이후 버전과 연속 성공 수(0~5), 마지막 결과의 소요 시간·성공 여부를 조회한다. 느려짐 문제는 해결 속도 기준을 충족한 성공만 연속 횟수에 포함한다 |
 | `cleanup_daily()` | 30일 지난 5분 요약 → stats_1h, 오래된 행 삭제 |
 | `issue_key(app_id, kind)` | 회원 호출 가능(본인 앱만): 키 생성, 해시 저장, 원문은 한 번만 반환 |
 

@@ -107,14 +107,18 @@ create view private.evaluation_signals as
  left join public.baselines b on b.feature_id=f.id left join recent r on r.feature_id=f.id and r.kind=k.kind
  left join missing m on m.feature_id=f.id where k.kind<>'unconfirmed' or f.kind='deep';
 
-create function private.recovery_version(issue public.incidents) returns text
+create function private.verification_progress(issue public.incidents)
+returns table(version text,consecutive_successes integer,latest_duration_ms integer,latest_success boolean)
 language sql stable set search_path='' as $$
- select v.version from public.app_versions v join public.features f on f.id=issue.feature_id
+ select v.version,coalesce(array_position(proof.qualified,false)-1,cardinality(proof.qualified),0) as streak,
+  proof.durations[1],proof.successes[1]
+ from public.app_versions v join public.features f on f.id=issue.feature_id
  left join public.baselines b on b.feature_id=f.id
  cross join lateral (
-  select count(*)=5 and bool_and(success and (issue.kind<>'slow' or coalesce(ms<=coalesce(b.p50_ms*1.5,f.slow_threshold_ms),false))) recovered
+  select array_agg(success and (issue.kind<>'slow' or coalesce(ms<=coalesce(b.p50_ms*1.5,f.slow_threshold_ms),false))
+    order by rank) qualified,array_agg(ms order by rank) durations,array_agg(success order by rank) successes
   from (
-   select success,ms from (
+   select success,ms,row_number() over w as rank from (
     select a.result_received_at stamp,0::bigint position,a.status='success' success,a.duration_ms ms
     from public.attempts a where a.feature_id=f.id and a.version=v.version and a.status in ('success','failure')
      and a.result_received_at>issue.opened_at
@@ -123,11 +127,14 @@ language sql stable set search_path='' as $$
     from private.latest_results r
     where r.app_id=v.app_id and r.feature_id=f.id and r.version=v.version
      and r.received_at>issue.opened_at
-   ) events order by stamp desc,position desc,success,ms desc limit 5
+   ) events window w as (order by stamp desc,position desc,success,ms desc)
+   order by stamp desc,position desc,success,ms desc limit 5
   ) last_results
  ) proof
- where v.app_id=issue.app_id and v.version<>issue.opened_version and v.last_seen_at>issue.opened_at and proof.recovered
- order by v.last_seen_at desc,v.version limit 1
+ where v.app_id=issue.app_id and v.version<>issue.opened_version and v.last_seen_at>issue.opened_at
+  and (issue.resolved_version is null or v.version=issue.resolved_version)
+ order by (cardinality(proof.qualified)=5 and array_position(proof.qualified,false) is null) desc nulls last,
+  v.last_seen_at desc,v.version limit 1
 $$;
 
 create function public.evaluate_all() returns jsonb
@@ -159,7 +166,7 @@ begin
   else
    select * into issue from public.incidents where id=signal.open_id and status='open' for update;
    if not found or issue.dismissed_until>now() then continue; end if;
-   recovered := private.recovery_version(issue);
+   select p.version into recovered from private.verification_progress(issue) p where p.consecutive_successes=5;
    if recovered is not null then
     update public.incidents set status='resolved',resolved_version=recovered,closed_at=now(),last_notified_at=now()
      where id=issue.id;
