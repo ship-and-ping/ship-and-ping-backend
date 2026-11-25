@@ -259,13 +259,16 @@ window.SP = window.SP || {};
       else end(oldCopy(text));
     } catch (err) { end(false); }
   };
+  /* 값을 읽는 범위: 한 화면에 PC·태블릿 마크업(.v-full)과 숨겨진 휴대폰 화면(.v-phone)이 함께 있으므로,
+     누르거나 입력한 요소가 속한 쪽(지금 보이는 폼)만 본다. 둘 다 아니면 화면 전체(.sp) */
+  SP.scope = function (el) { return el.closest('.v-full, .v-phone, .v-wide, .v-narrow') || el.closest('.sp'); };
   function selectAll(el) { try { var r = document.createRange(); r.selectNodeContents(el); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } catch (err) {} }
   document.addEventListener('click', function (e) {
     var c = e.target.closest('[data-copy]');
     if (c) {
       if (c.getAttribute('data-state') === 'done' || c.getAttribute('aria-busy') === 'true' || c.getAttribute('aria-disabled') === 'true') return;
       var kind = c.getAttribute('data-copy'), label = c.getAttribute('data-label') || '복사';
-      var text = SP.texts[kind] ? SP.texts[kind](c.closest('.sp')) : '';
+      var text = SP.texts[kind] ? SP.texts[kind](SP.scope(c)) : '';
       var lbl = c.querySelector('.lbl'), box = c.closest('.sp-copyblock'), manual = box ? box.querySelector('.sp-copy-manual') : null;
       c.setAttribute('aria-busy', 'true');
       var force = c.hasAttribute('data-force-fail');
@@ -322,7 +325,7 @@ window.SP = window.SP || {};
     var t = e.target;
     /* S8: 세 칸을 고치면 미리 보기 전문도 바로 바뀜(복사 내용과 같음) */
     if (t.hasAttribute && t.hasAttribute('data-deep')) {
-      var root = t.closest('.sp'), txt = SP.texts.deep(root), miss = SP.deepVals(root).missing;
+      var root = SP.scope(t), txt = SP.texts.deep(root), miss = SP.deepVals(root).missing;
       root.querySelectorAll('.sp-copyblock[data-kind="deep"] pre').forEach(function (p) { p.textContent = txt; });
       /* 빈 칸이 하나라도 있으면 복사 단추를 막고 이유를 보여 줌 */
       root.querySelectorAll('.sp-copyblock[data-kind="deep"]').forEach(function (b) {

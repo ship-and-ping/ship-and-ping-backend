@@ -16,7 +16,7 @@
 
   /* ---------------- S1 첫 화면·로그인 ---------------- */
   var s1 = function (banner) {
-    return wrap('<header class="sp-hdr"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="Ship &amp; Ping 쉽앤핑" width="40" height="40" style="width:40px;height:40px;border-radius:10px"><span class="t">쉽앤핑</span></header>' + (banner || '') +
+    return wrap('<header class="sp-hdr"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="Ship &amp; Ping 쉽앤핑" width="40" height="40" style="width:40px;height:40px;border-radius:10px"><span class="t" data-ft tabindex="-1">쉽앤핑 시작하기</span></header>' + (banner || '') +
       K.say({ meta: '<span>무료 베타</span>', headline: '<p class="sp-headline">내 앱이 괜찮은지, 24시간 대신 지켜볼게요</p>', body: '<p class="hsub">문제가 생기면 "분석이 느려졌어요"처럼 쉬운 말로 알려 드리고, 코딩 AI에 보낼 내용까지 챙겨 드려요.</p>' }) +
       sec('<button class="sp-btn block">' + ic.google(18) + 'Google로 시작하기</button><button class="sp-btn line block">' + ic.mail(18) + '이메일 링크로 시작하기</button><p class="sp-sub">이메일 링크는 비밀번호 없이 메일에 온 링크를 눌러 들어오는 방식이에요.</p><a class="sp-btn text" href="#s0">' + ic.back(16) + '쉽앤핑 소개로 돌아가기</a>') +
       sec('<h2>이렇게 써요</h2>' + K.steps(['연결 요청을 코딩 AI에 붙여넣어요', '문제가 생기면 슬랙이나 메일로 알려 드려요', '고친 버전을 배포하면 해결됐는지 확인해 드려요'], 0, -1)));
@@ -544,7 +544,7 @@
   var landing = function (m) {
     var bar = m ? '<header class="sp-pubbar m"><a class="brand" href="#s0"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="30" height="30">쉽앤핑</a><span class="grow"></span><a class="sp-btn text" href="#s1">로그인</a></header>' : SP.pubbar();
     var acts = '<div class="acts"><a class="sp-btn" href="#s1" style="text-decoration:none">시작하기</a><a class="sp-btn line" href="#s1" style="text-decoration:none">로그인</a></div>';
-    var hero = '<section class="lsec hero" aria-labelledby="l-h1' + (m ? 'm' : '') + '"><div class="txt"><h1 id="l-h1' + (m ? 'm' : '') + '" class="lt1">힘겹게 모은 사용자,<br>서버 문제로 잃으실 건가요?</h1><p class="lead strong">사용자가 나쁜 리뷰를 남기기 전에 먼저 알고 고칠 수 있게, 쉽앤핑이 대신 지켜볼게요.</p><p class="lead">쉽앤핑은 바이브 코딩으로 앱을 낸 사람을 위한 관리형 모니터링이에요. 문제가 생기면 쉬운 한 문장으로 알려 드리고, 코딩 AI에 보낼 내용까지 챙겨 드려요.</p>' + acts + '</div>' +
+    var hero = '<section class="lsec hero" aria-labelledby="l-h1' + (m ? 'm' : '') + '"><div class="txt"><h1 id="l-h1' + (m ? 'm' : '') + '" class="lt1" data-ft tabindex="-1">힘겹게 모은 사용자,<br>서버 문제로 잃으실 건가요?</h1><p class="lead strong">사용자가 나쁜 리뷰를 남기기 전에 먼저 알고 고칠 수 있게, 쉽앤핑이 대신 지켜볼게요.</p><p class="lead">쉽앤핑은 바이브 코딩으로 앱을 낸 사람을 위한 관리형 모니터링이에요. 문제가 생기면 쉬운 한 문장으로 알려 드리고, 코딩 AI에 보낼 내용까지 챙겨 드려요.</p>' + acts + '</div>' +
       /* 상자에서 꺼낸 양(크게, S0에서만 반복 움직임: 숨쉬기·깜빡임·뿔 레이더 핑) + 그 양이 하는 말(카드에는 양을 다시 넣지 않음) */
       '<div class="pic"><div class="bigsheep">' + SP.sheep('live') + '</div>' + K.say({ noAv: true, meta: K.status('ok') + '<span>예시 화면</span>', headline: '<p class="sp-headline">모임모아는 지금 모두 괜찮아요</p>', body: '<p class="hsub">기능 8개를 지켜보고 있어요. 문제가 생기면 슬랙이나 메일로 바로 알려 드릴게요.</p>' }) + '</div></section>';
     var pains = '<section class="lsec"><h2 class="lt">나쁜 리뷰로 먼저 알게 되면 늦어요</h2><p class="lead">코딩 AI로 만든 앱은 빨리 나오지만, 무엇이 멈추거나 느려졌는지는 사용자가 연락하거나 리뷰를 남겨야 알게 되는 경우가 많아요. 쉽앤핑은 기록에서 문제가 보이면 바로 알려 드려서, 그보다 먼저 알아챌 수 있게 도와요.</p><ul class="three">' +
