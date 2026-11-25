@@ -9,9 +9,31 @@ import {
 import { afterEach, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { MonitorRoute } from "./Monitor";
+import { Hero } from "./Layout";
 import { gateway } from "./data";
 
 afterEach(cleanup);
+it("첫 기록 대기 화면은 안내와 배지를 하나씩 표시한다", async () => {
+  const { container } = setup("/apps/a", [], rows => {
+    rows.incidents = [];
+    rows.stats_5m = [];
+    rows.app_versions = [];
+  });
+  await screen.findByRole("heading", {name: "첫 기록을 기다리고 있어요"});
+  const hero = container.querySelector(".hero-card")!;
+  expect(hero.querySelector("[role=status]")?.textContent).toBe("연결한 앱을 한 번 사용하면 첫 기록을 확인할 수 있어요.");
+  expect(hero.querySelectorAll(".status-badge")).toHaveLength(1);
+  expect(hero.querySelector(".status-badge")?.textContent).toContain("기록 대기");
+});
+it("도착 모션은 열린 카드의 상태가 바뀔 때만 시작한다", () => {
+  const props = { title: "기록", detail: "안내" };
+  const { container, rerender } = render(<Hero {...props} arrived />);
+  expect(container.querySelector(".arrived")).toBeNull();
+  rerender(<Hero {...props} arrived={false} />);
+  expect(container.querySelector(".arrived")).toBeNull();
+  rerender(<Hero {...props} arrived />);
+  expect(container.querySelector(".arrived")).toBeTruthy();
+});
 it("깊게 보기 카드는 네 결과를 구분하고 확정 결과만 실패율에 포함한다", async () => {
   setup("/apps/a", [], rows => {
     Object.assign((rows.features as object[])[0], {kind:"deep",method:null,route:null});
@@ -197,6 +219,29 @@ it.each([
     expected,
   );
 });
+it.each([
+  ["failure", "open", { total: 6, failures: 2 }, "신청 6건 중 2건 실패", "감지 구간 · 최근 30분", "진행 중"],
+  ["failure", "open", { total: 3, failures: 3, consecutive: true }, "신청에서 3건 연속 실패했어요", "최근 30분 3건 중 실패 3건", "진행 중"],
+  ["slow", "open", { p50: 6000 }, "신청이 느려졌어요", "기준 5초 → 최근 30분 6초", "진행 중"],
+  ["unconfirmed", "open", { unconfirmed: 3 }, "신청의 기록 전송이 끊겼을 수 있어요", "사용 결과를 확인하지 못한 기록 3건", "진행 중"],
+  ["failure", "resolved", { total: 6, failures: 2 }, "업데이트 후 신청 최근 5건이 모두 성공했어요.", "해결 전 기록 · 최근 30분 6건 중 실패 2건", "해결됐어요"],
+  ["slow", "resolved", { p50: 6000 }, "업데이트 후 신청 최근 5건이 모두 평소 속도로 끝났어요.", "해결 전 기록 · 기준 5초 → 최근 30분 6초", "해결됐어요"],
+  ["failure", "quiet", null, "신청에서 실패가 늘었어요", "부터", "잠잠해졌어요"],
+  ["failure", "dismissed", null, "신청에서 실패가 늘었어요", "까지 다시 알리지 않아요.", "문제 아님으로 닫았어요"],
+] as const)("문제 상세 요약 %s · %s · %j", async (kind, status, metric, title, detail, badge) => {
+  const { container } = setup("/apps/a/issues/i", [], rows => {
+    Object.assign((rows.features as object[])[0], { name: "신청" });
+    Object.assign((rows.incidents as object[])[0], {
+      kind, status, metric_at_open: metric, closed_at: status === "dismissed" ? new Date().toISOString() : null,
+    });
+  });
+  await screen.findByRole("heading", { level: 1, name: /신청/ });
+  const hero = container.querySelector(".hero-card")!;
+  expect(hero.querySelector("h2")?.textContent).toBe(title);
+  expect(hero.querySelector("[role=status]")?.textContent).toContain(detail);
+  expect(hero.querySelectorAll(".status-badge")).toHaveLength(1);
+  expect(hero.querySelector(".status-badge")?.textContent).toContain(badge);
+});
 it("숨긴 기능은 목록에서 빠지고 해당 문제 상세는 열린다", async () => {
   const { container, requests } = setup("/apps/a", [], (rows) => {
     (rows.features as {hidden: boolean}[])[0].hidden = true;
@@ -253,7 +298,7 @@ it("S7을 열면 경고와 기본 복사 옵션을 자동으로 선택한다", a
       screen.queryByRole("button", { name: "문제 아님으로 닫기" }),
     ).toBeNull(),
   );
-  await screen.findByRole("heading", { name: "문제 아님으로 닫았어요" });
+  await waitFor(() => expect(container.querySelector(".hero-card .status-badge")?.textContent).toContain("문제 아님으로 닫았어요"));
   expect(container.querySelector("#verification")).toBeNull();
 });
 
@@ -271,6 +316,7 @@ it("되돌린 버전으로 홈 띠와 문제 흐름, 확인 결과, 요청문을
   expect(link.parentElement?.textContent).toContain("새 버전 v0 감지");
   fireEvent.click(link);
   await screen.findByText("업데이트 후 4건 성공, 1건 더 확인할게요");
+  expect(container.querySelector("ol li:last-child time")?.getAttribute("datetime")).toBeTruthy();
   expect(container.querySelector("ol li:last-child")?.textContent).toContain("새 버전 감지 · v0");
   expect(container.querySelector("pre")?.textContent).toContain("v0");
   expect(container.querySelector("pre")?.textContent).not.toContain("v3");
