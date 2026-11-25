@@ -1,7 +1,12 @@
-use crate::ingest::{ApiError, Counts, MAX_BYTES, credential, prepare};
+use crate::ingest::{
+    ApiError, Counts, MAX_BYTES, credential, key_hash, prepare_ingest, prepare_map,
+};
+use crate::limits::Limits;
 use futures_util::StreamExt;
 use serde_json::json;
+use std::cell::RefCell;
 use worker::*;
+thread_local! { static LIMITS: RefCell<Limits> = RefCell::default(); }
 
 struct SinkError(u16, &'static str);
 
@@ -16,18 +21,12 @@ struct RpcFailure {
     code: String,
 }
 
-trait BatchSink {
-    async fn submit(&self, body: Vec<u8>, counts: Counts)
-    -> std::result::Result<Counts, SinkError>;
+struct Supabase {
+    url: String,
+    key: String,
 }
-struct Supabase<'a>(&'a Env);
-impl BatchSink for Supabase<'_> {
-    async fn submit(
-        &self,
-        body: Vec<u8>,
-        counts: Counts,
-    ) -> std::result::Result<Counts, SinkError> {
-        let env = self.0;
+impl Supabase {
+    fn configured(env: &Env) -> std::result::Result<Option<Self>, SinkError> {
         let url = env
             .var("SUPABASE_URL")
             .ok()
@@ -43,12 +42,15 @@ impl BatchSink for Supabase<'_> {
                 .var("INGEST_DRY_RUN")
                 .is_ok_and(|flag| flag.to_string() == "true");
             if dry_run && url.is_empty() && key.is_empty() {
-                return Ok(counts);
+                return Ok(None);
             }
             return Err(SinkError(503, "storage unavailable"));
         }
+        Ok(Some(Self { url, key }))
+    }
+    async fn rpc(&self, name: &str, body: Vec<u8>) -> std::result::Result<Response, SinkError> {
         let h = Headers::new();
-        h.set("apikey", &key)?;
+        h.set("apikey", &self.key)?;
         h.set("Content-Type", "application/json")?;
         let mut init = RequestInit::new();
         init.with_method(Method::Post)
@@ -59,7 +61,7 @@ impl BatchSink for Supabase<'_> {
                     .into(),
             ));
         let req = Request::new_with_init(
-            &format!("{}/rest/v1/rpc/ingest_batch", url.trim_end_matches('/')),
+            &format!("{}/rest/v1/rpc/{name}", self.url.trim_end_matches('/')),
             &init,
         )?;
         let mut response = Fetch::Request(req)
@@ -79,41 +81,49 @@ impl BatchSink for Supabase<'_> {
                 _ => SinkError(503, "storage unavailable"),
             });
         }
-        let mut result: Counts = response
-            .json()
+        Ok(response)
+    }
+    async fn app(&self, hash: &str, now: u64) -> std::result::Result<String, SinkError> {
+        if let Some(app) = LIMITS.with_borrow(|state| state.cached(hash, now)) {
+            return Ok(app);
+        }
+        let body = json!({"app_key_hash": hash}).to_string().into_bytes();
+        let mut response = self.rpc("lookup_key_app", body).await?;
+        let app = response
+            .json::<Option<uuid::Uuid>>()
             .await
-            .map_err(|_| SinkError(503, "invalid storage response"))?;
-        result.dropped += counts.dropped;
-        Ok(result)
+            .map_err(|_| SinkError(503, "invalid lookup response"))?
+            .ok_or(SinkError(401, "unknown key"))?
+            .to_string();
+        LIMITS.with_borrow_mut(|state| state.remember(hash, &app, now));
+        Ok(app)
     }
 }
 fn error(status: u16, message: &str) -> Result<Response> {
     Ok(Response::from_json(&json!({"error":message}))?.with_status(status))
 }
 async fn ingest(mut req: Request, env: Env) -> Result<Response> {
-    if req.path() != "/v1/ingest" {
-        return error(404, "not found");
-    }
+    let feature_map = match req.path().as_str() {
+        "/v1/feature-map" => true,
+        "/v1/ingest" => false,
+        _ => return error(400, "unknown endpoint"),
+    };
     if req.method() == Method::Options {
         return Ok(Response::empty()?.with_status(204));
     }
     if req.method() != Method::Post {
-        return error(405, "POST required");
+        return error(400, "POST required");
     }
     let headers = req.headers();
     let auth = headers.get("Authorization")?.unwrap_or_default();
-    if credential(&auth).is_err() {
+    let Ok(key) = credential(&auth) else {
         return error(401, "invalid key format");
-    }
+    };
+    let hash = key_hash(key);
     let content_type = headers.get("Content-Type")?.unwrap_or_default();
-    if !content_type
-        .split(';')
-        .next()
-        .unwrap_or("")
-        .trim()
-        .eq_ignore_ascii_case("application/json")
-    {
-        return error(400, "application/json required");
+    let mime = content_type.split(';').next().unwrap_or("").trim();
+    if !(mime.eq_ignore_ascii_case("application/json") || mime.eq_ignore_ascii_case("text/plain")) {
+        return error(400, "JSON body required");
     }
     if headers
         .get("Content-Length")?
@@ -123,6 +133,18 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
         return error(413, "batch too large");
     }
     let now = Date::now().as_millis() as i64;
+    let seconds = (now / 1000) as u64;
+    let db = match Supabase::configured(&env) {
+        Ok(db) => db,
+        Err(SinkError(status, msg)) => return error(status, msg),
+    };
+    let app = match &db {
+        Some(db) => match db.app(&hash, seconds).await {
+            Ok(app) => app,
+            Err(SinkError(status, msg)) => return error(status, msg),
+        },
+        None => hash.clone(),
+    };
     let mut body = Vec::new();
     let Ok(mut stream) = req.stream() else {
         return error(400, "missing body");
@@ -136,16 +158,45 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
         }
         body.extend_from_slice(&chunk);
     }
-    let (rpc, counts) = match prepare(&auth, &body, now) {
+    let (rpc, counts) = match if feature_map {
+        prepare_map(&hash, &body)
+    } else {
+        prepare_ingest(key, &hash, &body, now)
+    } {
         Ok(out) => out,
         Err(ApiError::TooLarge) => return error(413, "batch too large"),
         Err(ApiError::Unauthorized) => return error(401, "invalid key format"),
         Err(ApiError::Invalid) => return error(400, "invalid batch"),
     };
-    match Supabase(&env).submit(rpc, counts).await {
-        Ok(counts) => Ok(Response::from_json(&counts)?.with_status(202)),
-        Err(SinkError(status, message)) => error(status, message),
+    if let Err(retry) =
+        LIMITS.with_borrow_mut(|state| state.reserve(&app, Date::now().as_millis() / 1000))
+    {
+        let mut response = error(429, "app quota exceeded")?;
+        response
+            .headers_mut()
+            .set("Retry-After", &retry.to_string())?;
+        return Ok(response);
     }
+    let mut result = counts;
+    if let Some(db) = db {
+        let name = if feature_map {
+            "suggest_feature_map"
+        } else {
+            "ingest_batch"
+        };
+        let mut response = match db.rpc(name, rpc).await {
+            Ok(r) => r,
+            Err(SinkError(status, msg)) => return error(status, msg),
+        };
+        if !feature_map {
+            let Ok(mut stored) = response.json::<Counts>().await else {
+                return error(503, "invalid storage response");
+            };
+            stored.dropped += result.dropped;
+            result = stored;
+        }
+    }
+    Ok(Response::from_json(&result)?.with_status(202))
 }
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
@@ -155,6 +206,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     };
     let h = response.headers_mut();
     h.set("Access-Control-Allow-Origin", "*")?;
+    h.set("Access-Control-Expose-Headers", "Retry-After")?;
     h.set("Access-Control-Allow-Methods", "POST, OPTIONS")?;
     h.set(
         "Access-Control-Allow-Headers",
