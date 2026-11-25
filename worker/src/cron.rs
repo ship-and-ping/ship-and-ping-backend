@@ -25,6 +25,9 @@ pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
                 Ok(_) => (),
                 Err(_) => console_error!("Invalid evaluation response"),
             }
+            if crate::notify::deliver(&db, &env).await.is_err() {
+                console_error!("Notification delivery interrupted");
+            }
         }
         Ok(_) => (),
         Err(_) => console_error!("Scheduled RPC {} failed", rpc),

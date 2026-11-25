@@ -132,9 +132,10 @@ export function Shell({
                 {label}{hash === "#issues" && heading.issues != null ? " " + heading.issues : ""}
               </Link>
             ))}
+          <Link onClick={() => setOpen(false)} to={currentName && heading ? "/apps/"+heading.id+"/notifications" : "/apps/notifications"} aria-current={pathname.endsWith("/notifications") ? "page" : undefined}>알림 설정</Link>
           {(currentName
-            ? ["앱 설정", "알림 설정", "내 계정"]
-            : ["알림 설정", "내 계정"]
+            ? ["앱 설정", "내 계정"]
+            : ["내 계정"]
           ).map((n) => (
             <span key={n}>
               {n} <small>준비 중</small>

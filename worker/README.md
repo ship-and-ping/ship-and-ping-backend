@@ -49,3 +49,17 @@ Worker는 키의 SHA-256 해시로 `lookup_key_app`을 호출한다. `service_ro
 SUPABASE_URL과 SUPABASE_SECRET_KEY가 모두 비어 있고 INGEST_DRY_RUN=true인 로컬 실행에서는 RPC를 생략하고 키 해시별로 한도를 센다. 나머지 설정 누락은 503이다.
 
 측정 결과와 재현 절차는 [BENCH.md](BENCH.md)에 있다.
+
+## 알림 발송과 슬랙 연결
+
+| 환경값 | 쓰임 |
+|---|---|
+| WEB_ORIGIN | 회원용 Pages의 HTTPS 기본 주소. 문제 링크와 OAuth 복귀에 사용한다. |
+| SLACK_CLIENT_ID | incoming-webhook 권한을 신청한 슬랙 앱의 클라이언트 ID |
+| SLACK_CLIENT_SECRET | 코드 교환용 비밀값. Worker secret으로 등록한다. |
+| RESEND_API_KEY | Resend 발송용 Worker secret |
+| MAIL_FROM | Resend에서 인증한 도메인의 발신 주소 |
+
+슬랙 앱에 Worker의 `/v1/slack/callback` HTTPS 주소를 등록한다. S9에서 로그인을 확인하고 연결을 시작하면 해당 탭과 회원 앱에 10분간 유효한 일회용 state가 생긴다. 연결 정보는 Vault에 저장한다.
+
+매분 판정 후 최대 10개를 선점한다. 슬랙 메시지는 같은 워크스페이스·채널 단위로 합친다. 폐기된 연결은 다음 발송부터 로그인 이메일로 대신 보낸다. 이메일은 한국 시간 하루 90회까지 발송을 시도하고, 초과분은 다음 날 오전 9시부터 수신자별로 모아 보낸다. 메일 비밀값이나 발신 주소가 없으면 이력에 ‘설정 필요’를 기록한다.

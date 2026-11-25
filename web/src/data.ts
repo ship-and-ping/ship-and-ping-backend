@@ -24,6 +24,15 @@ export interface Snapshot {
   labels: Label[];
 }
 export interface Gateway {
+  settings(app: string): Promise<AlertSettings>;
+  emailSetting(app: string, enabled: boolean): Promise<void>;
+  disconnectSlack(app: string): Promise<void>;
+  testSlack(app: string): Promise<boolean>;
+  slack(
+    path: "install" | "callback",
+    origin: string,
+    params: Record<string, string>,
+  ): Promise<{ url?: string; state?: string; app?: string }>;
   monitor(app: string, feature?: string, issue?: string): Promise<Monitor>;
   threshold(app: string, feature: string, ms: number): Promise<void>;
   dismiss(issue: string): Promise<void>;
@@ -38,6 +47,12 @@ export interface Gateway {
   snapshot(id: string): Promise<Snapshot>;
   save(id: string, labels: Label[]): Promise<Pick<Label, "method" | "route">[]>;
 }
+export interface AlertSettings {
+  email: boolean;
+  channel: string | null;
+  connected: boolean;
+  broken: boolean;
+}
 
 function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
   if (result.error || result.data == null)
@@ -47,6 +62,38 @@ function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
 export function gateway(client: SupabaseClient): Gateway {
   const columns = "id,name,created_at,first_record_at";
   return {
+    async settings(app) {
+      return value(await client.rpc("notification_settings", { app }));
+    },
+    async emailSetting(app, enabled) {
+      const { error } = await client.rpc("set_notification_email", {
+        app,
+        enabled,
+      });
+      if (error) throw error;
+    },
+    async disconnectSlack(app) {
+      const { error } = await client.rpc("disconnect_slack", { app });
+      if (error) throw error;
+    },
+    async testSlack(app) {
+      return value(await client.rpc("queue_test_notification", { app }));
+    },
+    async slack(path, origin, params) {
+      const { data } = await client.auth.getSession();
+      if (!data.session) throw new Error("로그인이 필요해요.");
+      const response = await fetch(origin + "/v1/slack/" + path, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + data.session.access_token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(params),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error);
+      return payload;
+    },
     monitor: (app, feature, issue) => loadMonitor(client, app, feature, issue),
     async threshold(app, feature, ms) {
       value(

@@ -11,7 +11,12 @@ const config :Workerd.Config = (
       modules = .ingestModules,
       bindings = [
         (name = "SUPABASE_URL", text = "https://rpc.test"),
-        (name = "SUPABASE_SECRET_KEY", text = "fixture")
+        (name = "SUPABASE_SECRET_KEY", text = "fixture"),
+        (name = "WEB_ORIGIN", text = "https://web.test"),
+        (name = "SLACK_CLIENT_ID", text = "fixture"),
+        (name = "SLACK_CLIENT_SECRET", text = "fixture"),
+        (name = "RESEND_API_KEY", text = "fixture"),
+        (name = "MAIL_FROM", text = "notice@example.invalid")
       ],
       globalOutbound = "rpc"
     )),

@@ -64,8 +64,19 @@ impl Supabase {
         name: &str,
         body: Vec<u8>,
     ) -> std::result::Result<Response, SinkError> {
+        self.rpc_as(name, body, None).await
+    }
+    pub(crate) async fn rpc_as(
+        &self,
+        name: &str,
+        body: Vec<u8>,
+        bearer: Option<&str>,
+    ) -> std::result::Result<Response, SinkError> {
         let h = Headers::new();
         h.set("apikey", &self.key)?;
+        if let Some(auth) = bearer {
+            h.set("Authorization", auth)?;
+        }
         h.set("Content-Type", "application/json")?;
         let mut init = RequestInit::new();
         init.with_method(Method::Post)
@@ -256,7 +267,12 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
 }
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    let mut response = match ingest(req, env).await {
+    let result = if req.path().starts_with("/v1/slack/") {
+        crate::slack::route(req, &env).await
+    } else {
+        ingest(req, env).await
+    };
+    let mut response = match result {
         Ok(response) => response,
         Err(_) => error(503, "ingest unavailable")?,
     };

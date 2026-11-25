@@ -6,4 +6,12 @@ globalThis.Date = class extends Date {
   constructor(...args) { super(...(args.length ? args : [instant])); }
   static now() { return instant; }
 };
-export default worker;
+export default class FixtureWorker extends worker {
+  async fetch(request) {
+    if (new URL(request.url).pathname === "/fixture/cron") {
+      await super.scheduled({cron:"* * * * *",scheduledTime:Date.now()});
+      return fetch("https://rpc.test/fixture-report");
+    }
+    return super.fetch(request);
+  }
+}

@@ -122,12 +122,15 @@ stats_5m과 같은 열, bucket = 1시간. 매일 Cron이 30일 지난 5분 요�
 
 `private.latest_results`는 해결 판정용 예외로 기능·버전별 최근 요청 결과 20건의 서버 수신 시각·묶음 내 순서·소요 시간·성공 여부를 최대 30일 보관한다. 깊게 보기 결과의 수신 시각은 `attempts.result_received_at`에 기록한다.
 
-### alert_channels — 알림 받을 곳 (회원 단위)
+시험 알림은 incident_id 대신 test_app을 사용한다. claim_token은 매 선점마다 바뀌며 retries, available_at, digest에 재시도 횟수, 다음 선점 가능 시각, 묶음 여부를 기록한다.
+
+### alert_channels — 알림 받을 곳 (회원 소유 앱 단위)
 | 열 | 형식 | 설명 |
 |---|---|---|
-| owner_id PK | uuid | |
+| app_id PK, owner_id | uuid | 기존 회원 설정은 소유한 각 앱에 복사 |
 | slack_webhook_secret_id | uuid null | Vault에 암호화 저장된 webhook 주소 |
 | slack_channel_name | text null | |
+| slack_destination, broken, tested_at | text, bool, timestamptz | 워크스페이스·채널 식별자, 연결 끊김, 마지막 시험 요청 |
 | email_enabled | bool default true | |
 
 ### ingest_batches — 중복 방지 (24시간)
@@ -148,7 +151,11 @@ stats_5m과 같은 열, bucket = 1시간. 매일 Cron이 30일 지난 5분 요�
 | `evaluate_all()` | 미확인 처리, 평소 속도 갱신(6시간마다), 문제 열기·다시 알림·해결·잠잠 판정 → 알림 보낼 목록 반환 |
 | `record_notification(...)` | 알림 결과 기록 |
 | `claim_notifications(limit)` | 등록 순으로 대기 행 선점. 잠긴 행은 건너뛰며 10분 지난 선점은 재시도 가능 |
-| `complete_notification(id, ok, error)` | 선점한 행의 발송 결과를 기록하고 오류에 포함된 URL과 민감 정보를 가린다 |
+| `complete_notification(id, token, ok, error)` | 현재 토큰으로만 완료. 일시 오류는 1·2·4분 후 재시도하고 오류의 URL·키를 가린다 |
+| `slack_failed`, `connect_slack` | 현재 연결의 폐기를 확인해 이메일로 대체하거나 새 webhook을 Vault에 저장한다. 복호화 값은 서비스 전용 선점 RPC에서만 전달한다 |
+| `reserve_mail`, `defer_mail` | 서비스 전체의 한국 시간 일별 발송 슬롯을 원자적으로 예약하고 초과분을 다음 날 09시로 미룬다 |
+| `notification_settings`, `set_notification_email`, `disconnect_slack`, `queue_test_notification` | 회원 세션으로 자기 앱의 설정 조회·변경 및 분당 한 번 시험 알림 예약 |
+| `start_slack_state`, `consume_slack_state` | 로그인 회원의 앱에 일회용 OAuth state 발급 및 소비 |
 | `dismiss_incident(incident_id)` | 회원이 자기 앱의 열린 문제를 24시간 숨기고 선점 전 대기 알림을 취소한다. 이미 닫힌 문제에 다시 호출하면 기존 상태를 유지한다 |
 | `incident_verification(incident_id)` | 회원이 자기 앱의 문제 이후 버전과 연속 성공 수(0~5), 마지막 결과의 소요 시간·성공 여부를 조회한다. 느려짐 문제는 해결 속도 기준을 충족한 성공만 연속 횟수에 포함한다 |
 | `cleanup_daily()` | 30일 지난 5분 요약 → stats_1h, 오래된 행 삭제 |

@@ -30,6 +30,16 @@ const app = {
 };
 function fake(user: string | null = "member"): Gateway {
   return {
+    settings: vi.fn(async () => ({
+      email: false,
+      channel: null,
+      connected: false,
+      broken: false,
+    })),
+    emailSetting: vi.fn(),
+    testSlack: vi.fn(),
+    disconnectSlack: vi.fn(),
+    slack: vi.fn(),
     session: vi.fn(async () => user),
     listen: () => () => {},
     login: vi.fn(),
@@ -45,6 +55,44 @@ function fake(user: string | null = "member"): Gateway {
     save: vi.fn(async () => []),
   };
 }
+it("시작한 탭의 state만 슬랙 코드 교환에 사용한다", async () => {
+  const api = fake();
+  sessionStorage.setItem("ship-ping-slack-state", "original");
+  open("/apps/notifications#slack_state=wrong&slack_code=fixture", api);
+  await screen.findByText("연결 요청을 확인할 수 없어요. 다시 시작해 주세요.");
+  expect(api.slack).not.toHaveBeenCalled();
+  cleanup();
+  sessionStorage.setItem("ship-ping-slack-state", "original");
+  vi.mocked(api.slack).mockResolvedValue({app:"a"});
+  open("/apps/notifications#slack_state=original&slack_code=fixture", api);
+  await waitFor(() => expect(api.slack).toHaveBeenCalledWith("callback", base, {state:"original",code:"fixture"}));
+  expect(sessionStorage.getItem("ship-ping-slack-state")).toBeNull();
+});
+it("받을 곳 없음, 연결 끊김, 연결됨 상태와 시험 알림을 표시한다", async () => {
+  const api = fake();
+  open("/apps/a/notifications", api);
+  await screen.findByText("알림을 받을 곳이 없어요.");
+  expect(screen.getByRole("button", { name: "Slack에 추가" })).toBeTruthy();
+  vi.mocked(api.settings).mockResolvedValue({
+    email: true,
+    broken: true,
+    connected: false,
+    channel: "#모임",
+  });
+  fireEvent.click(screen.getByRole("switch"));
+  await screen.findByText("슬랙 연결이 끊겼어요. 다시 연결해 주세요.");
+  vi.mocked(api.settings).mockResolvedValue({
+    email: false,
+    broken: false,
+    connected: true,
+    channel: "#모임",
+  });
+  fireEvent.click(screen.getByRole("switch"));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "시험 알림 보내기" }),
+  );
+  await waitFor(() => expect(api.testSlack).toHaveBeenCalledWith("a"));
+});
 it("서버 키 복사는 현재 앱에 한정되고 요청문은 다시 복사해도 같다", async () => {
   const api = fake();
   const other = { ...app, id: "b", name: "두 번째 앱" };

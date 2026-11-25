@@ -50,6 +50,63 @@ fn ingest_http_statuses() {
         assert!(Instant::now() < deadline, "workerd startup timeout");
         thread::sleep(Duration::from_millis(30));
     }
+    let fixture = |path: &str, body: Option<Value>| {
+        let mut curl = Command::new("curl");
+        curl.args(["--silent", "--show-error", "--max-time", "5"]);
+        if let Some(body) = body {
+            curl.args([
+                "-H",
+                "Content-Type: application/json",
+                "-H",
+                "Authorization: Bearer fixture",
+                "--data",
+                &body.to_string(),
+            ]);
+        }
+        let output = curl.arg(format!("http://{addr}{path}")).output().unwrap();
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+    let install = || fixture("/v1/slack/install", Some(json!({"app":"fixture"})));
+    let callback = |state: Value, code: &str| {
+        fixture(
+            "/v1/slack/callback",
+            Some(json!({"state":state,"code":code})),
+        )
+    };
+    assert!(callback(json!("wrong"), "unused")["error"].is_string());
+    let ticket = install();
+    assert!(ticket["url"].as_str().unwrap().contains("incoming-webhook"));
+    let redirect = Command::new("curl")
+        .args([
+            "--silent",
+            "--include",
+            &format!("http://{addr}/v1/slack/callback?code=fixture&state=ticket"),
+        ])
+        .output()
+        .unwrap();
+    let headers = String::from_utf8(redirect.stdout).unwrap().to_lowercase();
+    assert!(
+        headers.contains("302")
+            && headers.contains("/apps/notifications#slack_code=fixture&slack_state=ticket")
+    );
+    assert!(headers.contains("no-store") && headers.contains("no-referrer"));
+    assert!(
+        callback(ticket["state"].clone(), "denied")["error"]
+            .as_str()
+            .unwrap()
+            .contains("관리자")
+    );
+    let ticket = install();
+    assert!(callback(ticket["state"].clone(), "valid")["app"].is_string());
+    assert!(callback(ticket["state"].clone(), "valid")["error"].is_string());
+    let broken = fixture("/fixture/cron", None);
+    assert_eq!(broken["slack"], 1);
+    assert_eq!(broken["broken"], 2);
+    let digest = fixture("/fixture/cron", None);
+    assert_eq!(
+        digest,
+        json!({"slack":1,"broken":2,"mail":1,"completed":2,"connected":1,"safe":true})
+    );
     let post = |addr: std::net::SocketAddr, mime: &str, auth: &str, data: &str| {
         let mut child = Command::new("curl")
             .args([
