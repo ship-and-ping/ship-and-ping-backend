@@ -18,7 +18,7 @@ static PRIVATE: LazyLock<Regex> = LazyLock::new(|| {
         r"|\bbasic[ \t]+(?-iu:[A-Za-z0-9+/]{14,}==|[A-Za-z0-9+/]{15,}=|[A-Za-z0-9+/]{16,})",
         r"|\b(?:access_token|token|key|password)=[^&\s,;#]+",
         r"|(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|\beyJ)[a-z0-9_.=\-]+",
-        r"|(?P<separator>^|[^\pL\pN])(?:sk_|pk_|rk_)(?-iu:[A-Za-z0-9]{16,})",
+        r"|(?P<separator>^|(?-i:[^A-Za-z0-9]))(?:sk_|pk_|rk_)(?-iu:[A-Za-z0-9_]{16,})",
         r"|[a-z0-9._%+\-]+(?:@|%40)[a-z0-9.\-]+\.[a-z]{2,}",
         r"|\+?\b\d(?:[ ().\-]*\d){8,14}\b",
     ))

@@ -83,6 +83,42 @@
     {
       "input": "Bearer: demo; token=test",
       "expected": "[가림]; [가림]"
+    },
+    {
+      "input": "한글sk_live___fixture__",
+      "expected": "한글[가림]"
+    },
+    {
+      "input": "sk_test___fixture__",
+      "expected": "[가림]"
+    },
+    {
+      "input": "(pk_live___fixture__)",
+      "expected": "([가림])"
+    },
+    {
+      "input": "rk_live___fixture__",
+      "expected": "[가림]"
+    },
+    {
+      "input": "sk_test___short___",
+      "expected": "sk_test___short___"
+    },
+    {
+      "input": "desk_live___fixture__",
+      "expected": "desk_live___fixture__"
+    },
+    {
+      "input": "/task_list",
+      "expected": "/task_list"
+    },
+    {
+      "input": "/task_list_abcdefghijk",
+      "expected": "/task_list_abcdefghijk"
+    },
+    {
+      "input": "épk_abcdefghijklmnop",
+      "expected": "é[가림]"
     }
   ],
   "route": [
