@@ -261,12 +261,11 @@ function Register({
       }
       enter(id, key);
     } catch (cause) {
-      if (
-        cause &&
-        typeof cause === "object" &&
-        "message" in cause &&
-        cause.message === "app limit reached"
-      )
+      const message =
+        cause && typeof cause === "object" && "message" in cause ? cause.message : "";
+      if (message === "beta capacity reached")
+        setError("베타 정원이 찼어요");
+      else if (message === "app limit reached")
         retry();
       else
         setError(
