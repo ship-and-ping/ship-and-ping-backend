@@ -45,6 +45,11 @@ select results_eq($q$select count(*),bool_or(success) from
 select is((select count(*) from private.latest_results where version='old'),20::bigint,'per-version tail capped');
 update private.latest_results set received_at=now()-interval '31 days' where version='old';
 select cleanup_daily();
+delete from incidents;
+insert into attempts(app_id,feature_id,attempt_id,version,status,started_at,ended_at)
+ select app_id,id,gen_random_uuid(),'old','failure',now(),now() from features cross join generate_series(1,3);
+select lives_ok('select evaluate_all()','auto feature with attempts and failing stats evaluated once');
+select is((select count(*) from private.evaluation_signals where kind='failure'),1::bigint,'auto feature has one failure signal');
 select is((select count(*) from private.latest_results where version='old'),0::bigint,'tail expires by receipt');
 select * from finish();
 rollback;

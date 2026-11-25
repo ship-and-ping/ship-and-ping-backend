@@ -29,7 +29,7 @@ const strong = [
 ];
 const weak =
   /\b(curl|wget|fetch|exec|ignore|tokens?|secrets?|credentials?)\b|https?:\/\/|\beval\s*\(|무시|system\s*prompt|시스템\s*프롬프트|환경\s*변수|process\.env|api[\s_-]*keys?|토큰|비밀\s*키/i;
-const isStrong = (s: string) => strong.some((pattern) => pattern.test(s));
+export const isStrong = (s: string) => strong.some((pattern) => pattern.test(s));
 
 export interface IssueInput {
   feature: string;
@@ -40,6 +40,8 @@ export interface IssueInput {
   mode?: "first" | "again" | "worse";
   opened?: string;
   kind?: "failure" | "slow" | "unconfirmed";
+  consecutive?: boolean;
+  unconfirmed?: number;
   total?: number;
   failures?: number;
   p50?: number;
@@ -80,7 +82,9 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
         : "문제를 감지했어요";
   const since = Date.parse(input.opened ?? "");
   const metrics = [
-    Number.isFinite(input.total) && "최근 30분 " + Number(input.total) + "건",
+    Number.isFinite(input.total) && (input.kind === "unconfirmed" ? "최근 1시간 " : "최근 30분 ") + Number(input.total) + "건",
+    input.consecutive && "문제 감지 때 3건 연속 실패",
+    Number.isFinite(input.unconfirmed) && "결과 미확인 " + Number(input.unconfirmed) + "건",
     Number.isFinite(input.failures) && "실패 " + Number(input.failures) + "건",
     Number.isFinite(input.p50) && "보통 " + Number(input.p50) / 1000 + "초",
     Number.isFinite(input.baseline) &&
@@ -118,7 +122,7 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
       : []),
     "===== 데이터 끝 =====",
     "",
-    "요청: 위 기능이 왜 느려지거나 실패하는지 코드를 조사해 원인을 설명하고 고쳐 줘.",
+    input.kind === "unconfirmed" ? "요청: 실제 저장 뒤 결과 기록 전송이 끊기는지 조사해 원인을 설명하고 고쳐 줘." : "요청: 위 기능이 왜 느려지거나 실패하는지 코드를 조사해 원인을 설명하고 고쳐 줘.",
     ...(input.mode === "again"
       ? [
           "이전 수정(" +

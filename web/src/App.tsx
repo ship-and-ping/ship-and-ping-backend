@@ -13,6 +13,7 @@ import { validateApp } from "./domain";
 import { displayText } from "./normalize";
 import { Hero, Landing, PublicBar, Shell } from "./Layout";
 import { MonitorRoute } from "./Monitor";
+import { DeepPage } from "./DeepPage";
 import { Notifications } from "./Notifications";
 import { Connect } from "./Connect";
 
@@ -449,6 +450,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
                   }
                 />
                 <Route path=":id" element={<MonitorRoute api={api} />} />
+                <Route path=":id/features/deep/:tracking" element={<DeepPage api={api} ingest={ingest} />} />
                 <Route
                   path=":id/features/:feature"
                   element={<MonitorRoute api={api} />}
