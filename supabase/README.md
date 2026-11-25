@@ -54,7 +54,7 @@ Worker는 `POST /rest/v1/rpc/ingest_batch`로 다음 JSON을 보낸다. `apikey`
 
 회원은 로그인 세션으로 자기 앱·기록을 읽고 `issue_key(app_id,kind)`를 호출한다. 키 목록은 `app_key_list`에서 조회한다. 동일 종류의 키를 다시 발급하면 기존 키의 유예 기간은 24시간이다. 회원이 편집할 수 있는 열은 앱 이름·주소, 기능 이름·숨김·느림 기준, 이메일 알림 설정이다. Slack OAuth 연동 시 서버에서 Vault에 webhook을 저장하고 설정 행에는 Vault UUID만 연결한다.
 
-Worker 역할에 허용된 RPC는 `ingest_batch`, `suggest_feature_map(app_key_hash,items)`, `record_notification(incident_id,channel,event,ok,error)`, `cleanup_daily()`다. 매일 정리 작업이 마지막 함수를 호출해야 30일을 지난 5분 요약이 시간별로 합쳐진다. 시간별 요약은 1년간 보관한다. 운영자 지표는 로그인 권한을 별도로 할당하는 그룹 역할 `grafana_reader`로 읽는다.
+Worker 역할에 허용된 RPC는 `ingest_batch`, `suggest_feature_map(app_key_hash,items)`, `record_notification(incident_id,channel,event,ok,error)`, `cleanup_daily()`다. 매일 정리 작업이 마지막 함수를 호출해야 7일 지난 5분 요약이 시간별로, 30일 지난 시간별 요약이 한국 날짜별로 합쳐진다. 하루 요약은 1년간 보관한다. 운영자 지표는 로그인 권한을 별도로 할당하는 그룹 역할 `grafana_reader`로 읽는다.
 
 운영자가 무료 Supabase 프로젝트를 만든 뒤 아래 순서로 적용한다. `PROJECT_REF`를 대시보드의 실제 프로젝트 참조로 바꾼다. dry run에서 대상과 네 개의 마이그레이션을 확인한 뒤 마지막 명령을 실행한다. [Supabase 마이그레이션 안내](https://supabase.com/docs/guides/deployment/database-migrations)
 
