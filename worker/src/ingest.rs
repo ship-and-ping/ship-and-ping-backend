@@ -3,7 +3,8 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, sync::LazyLock};
+use std::{borrow::Cow, collections::BTreeMap, sync::LazyLock};
+use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
 pub const MAX_BYTES: usize = 65536;
@@ -13,9 +14,11 @@ const BOUNDS: [u32; 15] = [
 static PRIVATE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"(?i)\b(?:set-cookie|cookie)[ \t]*:[^\r\n]*",
-        r"|\b(?:bearer|basic)(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;]+",
+        r"|\bbearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;]+",
+        r"|\bbasic[ \t]+(?-iu:[A-Za-z0-9+/]{14,}==|[A-Za-z0-9+/]{15,}=|[A-Za-z0-9+/]{16,})",
         r"|\b(?:access_token|token|key|password)=[^&\s,;#]+",
-        r"|\b(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|sk_|eyJ)[a-z0-9_.=\-]+",
+        r"|(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|\beyJ)[a-z0-9_.=\-]+",
+        r"|(?P<separator>^|[^\pL\pN])(?:sk_|pk_|rk_)(?-iu:[A-Za-z0-9]{16,})",
         r"|[a-z0-9._%+\-]+(?:@|%40)[a-z0-9.\-]+\.[a-z]{2,}",
         r"|\+?\b\d(?:[ ().\-]*\d){8,14}\b",
     ))
@@ -92,20 +95,54 @@ fn bounded(value: &str, max: usize) -> bool {
 fn valid_kind(kind: &Option<String>) -> bool {
     kind.as_ref().is_none_or(|s| bounded(s, 80))
 }
+fn normalize(text: &str) -> Cow<'_, str> {
+    if text.is_ascii() && !text.contains(['\r', '\x0b', '\x0c']) {
+        return Cow::Borrowed(text);
+    }
+    Cow::Owned(
+        text.nfkc()
+            .filter_map(|c| match c {
+                '\u{00ad}'
+                | '\u{061c}'
+                | '\u{200b}'..='\u{200f}'
+                | '\u{202a}'..='\u{202e}'
+                | '\u{2060}'..='\u{2064}'
+                | '\u{2066}'..='\u{2069}'
+                | '\u{feff}' => None,
+                '\r' | '\x0b' | '\x0c' | '\u{0085}' | '\u{2028}' | '\u{2029}' => Some('\n'),
+                _ => Some(c),
+            })
+            .collect(),
+    )
+}
+
+fn opaque_segment(part: &str) -> bool {
+    let token = part.trim_end_matches('=');
+    if part.len() < 16
+        || token.is_empty()
+        || part.len() - token.len() > 2
+        || !token
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+    {
+        return false;
+    }
+    part != token
+        || token.bytes().all(|b| b.is_ascii_hexdigit())
+        || token.bytes().any(|b| b.is_ascii_digit())
+        || (token.bytes().any(|b| b.is_ascii_uppercase())
+            && token.bytes().any(|b| b.is_ascii_lowercase()))
+}
+
 fn route(path: &str) -> String {
     path.split('/')
         .map(|part| {
             let part = part.split(';').next().unwrap_or_default();
-            let token = part.trim_end_matches('=');
             if !part.is_empty()
                 && (part.bytes().all(|b| b.is_ascii_digit())
                     || Uuid::try_parse(part).is_ok()
                     || PRIVATE.is_match(part)
-                    || (part.len() >= 16
-                        && !token.is_empty()
-                        && token
-                            .bytes()
-                            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))))
+                    || opaque_segment(part))
             {
                 ":id"
             } else {
@@ -117,7 +154,7 @@ fn route(path: &str) -> String {
 }
 fn mask(text: &str) -> String {
     PRIVATE
-        .replace_all(text, "[가림]")
+        .replace_all(&normalize(text), "${separator}[가림]")
         .chars()
         .take(300)
         .collect()
@@ -159,6 +196,7 @@ impl Aggregate {
                 error_kind,
                 error_message,
             } => {
+                let path = normalize(&path);
                 let path = path.split(['?', '#']).next().unwrap_or_default();
                 require(
                     path.starts_with('/')

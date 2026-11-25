@@ -94,6 +94,11 @@ fn ingest_http_statuses() {
         ("invalid", 400),
         ("unavailable", 503),
         ("disconnect", 503),
+        ("apikey", 503),
+        ("bad-json", 503),
+        ("permission", 503),
+        ("gateway", 503),
+        ("bad-counts", 503),
     ] {
         batch["app_version"] = json!(version);
         assert_eq!(send(key, &batch.to_string()).0, status, "{version}");

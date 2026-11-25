@@ -12,7 +12,7 @@ fn main() {
     let mut rows = Vec::new();
     for i in 0..100 {
         rows.push(json!({"type":"request","method":"GET","route":format!("/api/group-{}/item/{i}?q=value",i%20),
-            "status":500,"duration_ms":i*50,"ts":at,"error_kind":"Timeout","error_message":format!("test@example.test 010-1234-5678 Bearer fixture sk_sample eyJabc.def.ghi {}", "가".repeat(100))}));
+            "status":500,"duration_ms":i*50,"ts":at,"error_kind":"Timeout","error_message":format!("test@example.test 010-1234-5678 Bearer fixture sk_abcdefghijklmnop eyJabc.def.ghi {}", "가".repeat(100))}));
     }
     let mut data=serde_json::to_vec(&json!({"spec":"sp-1","batch_id":"badcafe0-0000-4000-8000-000000000001","app_version":"bench","platform":"server","sent_at":at,"records":rows})).unwrap();
     assert!(data.len() <= MAX_BYTES);

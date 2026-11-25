@@ -1,9 +1,9 @@
 name: worker
 on:
   push:
-    paths: ['worker/**', '.github/workflows/worker.yml']
+    paths: ['worker/**', 'docs/specs/sanitize-vectors.json', '.github/workflows/worker.yml']
   pull_request:
-    paths: ['worker/**', '.github/workflows/worker.yml']
+    paths: ['worker/**', 'docs/specs/sanitize-vectors.json', '.github/workflows/worker.yml']
 permissions:
   contents: read
 jobs:

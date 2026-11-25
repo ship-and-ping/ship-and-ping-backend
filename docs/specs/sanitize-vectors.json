@@ -1,0 +1,126 @@
+{
+  "mask": [
+    {
+      "input": "v1sp_srv_demo",
+      "expected": "v1[가림]"
+    },
+    {
+      "input": "xSP_PUB_demo",
+      "expected": "x[가림]"
+    },
+    {
+      "input": "x_sb_secret_sample",
+      "expected": "x_[가림]"
+    },
+    {
+      "input": "aSb_PuBlIsHaBlE_demo",
+      "expected": "a[가림]"
+    },
+    {
+      "input": "(sk_abcdefghijklmnop)",
+      "expected": "([가림])"
+    },
+    {
+      "input": "_PK_0123456789abcdef",
+      "expected": "_[가림]"
+    },
+    {
+      "input": "rk_ABCDEFGHIJKLMNOP",
+      "expected": "[가림]"
+    },
+    {
+      "input": "sk_abcdefghijklmno",
+      "expected": "sk_abcdefghijklmno"
+    },
+    {
+      "input": "xsk_abcdefghijklmnop",
+      "expected": "xsk_abcdefghijklmnop"
+    },
+    {
+      "input": "9pk_abcdefghijklmnop",
+      "expected": "9pk_abcdefghijklmnop"
+    },
+    {
+      "input": "task_queue",
+      "expected": "task_queue"
+    },
+    {
+      "input": "basic auth failed",
+      "expected": "basic auth failed"
+    },
+    {
+      "input": "Basic abcdefghijklmno",
+      "expected": "Basic abcdefghijklmno"
+    },
+    {
+      "input": "Basic YWJjZGVmZ2hpamts",
+      "expected": "[가림]"
+    },
+    {
+      "input": "Basic YWJjZGVmZ2hpaw==",
+      "expected": "[가림]"
+    },
+    {
+      "input": "ＳＰ＿ＳＲＶ＿demo",
+      "expected": "[가림]"
+    },
+    {
+      "input": "s\u200bp\u200c_\u200ds\u2060r\ufeffv_demo",
+      "expected": "[가림]"
+    },
+    {
+      "input": "sp_\u202esrv_\u2066demo\u2069",
+      "expected": "[가림]"
+    },
+    {
+      "input": "Cookie: sid=one\u2028safe\u2029next\u0085end",
+      "expected": "[가림]\nsafe\nnext\nend"
+    },
+    {
+      "input": "a%40example.test 010-1234-5678",
+      "expected": "[가림] [가림]"
+    },
+    {
+      "input": "Bearer: demo; token=test",
+      "expected": "[가림]; [가림]"
+    }
+  ],
+  "route": [
+    {
+      "input": "/notification-preferences/account_settings_panel",
+      "expected": "/notification-preferences/account_settings_panel"
+    },
+    {
+      "input": "/notificationpreferences",
+      "expected": "/notificationpreferences"
+    },
+    {
+      "input": "/a/abc123-def456_789",
+      "expected": "/a/:id"
+    },
+    {
+      "input": "/a/deadbeefcafebabe",
+      "expected": "/a/:id"
+    },
+    {
+      "input": "/a/QUJDREVGR0hJSktMTU4=",
+      "expected": "/a/:id"
+    },
+    {
+      "input": "/a/aBcDeFGhiJKlm_NOP",
+      "expected": "/a/:id"
+    },
+    {
+      "input": "/a/42;jsessionid=secret?q=x#frag",
+      "expected": "/a/:id"
+    },
+    {
+      "input": "/a/v1sp_srv_demo",
+      "expected": "/a/:id"
+    },
+    {
+      "input": "/a/１２３",
+      "expected": "/a/:id"
+    }
+  ]
+}

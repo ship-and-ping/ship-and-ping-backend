@@ -7,19 +7,13 @@ struct SinkError(u16, &'static str);
 
 impl From<worker::Error> for SinkError {
     fn from(_: worker::Error) -> Self {
-        Self(500, "storage configuration error")
+        Self(503, "storage unavailable")
     }
 }
 
-fn rpc_status(status: u16) -> std::result::Result<(), SinkError> {
-    match status {
-        200..=299 => Ok(()),
-        401 => Err(SinkError(401, "invalid or expired key")),
-        400 => Err(SinkError(400, "invalid batch")),
-        status @ 402..=499 => Err(SinkError(status, "storage rejected request")),
-        500..=599 => Err(SinkError(503, "storage unavailable")),
-        _ => Err(SinkError(502, "unexpected storage response")),
-    }
+#[derive(serde::Deserialize)]
+struct RpcFailure {
+    code: String,
 }
 
 trait BatchSink {
@@ -72,11 +66,23 @@ impl BatchSink for Supabase<'_> {
             .send()
             .await
             .map_err(|_| SinkError(503, "storage unavailable"))?;
-        rpc_status(response.status_code())?;
+        let status = response.status_code();
+        if !(200..300).contains(&status) {
+            let code = if matches!(status, 400 | 401) {
+                response.json::<RpcFailure>().await.ok().map(|e| e.code)
+            } else {
+                None
+            };
+            return Err(match (status, code.as_deref()) {
+                (401, Some("PT401")) => SinkError(401, "invalid or expired key"),
+                (400, Some("22023")) => SinkError(400, "invalid batch"),
+                _ => SinkError(503, "storage unavailable"),
+            });
+        }
         let mut result: Counts = response
             .json()
             .await
-            .map_err(|_| SinkError(502, "invalid storage response"))?;
+            .map_err(|_| SinkError(503, "invalid storage response"))?;
         result.dropped += counts.dropped;
         Ok(result)
     }
@@ -143,7 +149,10 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
 }
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    let mut response = ingest(req, env).await?;
+    let mut response = match ingest(req, env).await {
+        Ok(response) => response,
+        Err(_) => error(503, "ingest unavailable")?,
+    };
     let h = response.headers_mut();
     h.set("Access-Control-Allow-Origin", "*")?;
     h.set("Access-Control-Allow-Methods", "POST, OPTIONS")?;

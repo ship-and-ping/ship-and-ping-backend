@@ -20,7 +20,7 @@ fn masks_identifiers_and_private_text_before_rpc() {
     r["route"] = json!(format!("/a/123/{ID}/a123456789012345/short?email=x"));
     r["status"] = json!(500);
     r["error_message"] = json!(format!(
-        "a@example.test 010-1234-5678 Bearer example.token sk_private eyJabc.def.ghi {}",
+        "a@example.test 010-1234-5678 Bearer example.token sk_abcdefghijklmnop eyJabc.def.ghi {}",
         "가".repeat(400)
     ));
     let rpc = run(batch(vec![r])).unwrap();
@@ -55,7 +55,7 @@ fn masks_credentials_in_attempt_results() {
         "sp_srv_sample",
         "sb_secret_sample",
         "sb_publishable_sample",
-        "Basic dXNlcjpwYXNz",
+        "Basic YWJjZGVmZ2hpamts",
         "Cookie: sid=one; prefs=two",
         "Set-Cookie: sid=one; Secure; Path=/",
         "token=demo",
@@ -107,8 +107,8 @@ fn request_error_samples_and_status_bounds() {
         (99, None),
         (100, None),
         (200, None),
-        (200, Some("sk_private")),
-        (404, Some("sk_private")),
+        (200, Some("sk_abcdefghijklmnop")),
+        (404, Some("sk_abcdefghijklmnop")),
         (599, None),
         (600, None),
     ] {
@@ -138,7 +138,7 @@ fn request_error_samples_and_status_bounds() {
 fn deep_events_validate_fields_and_mask_result_details() {
     let start = json!({"type":"attempt_start","feature_key":"join","attempt_id":ID,"ts":AT});
     let end = json!({"type":"attempt_result","feature_key":"join","attempt_id":ID,"ts":AT,"source":"browser","result":"failure",
-        "step":"token=private","error_kind":"sk_private","error_message":"x%40example.test"});
+        "step":"token=private","error_kind":"sk_abcdefghijklmnop","error_message":"x%40example.test"});
     let mut empty = start.clone();
     empty["feature_key"] = json!(" ");
     let mut late = start.clone();
@@ -262,13 +262,53 @@ fn timestamps_include_both_24h_edges() {
 #[test]
 fn deep_results_enforce_server_source() {
     let row = json!({"type":"attempt_result","attempt_id":ID,"feature_key":"join","source":"server","result":"success","ts":AT});
-    let data = serde_json::to_vec(&batch(vec![row])).unwrap();
-    assert_eq!(prepare(KEY, &data, NOW).unwrap().1.dropped, 1);
+    let data = serde_json::to_vec(&batch(vec![row, request()])).unwrap();
+    let (rpc, counts) = prepare(KEY, &data, NOW).unwrap();
+    assert_eq!((counts.accepted, counts.dropped), (1, 1));
+    let rpc: Value = serde_json::from_slice(&rpc).unwrap();
+    assert_eq!(rpc["payload"]["attempts"], json!([]));
     assert_eq!(
         prepare("Bearer sp_srv_fixture", &data, NOW)
             .unwrap()
             .1
             .accepted,
-        1
+        2
     );
+}
+
+#[test]
+fn shared_sanitize_vectors() {
+    #[derive(serde::Deserialize)]
+    struct Case {
+        input: String,
+        expected: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct Cases {
+        mask: Vec<Case>,
+        route: Vec<Case>,
+    }
+    let cases: Cases =
+        serde_json::from_str(include_str!("../../docs/specs/sanitize-vectors.json")).unwrap();
+    for case in cases.mask {
+        let mut row = request();
+        row["status"] = json!(500);
+        row["error_message"] = json!(case.input);
+        let out = run(batch(vec![row])).unwrap();
+        assert_eq!(
+            out["payload"]["error_samples"][0]["message"], case.expected,
+            "{:?}",
+            case.input
+        );
+    }
+    for case in cases.route {
+        let mut row = request();
+        row["route"] = json!(case.input);
+        let out = run(batch(vec![row])).unwrap();
+        assert_eq!(
+            out["payload"]["stats"][0]["route"], case.expected,
+            "{:?}",
+            case.input
+        );
+    }
 }
