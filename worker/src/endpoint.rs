@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use worker::*;
 thread_local! { static LIMITS: RefCell<Limits> = RefCell::default(); }
 
-struct SinkError(u16, &'static str);
+pub(crate) struct SinkError(u16, &'static str);
 
 struct PendingLookup<'a> {
     hash: &'a str,
@@ -32,12 +32,12 @@ struct RpcFailure {
     code: String,
 }
 
-struct Supabase {
+pub(crate) struct Supabase {
     url: String,
     key: String,
 }
 impl Supabase {
-    fn configured(env: &Env) -> std::result::Result<Option<Self>, SinkError> {
+    pub(crate) fn configured(env: &Env) -> std::result::Result<Option<Self>, SinkError> {
         let url = env
             .var("SUPABASE_URL")
             .ok()
@@ -59,7 +59,11 @@ impl Supabase {
         }
         Ok(Some(Self { url, key }))
     }
-    async fn rpc(&self, name: &str, body: Vec<u8>) -> std::result::Result<Response, SinkError> {
+    pub(crate) async fn rpc(
+        &self,
+        name: &str,
+        body: Vec<u8>,
+    ) -> std::result::Result<Response, SinkError> {
         let h = Headers::new();
         h.set("apikey", &self.key)?;
         h.set("Content-Type", "application/json")?;

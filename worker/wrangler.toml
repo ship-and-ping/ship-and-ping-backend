@@ -4,3 +4,6 @@ compatibility_date = "2026-11-24"
 
 [build]
 command = "worker-build --release"
+
+[triggers]
+crons = ["* * * * *", "15 0 * * *"]
