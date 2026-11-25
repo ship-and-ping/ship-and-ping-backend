@@ -7,6 +7,7 @@ import {
 } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Sheep } from "./Sheep";
+import { StatusBadge, Timeline, IssueListItem } from "./IncidentSummary";
 import { displayText } from "./normalize";
 import mark from "./assets/wordmark.png";
 
@@ -19,16 +20,24 @@ export function Hero({
   title,
   detail,
   arrived = false,
+  showSheep = true,
   badge,
+  mood = "neutral",
 }: {
   title: string;
   detail: string;
   arrived?: boolean;
+  showSheep?: boolean;
   badge?: ReactNode;
+  mood?: "neutral" | "waiting" | "worried" | "relieved";
 }) {
+  const [transition, setTransition] = useState({ arrived, animate: false });
+  if (transition.arrived !== arrived) {
+    setTransition({ arrived, animate: arrived });
+  }
   return (
-    <section className={"hero-card" + (arrived ? " arrived" : "")}>
-      <Sheep />
+    <section className={"hero-card" + (transition.animate ? " arrived" : "")} data-mood={mood}>
+      {showSheep && <Sheep />}
       {badge}
       <h2>{title}</h2>
       <p role="status">{detail}</p>
@@ -172,6 +181,20 @@ export function Shell({
 }
 
 export function Landing() {
+  const landing = useRef<HTMLElement>(null);
+  const [preview, setPreview] = useState<"앱 홈" | "문제 상세">("앱 홈");
+  useEffect(() => {
+    if (!landing.current || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add("in-view");
+        observer.unobserve(entry.target);
+      }
+    });
+    landing.current.querySelectorAll(":scope > section:not(.intro)").forEach(section => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
   const acts = (
     <div className="actions">
       <Link className="button" to="/login">
@@ -188,7 +211,7 @@ export function Landing() {
         본문으로 가기
       </a>
       <PublicBar />
-      <main id="main" className="landing">
+      <main ref={landing} id="main" className="landing">
         <section className="intro">
           <div>
             <h1 tabIndex={-1}>
@@ -223,48 +246,19 @@ export function Landing() {
             </div>
           </div>
         </section>
-        <section>
-          <h2>나쁜 리뷰로 먼저 알게 되면 늦어요</h2>
-          <p>
-            코딩 AI로 만든 앱은 빨리 나오지만, 무엇이 멈추거나 느려졌는지는
-            사용자가 연락하거나 리뷰를 남겨야 알게 되는 경우가 많아요. 쉽앤핑은
-            기록에서 문제가 보이면 바로 알려 드려서, 그보다 먼저 알아챌 수 있게
-            도와요.
-          </p>
-          <div className="grid">
-            {[
-              "신청 버튼은 눌렸는데 명단에 저장되지 않았다는 연락을 받았어요.",
-              "평소보다 느려진 기능은 직접 써 보기 전에는 눈치채기 어려워요.",
-              "새 버전을 배포했는데 정말 고쳐졌는지 궁금해요.",
-            ].map((t) => (
-              <p className="panel" key={t}>
-                {t}
-              </p>
-            ))}
+        <section className="review-story">
+          <div><h2>나쁜 리뷰로 먼저 알게 되면 늦어요</h2>
+            <p>쉽앤핑은 사용자가 연락하기 전에 기록에서 문제를 찾아요.</p>
           </div>
+          <blockquote>“신청 버튼을 눌렀는데 명단에 제 이름이 없어요.”</blockquote>
         </section>
-        <section>
+        <section className="answers">
           <h2>쉽앤핑이 대신 답해 주는 세 가지</h2>
-          <div className="grid">
-            {[
-              ["어디서 막혔나", "모임 신청 20건 중 6건 실패했어요."],
-              [
-                "평소보다 느려졌나",
-                "분석이 평소 1.1초에서 최근 3.4초로 느려졌어요.",
-              ],
-              ["고쳐졌나", "업데이트 후 분석 15건 모두 평소 속도로 끝났어요."],
-            ].map(([q, a]) => (
-              <article className="panel" key={q}>
-                <h3>{q}</h3>
-                <small>이렇게 알려 드려요</small>
-                <p>{a}</p>
-              </article>
-            ))}
-          </div>
-          <p>
-            그래프나 로그를 읽지 않아도 되게, 기능 이름과 평소와의 차이로
-            말해요.
-          </p>
+          <dl>
+            <div><dt>어디서 막혔나</dt><dd>모임 신청 <strong>20건 중 6건</strong> 실패했어요.</dd></div>
+            <div><dt>평소보다 느려졌나</dt><dd>분석 시간이 <strong>1.1초 → 3.4초</strong>로 늘었어요.</dd></div>
+            <div><dt>고쳐졌나</dt><dd>업데이트 후 <strong>15건 모두</strong> 평소 속도로 끝났어요.</dd></div>
+          </dl>
         </section>
         <section>
           <h2>연결은 세 단계</h2>
@@ -286,48 +280,39 @@ export function Landing() {
         </section>
         <section data-slot="onboarding">
           <h2>연결하면 이렇게 보여요</h2>
-          <p>가입부터 앱 홈까지의 예시 화면이에요.</p>
-          <div className="flow">
-            {[
-              ["내 앱", "모임모아", "등록한 앱 1개"],
-              ["앱 등록", "앱 이름", "모임모아"],
-              ["연결 요청 복사", "첫 기록을 기다리고 있어요", "연결 4단계"],
-              ["앱 홈", "모임 신청이 느려졌어요", "평소 1.1초 → 최근 3.4초"],
-            ].map(([title, headline, sub]) => (
-              <figure key={title}>
-                <div className="mini">
-                  <strong>{title}</strong>
-                  <b>{headline}</b>
-                  <small>{sub}</small>
-                </div>
-                <figcaption>{title}</figcaption>
-              </figure>
-            ))}
+          <div className="product-example" role="region" aria-label="예시 화면">
+            <div className="example-bar"><strong>모임모아</strong>
+              <div className="example-tabs">{(["앱 홈", "문제 상세"] as const).map(name =>
+                <button key={name} aria-pressed={preview === name} onClick={() => setPreview(name)}>{name}</button>)}</div>
+            </div>
+            <Hero title={preview === "앱 홈" ? "모임 신청에서 실패가 늘었어요" : "모임 신청 20건 중 6건 실패"}
+              mood="worried" showSheep={false} badge={<StatusBadge state="open" />}
+              detail={preview === "앱 홈" ? "최근 30분 동안 실패가 6건 있었어요." : "감지 구간 · 최근 30분"} />
+            {preview === "앱 홈" ? <div className="example-row"><h3>문제</h3>
+              <IssueListItem summary="모임 신청에서 실패가 늘었어요" state="open"
+                metric="최근 30분 20건 중 실패 6건" onOpen={() => setPreview("문제 상세")} /></div> :
+              <div className="example-row"><h3>지금까지 흐름</h3>
+                <Timeline events={[{at:"2026-11-25T18:00:00+09:00", date:"오후 6:00", text:"버전 1.0에서 처음 감지했어요"}]} /></div>}
           </div>
         </section>
-        <section>
-          <h2>알림은 슬랙이나 메일로</h2>
+        <section className="alert-examples">
+          <div className="section-heading"><Sheep /><h2>알림은 슬랙이나 메일로</h2></div>
           <div className="even">
-            {["슬랙 · #모임모아-알림", "메일 · [쉽앤핑] 모임모아"].map((t) => (
-              <article key={t} className="panel">
-                <small>{t}</small>
-                <h3>분석이 느려졌어요</h3>
-                <p>
-                  평소 1.1초 → 최근 30분 3.4초 (24건).{" "}
-                  {t.startsWith("메일") &&
-                    "고친 버전을 배포하면 쉽앤핑이 실제 사용으로 확인해 드려요."}
-                </p>
-                <span>쉽앤핑에서 보기</span>
-              </article>
-            ))}
+            <article className="message-example"><header># 모임모아-알림</header>
+              <div><strong>쉽앤핑</strong> <small>앱 · 오후 6:00</small>
+                <blockquote><strong>분석이 느려졌어요</strong>
+                  <p>평소 1.1초 → 최근 30분 3.4초 (24건)</p></blockquote></div>
+            </article>
+            <article className="message-example"><header>받은 메일함</header>
+              <div><h3>[쉽앤핑] 모임모아 · 분석이 느려졌어요</h3>
+                <small>보낸 사람　쉽앤핑</small><hr />
+                <p>최근 분석 24건이 평소보다 오래 걸렸어요. 고친 버전을 배포하면 실제 사용으로 확인해 드려요.</p></div>
+            </article>
           </div>
-          <p>
-            문제가 생길 때 한 번, 해결될 때 한 번 보내요. 알림에는 오류 원문이나
-            키를 넣지 않아요.
-          </p>
+          <p>문제가 생길 때 한 번, 해결될 때 한 번 보내요. 알림에는 오류 원문이나 키를 넣지 않아요.</p>
         </section>
         <section>
-          <h2>지금은 무료 베타예요</h2>
+          <div className="section-heading" data-mood="relieved"><Sheep /><h2>지금은 무료 베타예요</h2></div>
           <p>
             회원당 앱 3개까지 등록할 수 있어요. 입력값, 요청 내용, 쿠키, 토큰
             같은 개인정보는 받지 않아요. Google 또는 이메일 링크로 로그인해요.

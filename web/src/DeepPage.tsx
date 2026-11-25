@@ -16,8 +16,8 @@ import { Hero } from "./Layout";
 const empty = { name: "", start: "", success: "" };
 const examples = {
   name: "예: 모임 신청, 결제, 글쓰기",
-  start: "사용자가 무엇을 하면 시작인가요? 예: 신청 버튼을 누를 때",
-  success: "무엇이 끝나야 진짜 성공인가요? 예: 참가자 명단에 저장됐을 때",
+  start: "사용자가 무엇을 하면 시작인가요? 예: 신청 버튼 누르기",
+  success: "무엇이 끝나야 성공인가요? 예: 참가자 명단 저장 완료",
 };
 
 function Arrival({
@@ -79,6 +79,7 @@ function Arrival({
     <>
     <Hero
       arrived={result?.status === "success"}
+      mood={!result ? "waiting" : result.status === "success" ? "relieved" : "worried"}
       title={
         result
           ? "첫 " + displayText(feature.name) + " 기록이 도착했어요."
@@ -259,7 +260,7 @@ function DeepForm({
                 </p>
                 <details open={!saved}>
                   <summary>보낼 내용 미리 보기</summary>
-                  <pre>{prompt.text}</pre>
+                  <pre tabIndex={0} aria-label="추가 연결 요청문 전문">{prompt.text}</pre>
                 </details>
                 {saved && !invalid ? (
                   <Copy

@@ -168,6 +168,7 @@ function Apps({ api }: { api: Gateway }) {
       ) : apps ? (
         <>
           <Hero
+            mood={apps.length ? "relieved" : "waiting"}
             title={
               apps.length
                 ? "등록한 앱을 지켜보고 있어요"
