@@ -46,7 +46,9 @@ window.SP = window.SP || {};
       { name: '댓글 쓰기', route: 'POST /api/meetings/:id/comments', uses: 0, fail: 0, st: 'wait' }
     ],
     unnamed: { route: 'GET /api/cron/cleanup', uses: 3 },
-    oldVer: '8b1e0d4', badVer: '3f2a9c1', newVer: 'a71c03e',
+    /* 버전: 5d0e7b2(11/22~어제 15:40) → 8b1e0d4(어제 15:40~, 문제 시작 전) → 3f2a9c1(오늘 13:50~, 문제) → a71c03e(15:10 고친 버전) */
+    olderVer: '5d0e7b2', oldVer: '8b1e0d4', badVer: '3f2a9c1', newVer: 'a71c03e',
+    errorsWorse: ['19:52 TimeoutError: upstream request exceeded 3000ms', '19:58 SlowQuery: analyze_results scan 6.4s', '20:01 TimeoutError: upstream request exceeded 3000ms', '20:04 SlowQuery: analyze_results scan 7.0s', '20:08 TimeoutError: upstream request exceeded 3000ms'],
     /* 오류 예시는 기능명세서 6.3처럼 최근 5개. 실패 4건(TimeoutError) + 느린 조회 1건 */
     errors: ['14:07 TimeoutError: upstream request exceeded 3000ms', '14:11 TimeoutError: upstream request exceeded 3000ms', '14:19 SlowQuery: analyze_results scan 2.9s', '14:23 TimeoutError: upstream request exceeded 3000ms', '14:28 TimeoutError: upstream request exceeded 3000ms'],
     keyPub: 'sp_pub_3f9a········', keySrv: 'sp_srv_8c21········', ingest: '{수집 주소}'
@@ -76,24 +78,43 @@ window.SP = window.SP || {};
         '4. 기능 이름표(POST ' + D.ingest + '/v1/feature-map)를 보냈는지도 확인해.\n' +
         '확인 결과에 입력값, 쿠키, 토큰, 키 값은 넣지 마.';
     },
-    deep: function () {
-      var D = SP.D;
-      return '[쉽앤핑 깊게 보기 추가 요청]\n내 앱의 "모임 신청" 기능이 실제로 끝까지 됐는지 쉽앤핑에 알려 주는 코드를 추가해 줘. 앱 기능은 바꾸지 마.\n' +
-        '- 시작: 신청 버튼을 누를 때 → attempt_start 를 보내 (feature_key "deep-1", attempt_id 새 UUID, ts)\n' +
-        '- 실제 성공: 참가자 명단에 저장됐을 때 → attempt_result, result "success"\n' +
+    /* 깊게 보기 요청문은 S8 화면의 세 칸 값으로 만든다(칸을 고치면 미리 보기·복사 내용이 같이 바뀜) */
+    deep: function (root) {
+      var D = SP.D, v = SP.deepVals(root);
+      return '[쉽앤핑 깊게 보기 추가 요청]\n내 앱의 "' + v.name + '" 기능이 실제로 끝까지 됐는지 쉽앤핑에 알려 주는 코드를 추가해 줘. 앱 기능은 바꾸지 마.\n' +
+        '- 시작: ' + v.start + ' → attempt_start 를 보내 (feature_key "deep-1", attempt_id 새 UUID, ts)\n' +
+        '- 실제 성공: ' + v.ok + ' → attempt_result, result "success"\n' +
         '- 저장이 실패하면 result "failure". 실패한 단계 이름은 step에, 오류 종류·메시지는 error_kind·error_message에\n' +
         '- 사용자가 취소하거나 화면을 떠나면 result "abandon"\n' +
         '- 성공은 실제 저장이 끝난 곳(서버가 있으면 서버, 없으면 저장 응답을 받은 브라우저)에서 보내.\n  서버에서 보낼 때는 source "server"와 서버 키(환경변수 SHIPPING_SERVER_KEY), 브라우저에서는 source "browser"와 수집 키 ' + D.keyPub + '\n' +
         '- 보내는 곳과 묶는 방식은 처음 연결 때와 같아: POST ' + D.ingest + '/v1/ingest\n' +
         '- 절대 보내지 말 것: 입력값(이름·전화·이메일), 요청·응답 본문, 쿠키, 토큰, 사용자 계정 ID.\n' +
-        '- 끝나면 확인 방법: 모임 신청을 한 번 해 보고, 응답 202가 왔는지 알려 줘.';
+        '- 끝나면 확인 방법: ' + v.name + '을(를) 한 번 해 보고, 응답 202가 왔는지 알려 줘.';
     },
-    ai: function () { return SP.aiText(false); },
-    again: function () { return SP.aiText(true); }
+    ai: function () { return SP.aiText('first'); },
+    again: function () { return SP.aiText('again'); },
+    worse: function () { return SP.aiText('worse'); }
   };
-  SP.aiText = function (again) {
+  /* S8 세 칸 값 읽기. 화면 밖(처음 그릴 때)이면 기본값 */
+  SP.deepDefault = { name: '모임 신청', start: '신청 버튼을 누를 때', ok: '참가자 명단에 저장됐을 때' };
+  SP.deepVals = function (root) {
+    var v = { name: SP.deepDefault.name, start: SP.deepDefault.start, ok: SP.deepDefault.ok };
+    if (root && root.querySelectorAll) root.querySelectorAll('[data-deep]').forEach(function (i) { var t = i.value.trim(); if (t) v[i.getAttribute('data-deep')] = t; });
+    return v;
+  };
+  /* AI에 보낼 내용(6.3). mode: first 처음 / again 새 버전에서도 느림 / worse 더 나빠져 다시 알림 — 화면 숫자와 같게 */
+  SP.aiText = function (mode) {
     var D = SP.D;
-    return '[쉽앤핑 문제 보고]\n기능: 분석 (POST /api/analyze)\n상태: 최근 30분 24건 중 보통 3.4초 (평소 1.1초) — 2026-11-24 14:05부터\n앱 버전: ' + (again ? D.newVer + ' (고치려고 배포한 버전, 이전 시도 ' + D.badVer + ')' : D.badVer) + ' (문제 시작 전 버전: ' + D.oldVer + ')\n오류 기록 (최근 5개, 개인정보 가림):\n- ' + D.errors.join('\n- ') + '\n요청: 위 기능이 왜 느려졌는지 코드를 조사해 원인을 설명하고 고쳐 줘.' + (again ? '\n이전 수정(' + D.newVer + ') 뒤에도 5건 중 2건이 느렸어. 이전 수정에서 놓친 부분을 봐 줘.' : '\n문제 시작 전 버전과 지금 버전 사이 바뀐 코드부터 봐 줘.') + ' 고친 뒤 배포하면 쉽앤핑이 실제 사용 결과로 확인한다.';
+    if (mode === true) mode = 'again'; if (!mode) mode = 'first';
+    var state = {
+      first: '최근 30분 24건 중 보통 3.4초 (평소 1.1초) — 2026-11-24 14:05부터',
+      again: '새 버전 ' + D.newVer + '에서 5건 중 2건이 느림, 보통 2.8초 (평소 1.1초) — 문제는 2026-11-24 14:05부터',
+      worse: '최근 30분 31건 중 보통 7.1초 (평소 1.1초, 처음 알림 때 3.4초) — 2026-11-24 14:05부터, 20:10에 더 나빠져 다시 알림'
+    }[mode];
+    var ver = mode === 'again' ? D.newVer + ' (고치려고 배포한 버전, 이전 시도 ' + D.badVer + ')' : D.badVer;
+    var errs = mode === 'worse' ? D.errorsWorse : D.errors;
+    var ask = { first: '\n문제 시작 전 버전과 지금 버전 사이 바뀐 코드부터 봐 줘.', again: '\n이전 수정(' + D.newVer + ') 뒤에도 5건 중 2건이 느렸어. 이전 수정에서 놓친 부분을 봐 줘.', worse: '\n처음 알림(3.4초) 뒤 배포 없이 7.1초까지 더 느려졌어. 사용량이나 데이터가 늘면 느려지는 부분(반복 조회, 인덱스 없는 조회)부터 봐 줘.' }[mode];
+    return '[쉽앤핑 문제 보고]\n기능: 분석 (POST /api/analyze)\n상태: ' + state + '\n앱 버전: ' + ver + ' (문제 시작 전 버전: ' + D.oldVer + ')\n오류 기록 (최근 5개, 개인정보 가림):\n- ' + errs.join('\n- ') + '\n요청: 위 기능이 왜 느려졌는지 코드를 조사해 원인을 설명하고 고쳐 줘.' + ask + ' 고친 뒤 배포하면 쉽앤핑이 실제 사용 결과로 확인한다.';
   };
 
   /* ---------- 부품 함수 (design-system.md 4장 이름과 같음) ---------- */
@@ -124,7 +145,7 @@ window.SP = window.SP || {};
      o = { label, kind, line, preview: 'open' | 'closed' | false, blocked, note } */
   K.copyBlock = function (o) {
     var t = SP.texts[o.kind](), name = esc(o.label.replace(/( 다시)? 복사$/, '')) + ' 전문';
-    return '<div class="sp-copyblock">' + K.copy(o.label, o.kind, o.line ? ' line block' : ' block', o.blocked ? 'fail' : null) +
+    return '<div class="sp-copyblock" data-kind="' + o.kind + '">' + K.copy(o.label, o.kind, o.line ? ' line block' : ' block', o.blocked ? 'fail' : null) +
       '<div class="sp-copy-manual"' + (o.blocked ? '' : ' hidden') + '><div class="sp-banner warn">' + ic.bad(18) + '<div><b>자동 복사가 막혔어요.</b> 아래 상자를 누르면 전부 선택돼요. 그대로 복사하세요(휴대폰은 길게 눌러 "복사").</div></div><pre class="sp-pre" tabindex="0" aria-label="' + name + ', 눌러서 모두 선택">' + esc(t) + '</pre></div>' +
       (o.preview && !o.blocked ? '<details' + (o.preview === 'open' ? ' open' : '') + '><summary>보낼 내용 미리 보기</summary><pre class="sp-pre scroll" tabindex="0" aria-label="' + name + '">' + esc(t) + '</pre></details>' : '') +
       (o.note ? '<p class="sp-sub">' + o.note + '</p>' : '') + '</div>';
@@ -135,7 +156,12 @@ window.SP = window.SP || {};
     return '<ul class="sp-results">' + it('ok', 'ok', '성공', r.ok, '명단 저장까지 끝났어요') + it('bad', 'bad', '실패', r.fail, '저장하다 실패했어요') + it('stop', 'exit', '중단', r.stop, '사용자가 취소했거나 화면을 떠났어요') + it('unk', 'question', '결과 미확인', r.unk, '시작하고 10분이 지나도 결과가 안 왔어요') + '</ul>';
   };
   /* 앱 화면 머리말 오른쪽: 평소엔 알림·설정 아이콘, 글자 200%에서는 [메뉴] 하나 */
-  K.appActs = function (open) { return '<button class="sp-ibtn not-big" aria-label="알림 설정">' + ic.bell(20) + '</button><button class="sp-ibtn not-big" aria-label="앱 설정">' + ic.gear(20) + '</button><button class="sp-btn line only-big sp-menu-btn" aria-expanded="' + (open ? 'true' : 'false') + '">' + ic.menu(18) + '메뉴</button>'; };
+  K.appActs = function (open) { return '<a class="sp-ibtn not-big" href="#s9" aria-label="알림 설정">' + ic.bell(20) + '</a><a class="sp-ibtn not-big" href="#s10" aria-label="앱 설정">' + ic.gear(20) + '</a><button class="sp-btn line only-big sp-menu-btn" aria-expanded="' + (open ? 'true' : 'false') + '" aria-controls="m' + (SP.mid = (SP.mid || 0) + 1) + '">' + ic.menu(18) + '메뉴</button>'; };
+  /* [메뉴]가 여닫는 목록. 머리말 바로 다음에 둔다(닫혀 있으면 hidden). id는 바로 앞 appActs의 aria-controls와 같다 */
+  K.appMenu = function (open) {
+    var it = function (icn, t, href) { return '<li><a href="#' + href + '">' + ic[icn](20) + t + '<span class="go">' + ic.chev(18) + '</span></a></li>'; };
+    return '<nav class="only-big-nav" id="m' + SP.mid + '" aria-label="모임모아 메뉴"' + (open ? '' : ' hidden') + '><ul class="sp-menu">' + it('bell', '알림 설정', 's9') + it('gear', '앱 설정', 's10') + it('plus', '깊게 볼 기능 추가', 's8') + it('back', '내 앱 목록', 's2') + it('user', '내 계정', 's11') + '</ul></nav>';
+  };
   K.steps = function (items, doneUpTo, nowAt) {
     return '<ol class="sp-steps">' + items.map(function (t, i) {
       var c = i < doneUpTo ? 'done' : (i === nowAt ? 'now' : '');
@@ -145,10 +171,11 @@ window.SP = window.SP || {};
   K.field = function (o) {
     var id = 'f' + (SP.uid = (SP.uid || 0) + 1);
     return '<div class="sp-field"><label for="' + id + '">' + o.label + (o.opt ? ' <span class="opt">(선택)</span>' : '') + '</label>' + (o.example ? '<span class="help" id="' + id + 'h">' + o.example + '</span>' : '') +
-      '<input class="sp-input" id="' + id + '" value="' + esc(o.value || '') + '"' + (o.placeholder ? ' placeholder="' + esc(o.placeholder) + '"' : '') + (o.err ? ' aria-invalid="true" aria-describedby="' + id + 'e"' : (o.example || o.help ? ' aria-describedby="' + id + 'h"' : '')) + '>' +
+      '<input class="sp-input" id="' + id + '" value="' + esc(o.value || '') + '"' + (o.attr || '') + (o.placeholder ? ' placeholder="' + esc(o.placeholder) + '"' : '') + (o.err ? ' aria-invalid="true" aria-describedby="' + id + 'e"' : (o.example || o.help ? ' aria-describedby="' + id + 'h"' : '')) + '>' +
       (o.help && !o.example ? '<span class="help" id="' + id + 'h">' + o.help + '</span>' : '') + (o.err ? '<span class="err" id="' + id + 'e" role="alert">' + ic.bad(16) + o.err + '</span>' : '') + '</div>';
   };
-  K.banner = function (kind, text, act) { return '<div class="sp-banner ' + kind + '" role="' + (kind === 'warn' ? 'alert' : 'status') + '">' + (kind === 'warn' ? ic.bad(18) : ic.info(18)) + '<div>' + text + (act ? '<br><button class="act">' + act + '</button>' : '') + '</div></div>'; };
+  /* 띠 알림. act가 있으면 href(다음 화면)로 가는 밑줄 글자 링크 */
+  K.banner = function (kind, text, act, href) { return '<div class="sp-banner ' + kind + '" role="' + (kind === 'warn' ? 'alert' : 'status') + '">' + (kind === 'warn' ? ic.bad(18) : ic.info(18)) + '<div>' + text + (act ? '<br><a class="act" href="#' + (href || '') + '">' + act + '</a>' : '') + '</div></div>'; };
   K.error = function (title, body, acts) { return '<div class="sp-error" role="alert">' + ic.bad(20) + '<div class="body"><b>' + title + '</b><span class="sp-sub" style="color:var(--sp-ink)">' + body + '</span>' + (acts ? '<div class="acts">' + acts + '</div>' : '') + '</div></div>'; };
   K.empty = function (title, body, act) { return '<div class="sp-empty"><b>' + title + '</b><span class="sp-sub">' + body + '</span>' + (act || '') + '</div>'; };
   K.hdr = function (title, sub, back, right) {
@@ -192,7 +219,7 @@ window.SP = window.SP || {};
     if (c) {
       if (c.getAttribute('data-state') === 'done' || c.getAttribute('aria-busy') === 'true') return;
       var kind = c.getAttribute('data-copy'), label = c.getAttribute('data-label') || '복사';
-      var text = SP.texts[kind] ? SP.texts[kind]() : '';
+      var text = SP.texts[kind] ? SP.texts[kind](c.closest('.sp')) : '';
       var lbl = c.querySelector('.lbl'), box = c.closest('.sp-copyblock'), manual = box ? box.querySelector('.sp-copy-manual') : null;
       c.setAttribute('aria-busy', 'true');
       var force = c.hasAttribute('data-force-fail');
@@ -214,10 +241,47 @@ window.SP = window.SP || {};
     }
     var pre = e.target.closest('.sp-copy-manual pre');
     if (pre) { selectAll(pre); return; }
+    /* 다음 화면으로 가는 단추(목업 이동). 비활성이면 아무것도 하지 않음 */
+    var go = e.target.closest('[data-go]');
+    if (go) { if (go.getAttribute('aria-disabled') === 'true') return; location.hash = go.getAttribute('data-go'); return; }
+    /* 글자 200%의 [메뉴] 여닫기 */
+    var mb = e.target.closest('.sp-menu-btn');
+    if (mb) { setMenu(mb, mb.getAttribute('aria-expanded') !== 'true'); return; }
+    /* 기간 고르기: 같은 화면 안의 data-period 묶음만 바꿔 보여 줌 */
+    var pb = e.target.closest('.sp-seg button[data-period]');
+    if (pb) {
+      var root = pb.closest('.sp'), p = pb.getAttribute('data-period');
+      root.querySelectorAll('.sp-seg button[data-period]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-period') === p)); });
+      root.querySelectorAll('[data-period-panel]').forEach(function (el) { el.hidden = el.getAttribute('data-period-panel') !== p; });
+      SP.say(p === '7d' ? '최근 7일로 바꿨어요' : '최근 24시간으로 바꿨어요');
+      return;
+    }
     var sw = e.target.closest('.sp-switch');
     if (sw) { sw.setAttribute('aria-checked', String(sw.getAttribute('aria-checked') !== 'true')); return; }
     var r = e.target.closest('[data-replay]');
     if (r) { document.querySelectorAll('[data-anim]').forEach(function (el) { el.classList.remove('play'); void el.offsetWidth; el.classList.add('play'); }); SP.say('움직임을 다시 보여 줘요'); }
+  });
+  function setMenu(btn, open) {
+    var nav = document.getElementById(btn.getAttribute('aria-controls'));
+    btn.setAttribute('aria-expanded', String(open)); if (nav) nav.hidden = !open;
+    if (open && nav) { var a = nav.querySelector('a'); if (a) a.focus(); }
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('.sp-menu-btn[aria-expanded="true"]').forEach(function (b) { setMenu(b, false); b.focus(); });
+  });
+  document.addEventListener('input', function (e) {
+    var t = e.target;
+    /* S8: 세 칸을 고치면 미리 보기 전문도 바로 바뀜(복사 내용과 같음) */
+    if (t.hasAttribute && t.hasAttribute('data-deep')) {
+      var root = t.closest('.sp'), txt = SP.texts.deep(root);
+      root.querySelectorAll('.sp-copyblock[data-kind="deep"] pre').forEach(function (p) { p.textContent = txt; });
+    }
+    /* 확인 입력: 적은 값이 data-confirm과 정확히 같을 때만 단추가 눌림 */
+    if (t.hasAttribute && t.hasAttribute('data-confirm')) {
+      var btn = document.getElementById(t.getAttribute('data-confirm-btn'));
+      if (btn) btn.setAttribute('aria-disabled', String(t.value !== t.getAttribute('data-confirm')));
+    }
   });
   /* 키보드로 직접 선택 상자에 오면 전부 선택 */
   document.addEventListener('focusin', function (e) { var p = e.target.closest && e.target.closest('.sp-copy-manual pre'); if (p) selectAll(p); });

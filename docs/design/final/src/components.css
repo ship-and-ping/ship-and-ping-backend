@@ -114,7 +114,7 @@ a.sp-frow .go { color: var(--sp-ink-2); display: grid; place-items: center; flex
 .sp-banner.warn > svg { color: var(--sp-bad-ink); flex: none; margin-top: 2px; }
 .sp-banner.info { background: var(--sp-wait-soft); border-color: var(--sp-line); }
 .sp-banner.info > svg { color: var(--sp-wait-ink); flex: none; margin-top: 2px; }
-.sp-banner .act { display: inline-block; margin-top: 4px; font-weight: var(--sp-weight-bold); color: var(--sp-ink); text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; padding: 0; min-height: var(--sp-touch); }
+.sp-banner .act { display: inline-flex; align-items: center; margin-top: 4px; font-weight: var(--sp-weight-bold); color: var(--sp-ink); text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; padding: 0; min-height: var(--sp-touch); }
 .sp-banner.top { margin: 4px 12px 0; }
 
 /* ---------- 빈 화면 ---------- */
@@ -178,6 +178,8 @@ a.sp-frow .go { color: var(--sp-ink-2); display: grid; place-items: center; flex
 .sp .only-big { display: none; }
 .sp.text-200 .only-big { display: inline-flex; }
 .sp.text-200 .not-big { display: none; }
+.sp:not(.text-200) .only-big-nav, .sp .only-big-nav[hidden], .sp [data-period-panel][hidden] { display: none; }
+.sp-axis.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
 .sp-menu-btn { min-height: var(--sp-touch); padding: 6px 12px; }
 .sp-menu { list-style: none; margin: 4px 12px 0; padding: 0; border: 1px solid var(--sp-line); border-radius: var(--sp-radius-md); background: var(--sp-surface); }
 .sp-menu a { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 16px; color: var(--sp-ink); text-decoration: none; font-weight: var(--sp-weight-medium); border-bottom: 1px solid var(--sp-line); }
