@@ -6,37 +6,45 @@ create table private.settings (
 insert into private.settings values(true,100,300000000);
 
 alter table public.features add column last_record_at timestamptz;
--- Remember the original key when a deep attempt is grouped into 기타. Its
--- start and result must agree on the key even when beta capacity changes.
-alter table public.attempts add column overflow_source_id uuid;
--- Historical batches lack per-feature receipt times. Use the newest retained evidence.
-update public.features f set last_record_at=greatest(
-  (select max(bucket) from public.stats_5m where feature_id=f.id),
-  (select max(received_at) from private.latest_results where feature_id=f.id),
-  (select max(greatest(started_at,result_received_at,ended_at)) from public.attempts where feature_id=f.id),
-  (select max(at) from public.error_samples where app_id=f.app_id and feature_id=f.id)
-) where f.method is distinct from '*';
-create index features_last_record on public.features(last_record_at)
- where method is distinct from '*' and last_record_at is not null;
+-- Seed the most recent routes within both quotas when upgrading existing apps.
+with evidence as (
+  select f.id,f.app_id,greatest(
+    (select max(bucket) from public.stats_5m where feature_id=f.id),
+    (select max(received_at) from private.latest_results where feature_id=f.id),
+    (select max(at) from public.error_samples where app_id=f.app_id and feature_id=f.id)
+  ) stamp from public.features f where f.kind='auto' and f.method<>'*'
+), app_ranked as (
+  select *,row_number() over(partition by app_id order by stamp desc,id) position
+  from evidence where stamp>=now()-interval '7 days'
+), admitted as (
+  select id,stamp from app_ranked where position<=20 order by stamp desc,id
+  limit (select active_feature_limit from private.settings)
+)
+update public.features f set last_record_at=a.stamp from admitted a where f.id=a.id;
+create index features_last_record on public.features(last_record_at,app_id)
+ where kind='auto' and method<>'*' and last_record_at is not null;
 
-create function private.active_feature_count() returns bigint language sql stable set search_path='' as $$
-  select count(*) from public.features where method is distinct from '*' and last_record_at>=now()-interval '7 days'
+create function private.active_feature_count(app uuid default null, cutoff timestamptz default now()-interval '7 days')
+returns bigint language sql stable set search_path='' as $$
+  select count(*) from public.features where kind='auto' and method<>'*'
+    and last_record_at>=cutoff and (app is null or app_id=app)
 $$;
-create function private.beta_has_room() returns boolean language plpgsql set search_path='' as $$
+create function private.beta_has_room(app uuid default null, cutoff timestamptz default now()-interval '7 days')
+returns boolean language plpgsql set search_path='' as $$
 declare slot_limit integer;
 begin
-  -- All admissions take the same transaction lock after the per-app lock.
   select active_feature_limit into strict slot_limit from private.settings for update;
-  return private.active_feature_count()<slot_limit;
+  return private.active_feature_count(null,cutoff)<slot_limit
+    and (app is null or private.active_feature_count(app,cutoff)<20);
 end $$;
-create function private.feature_admitted(feature uuid) returns boolean language plpgsql set search_path='' as $$
+create function private.feature_admitted(app uuid, feature uuid, cutoff timestamptz) returns boolean
+language plpgsql set search_path='' as $$
 begin
-  if exists(select 1 from public.features where id=feature and last_record_at>=now()-interval '7 days') then
+  if exists(select 1 from public.features where id=feature and last_record_at>=cutoff) then
     return true;
   end if;
-  if not private.beta_has_room() then return false; end if;
-  -- Publish a new row version so a transaction using a repeatable snapshot
-  -- retries admission if another app took its last visible slot.
+  if not private.beta_has_room(app,cutoff) then return false; end if;
+  -- A concurrent repeatable-read snapshot must retry after another admission.
   update private.settings set active_feature_limit=active_feature_limit;
   return true;
 end $$;
@@ -56,19 +64,20 @@ create function private.resolve_auto(app uuid,verb text,path text,record_activit
 language plpgsql set search_path='' as $$
 declare feature uuid;
   original_path text:=path;
+  received timestamptz:=now();
 begin
   path:=private.route(path);
   if verb is null or verb !~ '^[A-Z-]{1,32}$' or path is null or path not like '/%' then
     raise exception 'invalid route' using errcode='22023';
   end if;
   select id into feature from public.features where app_id=app and method=verb and route=path;
-  if not private.feature_admitted(feature) then
+  if not private.feature_admitted(app,feature,received-interval '7 days') then
     return private.overflow_feature(app);
   end if;
   if feature is null then feature:=private.find_or_create_auto(app,verb,original_path); end if;
   if record_activity then
-    update public.features set last_record_at=now() where id=feature and method<>'*'
-      and (last_record_at is null or last_record_at<now());
+    update public.features set last_record_at=received where id=feature and method<>'*'
+      and (last_record_at is null or last_record_at<received);
   end if;
   return feature;
 end $$;
@@ -83,7 +92,6 @@ declare
   k public.app_keys := private.lock_key(app_key_hash);
   version_name text := trim(payload->>'app_version');
   feature uuid;
-  requested_feature uuid;
   accepted integer := 0;
   dropped integer := 0;
   item jsonb;
@@ -134,34 +142,22 @@ begin
       or (item->>'source'='server' and k.kind <> 'srv'))) then
       raise exception 'invalid attempt' using errcode='22023';
     end if;
-    select id into requested_feature from public.features where app_id=k.app_id and feature_key=item->>'feature_key';
+    select id into feature from public.features where app_id=k.app_id and kind='deep' and feature_key=item->>'feature_key';
     if not found then dropped := dropped+1; continue; end if;
-    -- Keep a result paired with a start already routed to 기타, even if a slot reopened.
-    select a.feature_id into feature from public.attempts a
-      where a.app_id=k.app_id and a.attempt_id=(item->>'attempt_id')::uuid and a.overflow_source_id=requested_feature;
-    if not found then
-      feature:=requested_feature;
-      if not private.feature_admitted(feature) then feature:=private.overflow_feature(k.app_id); end if;
-    end if;
     stamp := (item->>'ts')::timestamptz;
-    insert into public.attempts as a(app_id,attempt_id,feature_id,version,started_at,ended_at,status,source,step,error_kind,overflow_source_id)
+    insert into public.attempts as a(app_id,attempt_id,feature_id,version,started_at,ended_at,status,source,step,error_kind)
       values(k.app_id,(item->>'attempt_id')::uuid,feature,version_name,case when not result_event then stamp end,
         case when result_event then stamp end,case when result_event then item->>'result' else 'pending' end,
         case when result_event then item->>'source' end,case when result_event then private.mask(item->>'step') end,
-        case when result_event then private.mask(item->>'error_kind') end,
-        case when feature<>requested_feature then requested_feature end)
+        case when result_event then private.mask(item->>'error_kind') end)
       on conflict(app_id,attempt_id) do update set
-        feature_id=excluded.feature_id, overflow_source_id=excluded.overflow_source_id,
         started_at=coalesce(a.started_at,excluded.started_at), ended_at=coalesce(a.ended_at,excluded.ended_at),
         status=case when result_event then excluded.status else a.status end,
         source=coalesce(a.source,excluded.source),step=coalesce(a.step,excluded.step),error_kind=coalesce(a.error_kind,excluded.error_kind),
         duration_ms=greatest(0,extract(epoch from (coalesce(a.ended_at,excluded.ended_at)-coalesce(a.started_at,excluded.started_at)))*1000)::integer
-      where coalesce(a.overflow_source_id,a.feature_id)=requested_feature
+      where a.feature_id=excluded.feature_id
         and ((result_event and a.ended_at is null) or (not result_event and a.started_at is null));
     if not found then dropped := dropped+1; continue; end if;
-    if feature=requested_feature then
-      update public.features set last_record_at=now() where id=feature and (last_record_at is null or last_record_at<now());
-    end if;
     if result_event and item->>'error_message' is not null then
       insert into public.error_samples(app_id,feature_id,version,at,error_kind,message)
         values(k.app_id,feature,version_name,stamp,private.mask(item->>'error_kind'),private.mask(item->>'error_message'));
@@ -197,7 +193,7 @@ begin
       raise exception 'invalid feature map item' using errcode='22023';
     end if;
     if not exists(select 1 from public.features where app_id=k.app_id and method=item->>'method'
-                  and route=private.route(item->>'route')) and not private.beta_has_room() then
+                  and route=private.route(item->>'route')) and not private.beta_has_room(k.app_id) then
       continue;
     end if;
     insert into public.feature_map_suggestions(app_id,method,route,name)

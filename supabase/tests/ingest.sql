@@ -31,11 +31,12 @@ select throws_ok($q$select ingest_batch(current_setting('test.hash'),pg_temp.bat
 update app_keys set revoked_at=null,expires_at=now() where key_hash=current_setting('test.hash');
 select throws_ok($q$select ingest_batch(current_setting('test.hash'),pg_temp.batch(gen_random_uuid()))$q$,'PT401',null,'expired key denied');
 
--- Choose an hour wholly before the cutoff, including on an exact clock tick.
-insert into stats_5m select app_id,feature_id,version,date_trunc('hour',now()-interval '7 days')-interval '1 hour',total,failures,
+-- Choose an hour wholly before the same cutoff used to find expired rows.
+select now()-interval '7 days' as cutoff \gset
+insert into stats_5m select app_id,feature_id,version,date_trunc('hour',:'cutoff'::timestamptz)-interval '1 hour',total,failures,
  client_errors,duration_sum_ms,hist from stats_5m;
 insert into stats_5m select app_id,feature_id,version,bucket+interval '5 minutes',3,1,1,37,array[1,2] || array_fill(0,array[14])
- from stats_5m where bucket < now()-interval '7 days';
+ from stats_5m where bucket < :'cutoff'::timestamptz;
 insert into private.evaluation_buckets
  select app_id,feature_id,version,bucket,array_fill(0,array[16]),null,null,total,0,5000 from stats_5m;
 select cleanup_daily();

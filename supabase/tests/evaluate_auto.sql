@@ -23,6 +23,11 @@ select is(evaluate_all(),'[]'::jsonb,'19 percent below failure threshold');
 select is((select p50_ms from baselines),null::int,'81 successes before three days');
 select results_eq('select sample_count,observed_min_ms,observed_max_ms from baselines','select 81,7000,7000','failed durations excluded');
 select ingest_batch(repeat('0',64),pg_temp.batch('old',81,21,'4 minutes'));
+-- Legacy mixed data must produce only the auto signal even when both inputs breach.
+insert into attempts(app_id,feature_id,attempt_id,version,started_at,ended_at,status,source)
+ select app_id,id,gen_random_uuid(),'old',now()-interval '1 second',now(),'failure','browser'
+ from features cross join generate_series(1,5);
+select is((select count(*) from private.evaluation_signals where kind='failure'),1::bigint,'one failure signal per mixed feature');
 -- 40 / 202 < 20%; two more failures cross the threshold.
 select ingest_batch(repeat('0',64),pg_temp.batch('old',0,2,'3 minutes'));
 select is(evaluate_all()->0->>'kind','failure','mixed bucket crosses threshold');
