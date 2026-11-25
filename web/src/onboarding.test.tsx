@@ -216,7 +216,7 @@ it("회원 앱 카드·연결 안내·이름표·주소는 가린 글자로 보�
   expect(screen.getByText("GET /:id/<b>").children.length).toBe(0);
   for (const selector of [".compact", "#member-menu"]) {
     const menu = document.querySelector(selector)!;
-    expect(menu.textContent).toContain("<em>앱</em> [가림]");
+    await waitFor(() => expect(menu.textContent).toContain("<em>앱</em> [가림]"));
     expect(menu.querySelector("em")).toBeNull();
   }
   const check = screen.getByLabelText(
