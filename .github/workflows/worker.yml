@@ -24,3 +24,5 @@ jobs:
       - run: cargo test --locked
       - run: cargo install worker-build --version 0.9.0 --locked
       - run: worker-build --release
+      - run: npm install --prefix target/workerd --no-save workerd@1.20261123.1
+      - run: cargo test --locked --test http -- --ignored

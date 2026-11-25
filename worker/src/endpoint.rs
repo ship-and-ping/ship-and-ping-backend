@@ -3,12 +3,25 @@ use futures_util::StreamExt;
 use serde_json::json;
 use worker::*;
 
+struct SinkError(u16, &'static str);
+
+impl From<worker::Error> for SinkError {
+    fn from(_: worker::Error) -> Self {
+        Self(500, "storage configuration error")
+    }
+}
+
 trait BatchSink {
-    async fn submit(&self, body: Vec<u8>, counts: Counts) -> Result<Counts>;
+    async fn submit(&self, body: Vec<u8>, counts: Counts)
+    -> std::result::Result<Counts, SinkError>;
 }
 struct Supabase<'a>(&'a Env);
 impl BatchSink for Supabase<'_> {
-    async fn submit(&self, body: Vec<u8>, counts: Counts) -> Result<Counts> {
+    async fn submit(
+        &self,
+        body: Vec<u8>,
+        counts: Counts,
+    ) -> std::result::Result<Counts, SinkError> {
         let env = self.0;
         let url = env
             .var("SUPABASE_URL")
@@ -20,8 +33,11 @@ impl BatchSink for Supabase<'_> {
             .ok()
             .map(|v| v.to_string())
             .unwrap_or_default();
-        if url.is_empty() || key.is_empty() {
+        if url.is_empty() && key.is_empty() {
             return Ok(counts);
+        }
+        if url.is_empty() || key.is_empty() {
+            return Err(SinkError(500, "incomplete storage configuration"));
         }
         let h = Headers::new();
         h.set("apikey", &key)?;
@@ -38,11 +54,22 @@ impl BatchSink for Supabase<'_> {
             &format!("{}/rest/v1/rpc/ingest_batch", url.trim_end_matches('/')),
             &init,
         )?;
-        let mut response = Fetch::Request(req).send().await?;
-        if !(200..300).contains(&response.status_code()) {
-            return Err(Error::RustError("RPC failed".into()));
+        let mut response = Fetch::Request(req)
+            .send()
+            .await
+            .map_err(|_| SinkError(503, "storage unavailable"))?;
+        match response.status_code() {
+            200..=299 => {}
+            401 => return Err(SinkError(401, "invalid or expired key")),
+            400 => return Err(SinkError(400, "invalid batch")),
+            status @ 402..=499 => return Err(SinkError(status, "storage rejected request")),
+            500..=599 => return Err(SinkError(503, "storage unavailable")),
+            _ => return Err(SinkError(502, "unexpected storage response")),
         }
-        let mut result: Counts = response.json().await?;
+        let mut result: Counts = response
+            .json()
+            .await
+            .map_err(|_| SinkError(502, "invalid storage response"))?;
         result.dropped += counts.dropped;
         Ok(result)
     }
@@ -104,7 +131,7 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
     };
     match Supabase(&env).submit(rpc, counts).await {
         Ok(counts) => Ok(Response::from_json(&counts)?.with_status(202)),
-        Err(_) => error(503, "storage unavailable"),
+        Err(SinkError(status, message)) => error(status, message),
     }
 }
 #[event(fetch)]

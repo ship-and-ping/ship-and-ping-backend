@@ -11,9 +11,15 @@ const BOUNDS: [u32; 15] = [
     50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000, 7500, 10000, 20000, 30000,
 ];
 static PRIVATE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-    r"(?i)bearer[ \t]+[^\s,;]+|sk_[a-z0-9_.\-]+|eyJ[a-z0-9_.=\-]+|[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}|\+?\d(?:[ ().\-]*\d){8,14}"
-).unwrap()
+    Regex::new(concat!(
+        r"(?i)(?:set-cookie|cookie)[ \t]*:[^\r\n]*",
+        r"|(?:bearer|basic)[ \t]+[^\s,;]+",
+        r"|(?:access_token|token|key|password)=[^&\s,;#]+",
+        r"|(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|sk_|eyJ)[a-z0-9_.=\-]+",
+        r"|[a-z0-9._%+\-]+(?:@|%40)[a-z0-9.\-]+\.[a-z]{2,}",
+        r"|\+?\d(?:[ ().\-]*\d){8,14}",
+    ))
+    .expect("static redaction patterns")
 });
 
 #[derive(Debug, PartialEq)]
@@ -92,10 +98,16 @@ fn route(path: &str) -> String {
         .unwrap_or("")
         .split('/')
         .map(|part| {
+            let part = part.split(';').next().unwrap_or_default();
+            let token = part.trim_end_matches('=');
             if !part.is_empty()
                 && (part.bytes().all(|b| b.is_ascii_digit())
                     || Uuid::try_parse(part).is_ok()
-                    || (part.len() >= 16 && part.bytes().all(|b| b.is_ascii_alphanumeric())))
+                    || (part.len() >= 16
+                        && !token.is_empty()
+                        && token
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))))
             {
                 ":id"
             } else {
@@ -129,27 +141,17 @@ pub fn credential(header: &str) -> Result<&str, ApiError> {
     }
     Ok(key)
 }
-pub fn prepare(header: &str, body: &[u8], now_ms: i64) -> Result<(Vec<u8>, Counts), ApiError> {
-    let key = credential(header)?;
-    if body.len() > MAX_BYTES {
-        return Err(ApiError::TooLarge);
-    }
-    let batch: Batch = serde_json::from_slice(body).map_err(|_| ApiError::Invalid)?;
-    if batch.records.len() > 100 {
-        return Err(ApiError::TooLarge);
-    }
-    require(
-        batch.spec == "sp-1"
-            && bounded(&batch.app_version, 64)
-            && matches!(batch.platform.as_str(), "server" | "browser"),
-    )?;
-    let mut counters = Counts::default();
-    let mut groups = BTreeMap::<(i64, String, String), Stats>::new();
-    let mut attempts = Vec::new();
-    let mut samples = Vec::new();
-    for value in batch.records {
+#[derive(Default)]
+struct Aggregate {
+    groups: BTreeMap<(i64, String, String), Stats>,
+    attempts: Vec<Value>,
+    samples: Vec<Value>,
+}
+
+impl Aggregate {
+    fn add(&mut self, value: Value, now_ms: i64, key: &str) -> Result<(), ApiError> {
         let Record { ts, data } = serde_json::from_value(value).map_err(|_| ApiError::Invalid)?;
-        let stale = ts.timestamp_millis().abs_diff(now_ms) > 86_400_000;
+        require(ts.timestamp_millis().abs_diff(now_ms) <= 86_400_000)?;
         match data {
             Data::Request {
                 route: path,
@@ -168,31 +170,28 @@ pub fn prepare(header: &str, body: &[u8], now_ms: i64) -> Result<(Vec<u8>, Count
                         && duration_ms <= 600000
                         && valid_kind(&error_kind),
                 )?;
-                if !stale {
-                    let path = route(&path);
-                    let client = (400..500).contains(&status);
-                    let failed = !client && (status == 0 || status >= 500 || error_kind.is_some());
-                    if (failed || client) && (error_message.is_some() || error_kind.is_some()) {
-                        samples.push(json!({"route":path,"method":method,"at":ts,"error_kind":error_kind.as_deref().map(mask),"message":error_message.as_deref().map(mask)}));
-                    }
-                    let row = groups
-                        .entry((ts.timestamp().div_euclid(300) * 300, method, path))
-                        .or_default();
-                    row.total += 1;
-                    row.failures += u32::from(failed);
-                    row.client_errors += u32::from(client);
-                    row.duration_sum_ms += u64::from(duration_ms);
-                    row.hist[BOUNDS.partition_point(|bound| *bound < duration_ms)] += 1;
+                let path = route(&path);
+                let client = (400..500).contains(&status);
+                let failed = !client && (status == 0 || status >= 500 || error_kind.is_some());
+                if (failed || client) && (error_message.is_some() || error_kind.is_some()) {
+                    self.samples.push(json!({"route":path,"method":method,"at":ts,"error_kind":error_kind.as_deref().map(mask),"message":error_message.as_deref().map(mask)}));
                 }
+                let row = self
+                    .groups
+                    .entry((ts.timestamp().div_euclid(300) * 300, method, path))
+                    .or_default();
+                row.total += 1;
+                row.failures += u32::from(failed);
+                row.client_errors += u32::from(client);
+                row.duration_sum_ms += u64::from(duration_ms);
+                row.hist[BOUNDS.partition_point(|bound| *bound < duration_ms)] += 1;
             }
             Data::AttemptStart {
                 feature_key,
                 attempt_id,
             } => {
                 require(!feature_key.trim().is_empty())?;
-                if !stale {
-                    attempts.push(json!({"type":"attempt_start","feature_key":feature_key,"attempt_id":attempt_id,"ts":ts}));
-                }
+                self.attempts.push(json!({"type":"attempt_start","feature_key":feature_key,"attempt_id":attempt_id,"ts":ts}));
             }
             Data::AttemptResult {
                 feature_key,
@@ -210,17 +209,41 @@ pub fn prepare(header: &str, body: &[u8], now_ms: i64) -> Result<(Vec<u8>, Count
                         && (source == "browser"
                             || (source == "server" && key.starts_with("sp_srv_"))),
                 )?;
-                if !stale {
-                    attempts.push(json!({"type":"attempt_result","feature_key":feature_key,"attempt_id":attempt_id,"ts":ts,"source":source,"result":result,"step":step.as_deref().map(mask),"error_kind":error_kind.as_deref().map(mask),"error_message":error_message.as_deref().map(mask)}));
-                }
+                self.attempts.push(json!({"type":"attempt_result","feature_key":feature_key,"attempt_id":attempt_id,"ts":ts,"source":source,"result":result,"step":step.as_deref().map(mask),"error_kind":error_kind.as_deref().map(mask),"error_message":error_message.as_deref().map(mask)}));
             }
         }
-        if stale {
-            counters.dropped += 1
+        Ok(())
+    }
+}
+
+pub fn prepare(header: &str, body: &[u8], now_ms: i64) -> Result<(Vec<u8>, Counts), ApiError> {
+    let key = credential(header)?;
+    if body.len() > MAX_BYTES {
+        return Err(ApiError::TooLarge);
+    }
+    let batch: Batch = serde_json::from_slice(body).map_err(|_| ApiError::Invalid)?;
+    if batch.records.len() > 100 {
+        return Err(ApiError::TooLarge);
+    }
+    require(
+        batch.spec == "sp-1"
+            && bounded(&batch.app_version, 64)
+            && matches!(batch.platform.as_str(), "server" | "browser"),
+    )?;
+    let mut counters = Counts::default();
+    let mut aggregate = Aggregate::default();
+    for value in batch.records {
+        if aggregate.add(value, now_ms, key).is_ok() {
+            counters.accepted += 1;
         } else {
-            counters.accepted += 1
+            counters.dropped += 1;
         }
     }
+    let Aggregate {
+        groups,
+        attempts,
+        samples,
+    } = aggregate;
     let stats: Vec<_> = groups
         .into_iter()
         .map(|((seconds, method, path), row)| {
