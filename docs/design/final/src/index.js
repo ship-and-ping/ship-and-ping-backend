@@ -4,7 +4,8 @@
   function draw(i) {
     var e = E[i];
     var phones = '<div class="frames">' + SP.phone('light', e.mobile(), { anim: e.anim, big: e.big }) + SP.phone('dark', e.mobile(), { anim: e.anim, big: e.big }) + '</div>';
-    var pcs = e.pc ? '<div class="pcs"><h2 style="font-size:17px;margin:0">PC 브라우저</h2>' + SP.browser('light', e.pc(), e.id === 's5' ? '/apps/moim' : '/apps/moim/problems/42', e.anim) + SP.browser('dark', e.pc(), e.id === 's5' ? '/apps/moim' : '/apps/moim/problems/42', e.anim) + '</div>' : '';
+    var path = e.path || '/';
+    var pcs = e.pc ? '<div class="pcs"><h2 style="font-size:17px;margin:0">PC 브라우저</h2>' + SP.browser('light', e.pc(), path, e.anim) + SP.browser('dark', e.pc(), path, e.anim) + '</div>' : '';
     return '<article class="entry" id="' + e.id + '" aria-labelledby="h-' + e.id + '"><h1 id="h-' + e.id + '">' + e.title + '</h1><p class="desc">' + e.desc + '</p>' + (e.anim ? '<p><button class="pg-btn" data-replay>움직임 다시 보기</button></p>' : '') + phones + pcs + '</article>';
   }
   function render() {
@@ -34,6 +35,8 @@
       document.body.classList.toggle('hide-dark', theme === 'light'); document.body.classList.toggle('hide-light', theme === 'dark');
       document.documentElement.setAttribute('data-page-theme', theme === 'dark' ? 'dark' : 'light'); SP.fit();
     }); });
+    /* 화면 안 링크(예: 기능 행 → #s6)를 누르면 그 화면으로 넘어간다 */
+    window.addEventListener('hashchange', function () { var id = location.hash.replace('#', ''); E.forEach(function (e, i) { if (e.id === id) { mode = 'one'; setMode(); go(i, false); } }); });
     var h = location.hash.replace('#', ''), idx = 0;
     E.forEach(function (e, i) { if (e.id === h) idx = i; });
     go(idx, false);
