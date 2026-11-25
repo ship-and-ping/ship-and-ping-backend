@@ -309,13 +309,13 @@ figcaption {
 }
 .shell {
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: 248px minmax(0, 1fr);
   min-height: 100vh;
 }
 .rail {
   border-right: 1px solid var(--sp-line);
   background: var(--sp-surface);
-  padding: 32px 20px;
+  padding: 20px 12px;
 }
 .rail nav {
   display: grid;
@@ -408,6 +408,22 @@ textarea {
   background: var(--sp-surface-2);
   resize: vertical;
 }
+.sp-copy {
+  display: grid;
+  gap: 12px;
+}
+.sp-copy button[data-state="done"] {
+  background: var(--sp-ok);
+  color: var(--sp-on-ok);
+}
+.sp-copy button[data-state="fail"] {
+  background: var(--sp-surface);
+  color: var(--sp-ink);
+  border-color: var(--sp-line-strong);
+}
+.sp-copy button[data-state="fail"] ~ textarea {
+  user-select: all;
+}
 .preview {
   height: 32.5rem;
   max-height: 520px;
@@ -462,7 +478,7 @@ summary {
     grid-template-columns: 1fr 1fr;
   }
   .workspace {
-    padding: 32px;
+    padding: 32px 24px;
   }
   .intro .illustration {
     max-width: 540px;
@@ -475,7 +491,7 @@ summary {
   .workspace,
   .landing,
   .public {
-    padding-inline: 20px;
+    padding-inline: 16px;
   }
   .landing section,
   .landing .intro {

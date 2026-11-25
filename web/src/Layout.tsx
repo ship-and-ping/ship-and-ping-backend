@@ -184,12 +184,21 @@ export function Landing() {
                 <br />
                 모두 괜찮아요
               </h2>
-              <p>기능 8개를 지켜보고 있어요.</p>
+              <p>
+                기능 8개를 지켜보고 있어요. 문제가 생기면 슬랙이나 메일로 바로
+                알려 드릴게요.
+              </p>
             </div>
           </div>
         </section>
         <section>
           <h2>나쁜 리뷰로 먼저 알게 되면 늦어요</h2>
+          <p>
+            코딩 AI로 만든 앱은 빨리 나오지만, 무엇이 멈추거나 느려졌는지는
+            사용자가 연락하거나 리뷰를 남겨야 알게 되는 경우가 많아요. 쉽앤핑은
+            기록에서 문제가 보이면 바로 알려 드려서, 그보다 먼저 알아챌 수 있게
+            도와요.
+          </p>
           <div className="grid">
             {[
               "신청 버튼은 눌렸는데 명단에 저장되지 않았다는 연락을 받았어요.",
@@ -215,20 +224,31 @@ export function Landing() {
             ].map(([q, a]) => (
               <article className="panel" key={q}>
                 <h3>{q}</h3>
+                <small>이렇게 알려 드려요</small>
                 <p>{a}</p>
               </article>
             ))}
           </div>
+          <p>
+            그래프나 로그를 읽지 않아도 되게, 기능 이름과 평소와의 차이로
+            말해요.
+          </p>
         </section>
         <section>
           <h2>연결은 세 단계</h2>
           <ol className="step-grid">
             {[
-              "앱을 등록하고 요청문 복사",
-              "쓰던 코딩 AI에 붙여넣기",
-              "바뀐 코드를 확인하고 배포",
-            ].map((t) => (
-              <li key={t}>{t}</li>
+              ["요청문 복사", "앱을 등록하면 연결 요청문을 드려요."],
+              [
+                "코딩 AI에 붙여넣기",
+                "쓰던 코딩 AI 대화창에 붙여넣으면 AI가 기록 전송 코드를 넣어요.",
+              ],
+              ["배포", "배포하고 앱을 한 번 써 보면 첫 기록이 와요."],
+            ].map(([title, detail]) => (
+              <li key={title}>
+                <strong>{title}</strong>
+                <p>{detail}</p>
+              </li>
             ))}
           </ol>
         </section>
@@ -260,20 +280,33 @@ export function Landing() {
               <article key={t} className="panel">
                 <small>{t}</small>
                 <h3>분석이 느려졌어요</h3>
-                <p>평소 1.1초 → 최근 30분 3.4초 (24건)</p>
+                <p>
+                  평소 1.1초 → 최근 30분 3.4초 (24건).{" "}
+                  {t.startsWith("메일") &&
+                    "고친 버전을 배포하면 쉽앤핑이 실제 사용으로 확인해 드려요."}
+                </p>
+                <span>쉽앤핑에서 보기</span>
               </article>
             ))}
           </div>
+          <p>
+            문제가 생길 때 한 번, 해결될 때 한 번 보내요. 알림에는 오류 원문이나
+            키를 넣지 않아요.
+          </p>
         </section>
         <section>
           <h2>지금은 무료 베타예요</h2>
           <p>
-            회원당 앱 3개까지 등록할 수 있어요. Google이나 이메일 링크로
-            시작하세요.
+            회원당 앱 3개까지 등록할 수 있어요. 입력값, 요청 내용, 쿠키, 토큰
+            같은 개인정보는 받지 않아요. Google 또는 이메일 링크로 로그인해요.
+            비밀번호를 만들지 않아도 돼요.
           </p>
           {acts}
         </section>
       </main>
+      <footer className="landing">
+        <small>쉽앤핑 무료 베타</small>
+      </footer>
     </>
   );
 }

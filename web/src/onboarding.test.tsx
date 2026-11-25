@@ -59,12 +59,23 @@ it("서버 키 복사는 현재 앱에 한정되고 요청문은 다시 복사�
     await screen.findByRole("button", { name: "새 수집 키 발급" }),
   );
   const copy = await screen.findByRole("button", { name: "연결 요청 복사" });
+  vi.useFakeTimers();
+  await act(async () => {
+    fireEvent.click(copy);
+  });
+  expect(copy.textContent).toBe("복사했어요");
   fireEvent.click(copy);
+  expect(writeText).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    vi.advanceTimersByTime(2600);
+  });
+  vi.useRealTimers();
   fireEvent.click(copy);
   expect(writeText.mock.calls[0][0]).toBe(writeText.mock.calls[1][0]);
   fireEvent.click(screen.getByRole("button", { name: "서버 키 발급" }));
   fireEvent.click(await screen.findByRole("button", { name: "서버 키 복사" }));
   expect(writeText).toHaveBeenLastCalledWith(secret);
+  expect(document.body.innerHTML).not.toContain(secret);
   fireEvent.click(screen.getByRole("link", { name: "내 앱" }));
   fireEvent.click(await screen.findByRole("link", { name: /두 번째 앱/ }));
   fireEvent.click(await screen.findByRole("button", { name: "서버 키 발급" }));
@@ -103,6 +114,73 @@ it("클립보드가 막히면 직접 복사할 전문을 선택한다", async ()
   expect(document.activeElement).toBe(field);
   expect(field.selectionEnd - field.selectionStart).toBe(field.value.length);
 });
+it("등록한 수집 키는 미리 보기에서 가리고 화면을 다시 열면 폐기한다", async () => {
+  const api = fake();
+  open("/apps/new", api);
+  fireEvent.change(await screen.findByLabelText("앱 이름 (필수)"), {
+    target: { value: " 내 앱 " },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "등록" }));
+  const preview = (await screen.findByLabelText(
+    "연결 요청 복사 전문",
+  )) as HTMLTextAreaElement;
+  expect(api.create).toHaveBeenCalledWith("내 앱", "");
+  expect(api.issue).toHaveBeenCalledWith("a", "pub");
+  expect(preview.value).not.toContain(pub);
+  expect(preview.value).toContain("••••");
+  fireEvent.click(screen.getByRole("link", { name: "내 앱" }));
+  fireEvent.click(await screen.findByRole("link", { name: /모임모아/ }));
+  expect(
+    await screen.findByRole("button", { name: "새 수집 키 발급" }),
+  ).toBeTruthy();
+  expect(api.issue).toHaveBeenCalledTimes(1);
+});
+it("선택한 제안만 저장하고 이름 없는 주소에 늦게 온 제안을 보여 준다", async () => {
+  const api = fake();
+  const proposed = {
+    id: null,
+    method: "GET",
+    route: "/a",
+    name: "신청",
+    hidden: false,
+  };
+  const unnamed = { ...proposed, id: "b", route: "/b", name: "" };
+  const snapshot = {
+    app: { ...app, first_record_at: "2026-11-25" },
+    labels: [proposed, unnamed],
+  };
+  vi.mocked(api.snapshot)
+    .mockResolvedValueOnce(snapshot)
+    .mockResolvedValue({
+      ...snapshot,
+      labels: [proposed, { ...unnamed, name: "예약" }],
+    });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  open("/apps/a/connect", api);
+  await act(async () => {});
+  expect(screen.getByText(/기능 1개를 찾았어요/)).toBeTruthy();
+  fireEvent.click(screen.getAllByLabelText("이 이름 확인")[0]);
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "모두 확인" }));
+  });
+  expect(api.save).toHaveBeenCalledWith("a", [proposed]);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  expect(screen.getByDisplayValue("예약")).toBeTruthy();
+});
+it("서버 키 복사가 거절되어도 DOM에 원문을 남기지 않는다", async () => {
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+  });
+  open("/apps/a/connect");
+  fireEvent.click(await screen.findByRole("button", { name: "서버 키 발급" }));
+  fireEvent.click(await screen.findByRole("button", { name: "서버 키 복사" }));
+  expect(await screen.findByText(/브라우저의 복사 권한/)).toBeTruthy();
+  expect(document.body.innerHTML).not.toContain(secret);
+  expect(screen.queryByLabelText("서버 키 복사 전문")).toBeNull();
+});
 function open(path: string, api = fake()) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -120,6 +198,7 @@ describe("연결 요청문과 등록 입력", () => {
       "깃에 올리지 마",
       "멈추고 나에게 물어봐",
       "/v1/feature-map",
+      "쉽앤핑 수집 주소(INGEST_URL)는 예외",
     ])
       expect(prompt).toContain(rule);
     expect(() => buildConnectPrompt(secret, base)).toThrow();
@@ -176,9 +255,8 @@ it("첫 기록을 확인한 뒤 수정한 이름과 숨김을 저장한다", asy
   fireEvent.click(screen.getByLabelText("이 기능 숨기기"));
   fireEvent.click(screen.getByRole("button", { name: "모두 확인" }));
   await waitFor(() =>
-    expect(api.save).toHaveBeenCalledWith(
-      "a",
+    expect(api.save).toHaveBeenCalledWith("a", [
       expect.objectContaining({ id: "f", name: "참가 신청", hidden: true }),
-    ),
+    ]),
   );
 });

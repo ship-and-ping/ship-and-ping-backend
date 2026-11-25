@@ -4,49 +4,117 @@ import type { Gateway, Label, Snapshot } from "./data";
 import { buildConnectPrompt } from "./domain";
 import { Hero } from "./Layout";
 
+function copyWithEvent(text: string) {
+  let written = false;
+  const handler = (event: ClipboardEvent) => {
+    if (event.clipboardData) {
+      event.clipboardData.setData("text/plain", text);
+      event.preventDefault();
+      written = true;
+    }
+  };
+  document.addEventListener("copy", handler);
+  try {
+    return document.execCommand?.("copy") && written;
+  } catch {
+    return false;
+  } finally {
+    document.removeEventListener("copy", handler);
+  }
+}
+
 function Copy({
   text,
   title,
   secret = false,
+  publicKey,
   onCopy,
 }: {
   text: string;
   title: string;
   secret?: boolean;
+  publicKey?: string;
   onCopy?: () => void;
 }) {
-  const [result, setResult] = useState("");
+  const [state, setState] = useState<"ready" | "busy" | "done" | "fail">(
+    "ready",
+  );
   const area = useRef<HTMLTextAreaElement>(null);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setResult("복사했어요");
-      onCopy?.();
-    } catch {
-      setResult("자동 복사가 막혔어요. 아래 내용을 직접 선택해 복사하세요");
-    }
-  }
-  const manual = result.startsWith("자동");
+  const locked = useRef(false);
+  const preview = publicKey
+    ? text.replace(publicKey, publicKey.slice(0, 8) + "••••")
+    : text;
   useEffect(() => {
-    if (manual) {
+    if (state !== "done") return;
+    const timer = setTimeout(() => {
+      locked.current = false;
+      setState("ready");
+    }, 2600);
+    return () => clearTimeout(timer);
+  }, [state]);
+  useEffect(() => {
+    if (state === "fail") {
       area.current?.focus();
       area.current?.select();
     }
-  }, [manual]);
+  }, [state]);
+  async function copy() {
+    if (locked.current) return;
+    locked.current = true;
+    setState("busy");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      if (!copyWithEvent(text)) {
+        locked.current = false;
+        setState("fail");
+        return;
+      }
+    }
+    setState("done");
+    onCopy?.();
+  }
   return (
-    <>
-      <button onClick={copy}>{title}</button>
-      <span role="status">{result}</span>
-      {(!secret || manual) && (
+    <div className="sp-copy">
+      <button
+        data-state={state}
+        aria-busy={state === "busy"}
+        aria-disabled={state === "busy" || state === "done"}
+        onClick={copy}
+      >
+        {state === "done"
+          ? "복사했어요"
+          : state === "fail"
+            ? "다시 복사"
+            : title}
+      </button>
+      <span role="status">
+        {state === "done"
+          ? secret
+            ? "복사했어요. 배포 설정에 넣으세요."
+            : "복사했어요. 코딩 AI 대화창에 붙여넣으세요."
+          : state === "fail"
+            ? secret
+              ? "자동 복사가 막혔어요. 브라우저의 복사 권한을 허용하고 다시 복사하세요."
+              : "자동 복사가 막혔어요. 아래 상자를 누르면 전부 선택돼요."
+            : ""}
+      </span>
+      {!secret && (
         <textarea
           aria-label={title + " 전문"}
           ref={area}
-          className={secret ? "" : "preview"}
+          className="preview"
           readOnly
-          value={text}
+          value={state === "fail" ? text : preview}
+          onFocus={(e) => {
+            if (state === "fail") e.target.select();
+          }}
+          onClick={(e) => {
+            if (state === "fail") e.currentTarget.select();
+          }}
         />
       )}
-    </>
+    </div>
   );
 }
 
@@ -63,20 +131,22 @@ export function Connect({
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [pollError, setPollError] = useState(false);
+  const revision = useRef(0);
   const [error, setError] = useState("");
   const [pub, setPub] = useState(initialKey);
   const [server, setServer] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [edits, setEdits] = useState<Record<string, Partial<Label>>>({});
+  const [edits, setEdits] = useState<Record<string, Label>>({});
   const [saved, setSaved] = useState(false);
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
       try {
+        const started = revision.current;
         const result = await api.snapshot(id);
-        if (active) {
+        if (active && started === revision.current) {
           setSnapshot(result);
           setPollError(false);
         }
@@ -106,23 +176,60 @@ export function Connect({
     }
   }
   const identity = (l: Label) => l.method + " " + l.route;
-  const labels = (snapshot?.labels ?? []).map((l) => ({
-    ...l,
-    ...edits[identity(l)],
-  }));
+  const labels = snapshot?.labels ?? [];
+  const groups: Record<string, Label[]> = {
+    "찾은 기능": [],
+    "이름 없는 기능": [],
+    기타: [],
+    "숨긴 기능": [],
+  };
+  for (const label of labels) {
+    const group = label.hidden
+      ? "숨긴 기능"
+      : label.method === "*"
+        ? "기타"
+        : label.name && label.name !== "이름 없는 기능"
+          ? "찾은 기능"
+          : "이름 없는 기능";
+    groups[group].push(label);
+  }
+  const selected = Object.values(edits);
+  function deselect(l: Label) {
+    setEdits((prev) => {
+      const next = { ...prev };
+      delete next[identity(l)];
+      return next;
+    });
+  }
   function change(l: Label, patch: Partial<Label>) {
     setSaved(false);
     setEdits((prev) => ({
       ...prev,
-      [identity(l)]: { ...prev[identity(l)], ...patch },
+      [identity(l)]: { ...l, ...prev[identity(l)], ...patch },
     }));
   }
   async function confirm() {
     setBusy(true);
     setError("");
     try {
-      for (const l of labels.filter((l) => l.id))
-        await api.save(id, { ...l, name: l.name.trim() });
+      await api.save(
+        id,
+        selected.map((l) => ({ ...l, name: l.name.trim() })),
+      );
+      revision.current++;
+      setSnapshot(
+        (current) =>
+          current && {
+            ...current,
+            labels: current.labels.map((label) => {
+              const edit = edits[identity(label)];
+              return edit
+                ? { ...label, name: edit.name.trim(), hidden: edit.hidden }
+                : label;
+            }),
+          },
+      );
+      setEdits({});
       setSaved(true);
     } catch {
       setError(
@@ -152,48 +259,83 @@ export function Connect({
             title={arrived ? "기록이 도착했어요" : "첫 기록을 기다리고 있어요"}
             detail={
               arrived
-                ? "기능 " + labels.length + "개를 찾았어요"
+                ? "기능 " + groups["찾은 기능"].length + "개를 찾았어요"
                 : snapshot.app.name + "에서 보낸 기록을 5초마다 확인해요."
             }
             arrived={arrived}
           />
-          {arrived && (
+          {(arrived || labels.length > 0) && (
             <section className="panel">
               <h2>기능 이름표 확인</h2>
-              <p>여기서 고른 이름을 알림에 사용해요.</p>
+              <p>
+                알림에 쓸 이름을 골라 주세요. 이름을 고치거나 숨기면 확인할
+                항목에 포함돼요.
+              </p>
               {!labels.length && <p>기능 이름표를 기다리고 있어요.</p>}
-              {labels.map((l, i) => (
-                <fieldset key={identity(l)} disabled={busy}>
-                  <label>
-                    기능 이름 {i + 1}
-                    <input
-                      value={l.name}
-                      maxLength={300}
-                      onChange={(e) => change(l, { name: e.target.value })}
-                    />
-                  </label>
-                  <details>
-                    <summary>주소 자세히</summary>
-                    <code>{identity(l)}</code>
-                  </details>
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={l.hidden}
-                      onChange={(e) => change(l, { hidden: e.target.checked })}
-                    />
-                    이 기능 숨기기
-                  </label>
-                  {!l.id && (
-                    <p>이 기능을 한 번 사용하면 이름을 저장할 수 있어요.</p>
-                  )}
-                </fieldset>
-              ))}
+              {Object.entries(groups).map(
+                ([group, rows]) =>
+                  rows.length > 0 && (
+                    <div key={group}>
+                      <h3>
+                        {group} {rows.length}개
+                      </h3>
+                      {rows.map((original) => {
+                        const l = edits[identity(original)] ?? original;
+                        const index = labels.indexOf(original) + 1;
+                        return (
+                          <fieldset
+                            key={identity(l)}
+                            disabled={busy || l.method === "*"}
+                          >
+                            <label>
+                              기능 이름 {index}
+                              <input
+                                value={l.name}
+                                placeholder="이름 없는 기능"
+                                maxLength={300}
+                                onChange={(e) =>
+                                  change(l, { name: e.target.value })
+                                }
+                              />
+                            </label>
+                            <details>
+                              <summary>주소 자세히</summary>
+                              <code>{identity(l)}</code>
+                            </details>
+                            <label className="check">
+                              <input
+                                type="checkbox"
+                                checked={l.hidden}
+                                onChange={(e) =>
+                                  change(l, { hidden: e.target.checked })
+                                }
+                              />
+                              이 기능 숨기기
+                            </label>
+                            <label className="check">
+                              <input
+                                type="checkbox"
+                                checked={!!edits[identity(l)]}
+                                disabled={!l.name.trim() && !edits[identity(l)]}
+                                onChange={(e) =>
+                                  e.target.checked ? change(l, {}) : deselect(l)
+                                }
+                              />
+                              이 이름 확인
+                            </label>
+                          </fieldset>
+                        );
+                      })}
+                    </div>
+                  ),
+              )}
               <button
                 disabled={
                   busy ||
-                  !labels.some((l) => l.id) ||
-                  labels.some((l) => l.id && !l.name.trim())
+                  !selected.length ||
+                  selected.some(
+                    (l) => !l.name.trim() || l.name.trim() === "이름 없는 기능",
+                  )
                 }
                 onClick={confirm}
               >
@@ -201,7 +343,7 @@ export function Connect({
               </button>
               {saved && (
                 <p role="status">
-                  기록이 도착한 기능의 이름을 저장했어요.{" "}
+                  확인한 기능의 이름을 저장했어요.{" "}
                   <Link to="/apps">내 앱 보기</Link>
                 </p>
               )}
@@ -219,9 +361,13 @@ export function Connect({
                   <Copy
                     text={buildConnectPrompt(pub, ingest)}
                     title="연결 요청 복사"
+                    publicKey={pub}
                     onCopy={() => setCopied(true)}
                   />
-                  <p>코딩 AI가 바꾼 코드는 배포 전에 한 번 확인해 주세요.</p>
+                  <p>
+                    다른 사람에게 보내지 마세요. 코딩 AI가 바꾼 코드는 배포 전에
+                    한 번 확인해 주세요.
+                  </p>
                 </>
               ) : (
                 <>

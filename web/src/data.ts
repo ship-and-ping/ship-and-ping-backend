@@ -31,7 +31,7 @@ export interface Gateway {
   create(name: string, url: string): Promise<string>;
   issue(id: string, kind: "pub" | "srv"): Promise<string>;
   snapshot(id: string): Promise<Snapshot>;
-  save(id: string, label: Label): Promise<void>;
+  save(id: string, labels: Label[]): Promise<void>;
 }
 
 function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
@@ -150,9 +150,11 @@ export function gateway(client: SupabaseClient): Gateway {
         const proposed = suggestions.get(key);
         suggestions.delete(key);
         const name =
-          f.name_source === "confirmed"
-            ? f.name
-            : (proposed?.name ?? "이름 없는 기능");
+          f.method === "*"
+            ? "기타"
+            : f.name_source === "confirmed" && f.name !== "이름 없는 기능"
+              ? f.name
+              : (proposed?.name ?? "");
         return {
           id: f.id,
           method: f.method,
@@ -165,16 +167,17 @@ export function gateway(client: SupabaseClient): Gateway {
         labels.push({ ...s, id: null, hidden: false });
       return { app: value(appResult), labels };
     },
-    async save(id, label) {
-      value(
-        await client
-          .from("features")
-          .update({ name: label.name, hidden: label.hidden })
-          .eq("app_id", id)
-          .eq("id", label.id)
-          .select("id")
-          .single(),
-      );
+    async save(id, labels) {
+      const { error } = await client.rpc("confirm_feature_names", {
+        p_app_id: id,
+        p_items: labels.map(({ method, route, name, hidden }) => ({
+          method,
+          route,
+          name,
+          hidden,
+        })),
+      });
+      if (error) throw error;
     },
   };
 }

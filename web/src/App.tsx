@@ -257,10 +257,18 @@ function Register({
         /* 등록된 앱에서 키 발급을 다시 시도한다. */
       }
       enter(id, key);
-    } catch {
-      setError(
-        "앱 등록 결과를 확인하지 못했어요. 내 앱 목록을 먼저 확인해 주세요.",
-      );
+    } catch (cause) {
+      if (
+        cause &&
+        typeof cause === "object" &&
+        "message" in cause &&
+        cause.message === "app limit reached"
+      )
+        retry();
+      else
+        setError(
+          "앱 등록 결과를 확인하지 못했어요. 내 앱 목록을 먼저 확인해 주세요.",
+        );
     } finally {
       setBusy(false);
     }
