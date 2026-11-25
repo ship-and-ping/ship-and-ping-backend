@@ -8,9 +8,14 @@ export interface Definitions {
   success: string;
 }
 export interface DeepFeature extends Definitions {
+  create_request_id?: string;
   id: string;
   feature_key: string;
 }
+export const resultKinds = [
+  ["success", "성공", "✓"], ["failure", "실패", "×"],
+  ["abandon", "중단", "–"], ["unconfirmed", "결과 미확인", "?"],
+] as const;
 export interface FirstResult {
   status: "success" | "failure" | "abandon";
   duration_ms: number | null;

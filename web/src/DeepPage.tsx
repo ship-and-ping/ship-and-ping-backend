@@ -6,6 +6,7 @@ import {
   deepLabels,
   deepPrompt,
   fieldNames,
+  resultKinds,
   type DeepFeature,
   type FirstResult,
 } from "./deep";
@@ -14,9 +15,9 @@ import { Hero } from "./Layout";
 
 const empty = { name: "", start: "", success: "" };
 const examples = {
-  name: "모임 신청",
-  start: "신청 버튼을 누를 때",
-  success: "참가자 명단에 저장됐을 때",
+  name: "예: 모임 신청, 결제, 글쓰기",
+  start: "사용자가 무엇을 하면 시작인가요? 예: 신청 버튼을 누를 때",
+  success: "무엇이 끝나야 진짜 성공인가요? 예: 참가자 명단에 저장됐을 때",
 };
 
 function Arrival({
@@ -30,6 +31,7 @@ function Arrival({
 }) {
   const [result, setResult] = useState<FirstResult | null>(null);
   const [error, setError] = useState(false);
+  const [counts, setCounts] = useState<number[]>([]);
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
@@ -38,6 +40,9 @@ function Arrival({
         const first = await api.firstResult(app, feature.id);
         if (!active) return;
         setResult(first);
+        const totals = await api.deepCounts(app, feature.id);
+        if (!active) return;
+        setCounts(totals);
         setError(false);
         if (first && (first.status !== "success" || first.duration_ms != null))
           return;
@@ -68,9 +73,10 @@ function Arrival({
                 ? success.replace(/됐을 때$/, "되기까지")
                 : "실제 성공까지") +
               " " +
-              duration / 1000 +
+              Math.round(duration / 10) / 100 +
               "초 걸렸어요.";
   return (
+    <>
     <Hero
       arrived={result?.status === "success"}
       title={
@@ -80,6 +86,15 @@ function Arrival({
       }
       detail={detail}
     />
+    {!result && <section className="panel"><h2>남은 할 일</h2>
+      <ol><li>추가 연결 요청 복사</li><li>코딩 AI가 코드 추가</li><li>배포</li><li>{displayText(feature.name)} 한 번 해 보기</li></ol>
+    </section>}
+    {counts.some(Boolean) && <section className="panel"><h2>지금까지 결과</h2>
+      <dl className="deep-results">{resultKinds.map(([status, label, icon], index) =>
+        <div key={status}><dt><span aria-hidden="true">{icon} </span>{label}</dt><dd>{counts[index]}건</dd></div>
+      )}</dl>
+    </section>}
+    </>
   );
 }
 
@@ -112,13 +127,22 @@ function DeepForm({
   const [raw, setRaw] = useState(empty);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const storageKey = "deep-create:" + app;
+  const [request] = useState(() => sessionStorage.getItem(storageKey) ?? crypto.randomUUID());
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [attempt, retry] = useState(0);
   useEffect(() => {
     let active = true;
     api
       .deepFeatures(app)
       .then((list) => {
-        if (active) setFeatures(list);
+        if (!active) return;
+        const recovered = tracking === "new" && list.find((f) => f.create_request_id === request);
+        if (recovered) {
+          sessionStorage.removeItem(storageKey);
+          navigate(base + "/features/deep/" + encodeURIComponent(recovered.id), { replace: true });
+        }
+        else setFeatures(list);
       })
       .catch(() => {
         if (active) setError("기능 목록을 불러오지 못했어요.");
@@ -126,7 +150,7 @@ function DeepForm({
     return () => {
       active = false;
     };
-  }, [api, app, attempt]);
+  }, [api, app, attempt, base, navigate, request, storageKey, tracking]);
   const saved = features?.find((f) => f.id === tracking);
   const fields = saved
     ? {
@@ -140,15 +164,29 @@ function DeepForm({
   async function save() {
     setBusy(true);
     try {
-      const feature = await api.saveDeep(app, prompt.fields);
+      sessionStorage.setItem(storageKey, request);
+      const feature = await api.saveDeep(app, prompt.fields, request);
+      sessionStorage.removeItem(storageKey);
       navigate(base + "/features/deep/" + encodeURIComponent(feature.id), {
         replace: true,
       });
     } catch {
       setError(
-        "추가 결과를 확인하지 못했어요. 등록된 기능을 먼저 확인해 주세요.",
+        "추가 결과를 확인하지 못했어요. 기능 추가를 다시 눌러 주세요.",
       );
       retry((n) => n + 1);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove() {
+    if (!saved || !confirmDelete) return;
+    setBusy(true);
+    try {
+      await api.deleteDeep(app, saved.id);
+      navigate(base + "/features/deep/new", { replace: true });
+    } catch {
+      setError("삭제 결과를 확인하지 못했어요.");
     } finally {
       setBusy(false);
     }
@@ -180,25 +218,27 @@ function DeepForm({
         <>
           {saved && <Arrival api={api} app={app} feature={saved} />}
           <p>
-            앱마다 최대 5개까지 깊게 볼 수 있어요. 현재 {features.length}개예요.
+            앱마다 최대 5개까지 깊게 볼 수 있어요. 남은 자리 {5 - features.length}개
           </p>
           {saved || features.length < 5 ? (
             <>
               <section className="panel">
                 {fieldNames.map((k) => (
                   <div key={k}>
-                    <label>
+                    <label htmlFor={"deep-" + k}>
                       {deepLabels[k]}
+                    </label>
+                    {!saved && <small id={"help-" + k}>{examples[k]}</small>}
                       <input
+                        id={"deep-" + k}
+                        aria-describedby={saved ? undefined : "help-" + k}
                         readOnly={!!saved}
                         disabled={busy}
                         value={saved ? displayText(fields[k]) : raw[k]}
-                        placeholder={examples[k]}
                         onChange={(e) =>
                           setRaw({ ...raw, [k]: e.target.value })
                         }
                       />
-                    </label>
                     {fields[k] && prompt.errors[k] && (
                       <small role="alert">{prompt.errors[k]}</small>
                     )}
@@ -228,9 +268,17 @@ function DeepForm({
                     title="추가 연결 요청 복사"
                   />
                 ) : (
-                  <button disabled>추가 연결 요청 복사</button>
+                  <><button disabled aria-describedby="copy-reason">추가 연결 요청 복사</button>
+                    <p id="copy-reason">{invalid ? "세 칸을 모두 올바르게 입력하면 기능을 추가할 수 있어요." : "기능을 추가하면 연결 요청을 복사할 수 있어요."}</p></>
                 )}
               </section>
+              {saved && <section className="panel">
+                {confirmDelete ? <>
+                  <p>{displayText(saved.name)} 기능과 수집한 기록을 삭제할까요?</p>
+                  <button disabled={busy} onClick={() => setConfirmDelete(false)}>취소</button>
+                  <button disabled={busy} onClick={remove}>삭제 확인</button>
+                </> : <button onClick={() => setConfirmDelete(true)}>기능 삭제</button>}
+              </section>}
             </>
           ) : (
             <p>이미 5개를 등록했어요.</p>

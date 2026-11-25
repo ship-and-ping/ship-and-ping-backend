@@ -38,6 +38,8 @@ function fake(user: string | null = "member"): Gateway {
     })),
     deepFeatures: vi.fn(),
     saveDeep: vi.fn(),
+    deleteDeep: vi.fn(),
+    deepCounts: vi.fn(),
     firstResult: vi.fn(),
     emailSetting: vi.fn(),
     testSlack: vi.fn(),

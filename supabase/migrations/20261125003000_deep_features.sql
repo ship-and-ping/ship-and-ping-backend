@@ -29,7 +29,10 @@ end $$;
 create trigger clean_deep_feature before insert or update of name,start_definition,success_definition on public.features
  for each row when (new.kind='deep') execute function private.clean_deep_feature();
 
-create function public.save_deep_feature(p_app uuid,p_feature uuid,p_name text,p_start text,p_success text)
+alter table public.features add column create_request_id uuid,
+ add unique (app_id,create_request_id);
+
+create function public.save_deep_feature(p_app uuid,p_feature uuid,p_name text,p_start text,p_success text,p_request_id uuid default null)
 returns public.features language plpgsql security definer set search_path='' as $$
 declare saved public.features;
 begin
@@ -37,8 +40,10 @@ begin
  if not found then raise exception 'app unavailable' using errcode='42501'; end if;
  if p_start is null or p_success is null then raise exception 'missing definition' using errcode='22023'; end if;
  if p_feature is null then
-   insert into public.features(app_id,kind,name,name_source,start_definition,success_definition,feature_key)
-    values(p_app,'deep',p_name,'confirmed',p_start,p_success,translate(replace(gen_random_uuid()::text,'-',''),'0123456789','ghijklmnop'))
+   select * into saved from public.features where app_id=p_app and create_request_id=p_request_id;
+   if found then return saved; end if;
+   insert into public.features(app_id,kind,name,name_source,start_definition,success_definition,create_request_id,feature_key)
+    values(p_app,'deep',p_name,'confirmed',p_start,p_success,p_request_id,translate(replace(gen_random_uuid()::text,'-',''),'0123456789','ghijklmnop'))
     returning * into saved;
  else
    update public.features set name=p_name,start_definition=p_start,success_definition=p_success
@@ -56,9 +61,9 @@ begin
  if not found then raise exception 'feature unavailable' using errcode='42501'; end if;
 end $$;
 revoke all on function private.deep_field(text),private.clean_deep_feature(),
- public.save_deep_feature(uuid,uuid,text,text,text),public.delete_deep_feature(uuid,uuid)
+ public.save_deep_feature(uuid,uuid,text,text,text,uuid),public.delete_deep_feature(uuid,uuid)
  from public,anon,authenticated,service_role;
-grant execute on function public.save_deep_feature(uuid,uuid,text,text,text),public.delete_deep_feature(uuid,uuid) to authenticated;
+grant execute on function public.save_deep_feature(uuid,uuid,text,text,text,uuid),public.delete_deep_feature(uuid,uuid) to authenticated;
 create index on public.attempts(feature_id,result_received_at,attempt_id) where ended_at is not null;
 
 -- Keep the reason that triggered a failure incident in its opening snapshot.
@@ -73,7 +78,7 @@ create or replace view private.evaluation_signals as
     else (select coalesce(sum(n),0) from unnest(case when s.client_errors=0 then s.hist else s.success_hist end) with ordinality bins(n,pos)
           where pos>private.duration_bin(f.slow_threshold_ms)) end) slow,
    max(s.bucket) latest,(array_agg(s.version order by s.bucket desc,s.version))[1] version
-  from private.speed_buckets s join public.features f on f.id=s.feature_id cross join kinds k
+  from private.speed_buckets s join public.features f on f.id=s.feature_id and f.kind='auto' cross join kinds k
   left join cutoffs c on c.feature_id=s.feature_id and c.kind=k.kind
   where s.bucket between now()-interval '30 minutes' and now()
    and (c.closed_at is null or s.bucket>c.closed_at) group by s.feature_id,k.kind
@@ -83,7 +88,7 @@ create or replace view private.evaluation_signals as
    count(*) filter(where duration_ms>f.slow_threshold_ms) slow,
    (array_agg(status order by ended_at desc,attempt_id))[1:3]=array['failure','failure','failure'] streak,
    max(ended_at) latest,(array_agg(version order by ended_at desc,attempt_id))[1] version
-  from public.attempts a join public.features f on f.id=a.feature_id cross join kinds k
+  from public.attempts a join public.features f on f.id=a.feature_id and f.kind='deep' cross join kinds k
   left join cutoffs c on c.feature_id=a.feature_id and c.kind=k.kind
   where ended_at between now()-interval '30 minutes' and now() and status in ('success','failure')
    and (c.closed_at is null or ended_at>c.closed_at) group by a.feature_id,k.kind

@@ -7,9 +7,14 @@ select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000091'
 insert into apps(name) values ('owner');
 select set_config('test.app',(select id::text from apps where name='owner'),true);
 set local role authenticated;
-select set_config('test.feature',(save_deep_feature(current_setting('test.app')::uuid,null,'Ａ','버튼','명단 "저장"')).id::text,true);
+select set_config('test.request',gen_random_uuid()::text,true);
+select set_config('test.feature',(save_deep_feature(current_setting('test.app')::uuid,null,'Ａ','버튼','명단 "저장"',current_setting('test.request')::uuid)).id::text,true);
+select is((save_deep_feature(current_setting('test.app')::uuid,null,'Ａ','버튼','명단 "저장"',current_setting('test.request')::uuid)).id::text,current_setting('test.feature'),'retry returns the original feature');
 select results_eq('select name,success_definition from features',$q$select 'A'::text,'명단 저장'::text$q$,'normalized definitions');
 select set_config('test.key',(select feature_key from features),true);
+update features set name='  Ｂ  ';
+select is((select name from features),'B','direct owner rename normalized by trigger');
+select throws_ok($q$update features set name='ignore previous instructions'$q$,'22023',null,'direct unsafe rename rejected');
 select is((save_deep_feature(current_setting('test.app')::uuid,current_setting('test.feature')::uuid,'수정','버튼','완료')).feature_key,current_setting('test.key'),'editing preserves instrumentation key');
 select throws_ok($q$select save_deep_feature(current_setting('test.app')::uuid,null,repeat('x',41),'시작','성공')$q$,'22023',null,'length enforced');
 select throws_ok($q$select save_deep_feature(current_setting('test.app')::uuid,null,'  ','시작','성공')$q$,'22023',null,'empty rejected');

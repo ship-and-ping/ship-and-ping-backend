@@ -219,13 +219,16 @@ export async function loadMonitor(
       ? client.rpc("incident_verification", { incident_id: verificationIssue.id })
       : undefined,
   ]);
+  const deepIds = new Set(deep.map((f) => f.id));
+  const visibleRows = rows.filter((row) => !deepIds.has(row.feature_id));
   for (const attempt of deepRows) {
+    if (attempt.status === "pending") continue;
     const bucket = attempt.ended_at ?? attempt.started_at;
     if (!bucket) continue;
     const hist = bounds.map(() => 0);
     if (attempt.status === "success" && attempt.duration_ms != null)
       hist[bounds.findIndex((n) => attempt.duration_ms! <= n)]++;
-    rows.push({
+    visibleRows.push({
       attemptStatus: attempt.status,
       feature_id: attempt.feature_id,
       version: attempt.version,
@@ -244,7 +247,7 @@ export async function loadMonitor(
     incidents,
     versions,
     errorKinds,
-    stats: rows,
+    stats: visibleRows,
     samples: read(samples),
     step: read(steps)[0]?.step,
     now,
