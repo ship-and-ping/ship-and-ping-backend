@@ -168,7 +168,7 @@ window.SP = window.SP || {};
     /\b(send|upload|exfiltrate|post|leak|dump|print)\s+(all\s+|every\s+|the\s+|your\s+|my\s+)?(env(ironment)?(\s*var(iable)?s?)?|process\.env|\.env|secrets?|api[\s_-]*keys?|credentials?|tokens?)\b/i
   ];
   /* 약함(경고만, 기본 포함): 외부 주소·명령어, 또는 강함은 아니지만 지시에 쓰이는 낱말이 보이는 정상 진단 문구 */
-  SP.WEAK = /(\bcurl\b|\bwget\b|\bfetch\b|https?:\/\/|\beval\s*\(|\bexec\b|무시|\bignore\b|system\s*prompt|시스템\s*프롬프트|환경\s*변수|process\.env)/i;
+  SP.WEAK = /(\bcurl\b|\bwget\b|\bfetch\b|https?:\/\/|\beval\s*\(|\bexec\b|무시|\bignore\b|system\s*prompt|시스템\s*프롬프트|환경\s*변수|process\.env|\btokens?\b|\bsecrets?\b|\bcredentials?\b|api[\s_-]*keys?|토큰|비밀\s*키)/i;
   SP.isStrong = function (s) { s = SP.norm(s); return SP.STRONG.some(function (r) { return r.test(s); }); };
   SP.looksLikeOrder = SP.isStrong;
   /* 오류 기록 분석: 줄마다 level = strong | split(여러 줄에 나눈 지시) | weak | null.
@@ -257,6 +257,14 @@ window.SP = window.SP || {};
     an.lines.forEach(function (x, i) { if (an.lv[i]) out.push({ text: x, level: an.lv[i] }); });
     return out;
   };
+  /* 화면 표시용(6.0 "앱이 준 값의 화면 표시는 항상 이스케이프"): 앱이 보낸 글자를 HTML에 넣는 모든 곳은 이 둘만 쓴다.
+     SP.show: 정규화·키/개인정보 가림 후 HTML 이스케이프.
+     SP.vshow: 버전 — 요청문과 같은 SP.versions 검증. 통과면 값 그대로(이스케이프), 실패면 가림·정리한 값 + "(형식 확인 필요)" */
+  SP.show = function (s) { return esc(SP.mask(s)); };
+  SP.vshow = function (v) {
+    var r = SP.versions({ v: v });
+    return r.ok ? esc(v) : esc(SP.cleanLine(SP.mask(v), 64)) + ' <span class="sp-sub">(형식 확인 필요)</span>';
+  };
   /* 화면 안내용: 이 모드의 요청문 버전 묶음이 검증에 실패하는지(aiText와 같은 묶음) */
   SP.badVersion = function (mode) {
     var D = SP.D;
@@ -318,7 +326,7 @@ window.SP = window.SP || {};
     var rt = f.st === 'wait' ? '<span class="rt"><small>아직 없어요</small></span>' : f.learning ? '<span class="rt"><small>평소 속도<br>익히는 중</small></span>' : '<span class="rt">' + f.now + '<small>평소 ' + f.usual + '</small></span>';
     var sub = f.st === 'wait' ? '아직 사용 기록이 없어요' : f.learning ? f.learning : f.deep ? '사용 ' + f.uses + '건: 성공 ' + f.deep.ok + ', 실패 ' + f.deep.fail + ', 중단 ' + f.deep.stop + ', 결과 미확인 ' + f.deep.unk : '사용 ' + f.uses.toLocaleString() + '건, 실패 ' + f.fail + '건';
     /* f.nolink: 상세 화면을 그리지 않은 앱(독서노트)의 행 — 다른 앱 화면으로 잘못 보내지 않게 링크 없이 */
-    if (f.nolink) return '<li><div class="sp-frow ' + f.st + '"><span class="si ' + f.st + '">' + ic[f.st](20) + '<span class="sr">' + stTxt[f.st] + '</span></span><span class="nm">' + f.name + '<small>' + sub + '</small></span>' + rt + '</div></li>';
+    if (f.nolink) return '<li><div class="sp-frow ' + f.st + '"><span class="si ' + f.st + '">' + ic[f.st](20) + '<span class="sr">' + stTxt[f.st] + '</span></span><span class="nm">' + SP.show(f.name) + '<small>' + sub + '</small></span>' + rt + '</div></li>';
     return '<li><a class="sp-frow ' + f.st + (focus ? ' is-focus' : '') + '" href="#' + (f.deep ? 's8-result' : 's6') + '"><span class="si ' + f.st + '">' + ic[f.st](20) + '<span class="sr">' + stTxt[f.st] + '</span></span><span class="nm">' + f.name + (f.deep ? ' <span class="tag">깊게 보기</span>' : '') + '<small>' + sub + '</small></span>' + rt + '<span class="go">' + ic.chev(18) + '</span></a></li>';
   };
   K.featList = function (list, focusFirst) { return '<ul class="sp-list">' + list.map(function (f, i) { return K.frow(f, focusFirst && i === 0); }).join('') + '</ul>'; };

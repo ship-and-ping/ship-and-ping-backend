@@ -88,8 +88,9 @@
     } });
   var names = function () {
     return '<ul class="sp-list">' + D.features.map(function (f) {
-      return '<li class="sp-frow"><span class="nm">' + f.name + '<details><summary>자세히</summary><code>' + esc(f.route) + '</code></details></span><button class="sp-edit" aria-label="' + f.name + ' 이름 고치기">' + ic.pen(15) + '고치기</button><button class="sp-edit" aria-label="' + f.name + ' 숨기기">' + ic.eyeoff(15) + '숨기기</button></li>';
-    }).join('') + '</ul><h3 class="sp-h3">이름 없는 기능 1개</h3><ul class="sp-list"><li class="sp-frow"><span class="si none">' + ic.pen(18) + '</span><span class="nm">이름 없는 기능<small>이름을 붙이면 알림에 그 이름이 나와요</small><details><summary>자세히</summary><code>' + D.unnamed.route + ' (3건)</code></details></span><button class="sp-edit">이름 붙이기</button></li></ul>';
+      var nm = SP.show(f.name);   /* 기능 이름도 앱(코딩 AI가 보낸 이름표)에서 온 값 → 이스케이프·가림 */
+      return '<li class="sp-frow"><span class="nm">' + nm + '<details><summary>자세히</summary><code>' + SP.show(f.route) + '</code></details></span><button class="sp-edit" aria-label="' + nm + ' 이름 고치기">' + ic.pen(15) + '고치기</button><button class="sp-edit" aria-label="' + nm + ' 숨기기">' + ic.eyeoff(15) + '숨기기</button></li>';
+    }).join('') + '</ul><h3 class="sp-h3">이름 없는 기능 1개</h3><ul class="sp-list"><li class="sp-frow"><span class="si none">' + ic.pen(18) + '</span><span class="nm">이름 없는 기능<small>이름을 붙이면 알림에 그 이름이 나와요</small><details><summary>자세히</summary><code>' + SP.show(D.unnamed.route) + ' (3건)</code></details></span><button class="sp-edit">이름 붙이기</button></li></ul>';
   };
   add({ id: 's4', group: 'S4 연결하기', title: 'S4 첫 기록 도착: 기능 이름 확인', anim: 's4',
     desc: '첫 기록이 도착한 순간. 상태 표시가 "첫 기록을 기다려요"에서 "기록이 도착했어요"로, 양이 하는 말이 "기능 8개를 찾았어요"로 바뀐다. 아래 목록도 정확히 8줄이고, 이름표에 없던 주소는 "이름 없는 기능 1개"로 따로 모은다.',
@@ -131,7 +132,7 @@
     mobile: function () { return wrap(hdrApp('마지막 기록 1분 전') + s5Hero() + featSec(D.features, '최근 24시간, 문제 있는 기능 먼저', true)); } });
   add({ id: 's5-update', group: 'S5 앱 홈', title: 'S5 새 버전 감지 띠',
     desc: '문제가 열린 뒤 새 버전이 들어오면 큰 문장 카드 바로 아래에 "새 버전을 감지했어요" 띠가 붙는다(기능명세서 S5 "최근 업데이트 띠"). 띠의 [확인 상황 보기]는 S7의 업데이트 후 확인 영역으로 간다. 해결 판정이 나면 띠는 사라지고 카드 문장이 바뀐다.',
-    mobile: function () { return wrap(hdrApp('마지막 기록 1분 전') + s5Hero() + sec(K.banner('info', '<b>새 버전 ' + D.newVer + '을 감지했어요 (15:10).</b> 분석이 고쳐졌는지 실제 사용으로 확인하고 있어요. 지금 3건 확인, 2건 남았어요.', '확인 상황 보기', 's7-loading'), 'padding-top:12px') + featSec(D.features, '최근 24시간, 문제 있는 기능 먼저')); } });
+    mobile: function () { return wrap(hdrApp('마지막 기록 1분 전') + s5Hero() + sec(K.banner('info', '<b>새 버전 ' + SP.vshow(D.newVer) + '을 감지했어요 (15:10).</b> 분석이 고쳐졌는지 실제 사용으로 확인하고 있어요. 지금 3건 확인, 2건 남았어요.', '확인 상황 보기', 's7-loading'), 'padding-top:12px') + featSec(D.features, '최근 24시간, 문제 있는 기능 먼저')); } });
   add({ id: 's5-ok', group: 'S5 앱 홈', title: 'S5 앱 홈: 모두 괜찮아요',
     desc: '열린 문제가 없을 때 같은 자리에서 양이 "모두 괜찮아요"를 말한다. 숫자 대신 무엇을 지켜보고 있는지를 쓴다. 목록은 같은 기능 8개를 사용 많은 순으로.',
     mobile: function () { return wrap(hdrApp('마지막 기록 1분 전') + K.say({ meta: K.status('ok') + '<span>지금</span>', headline: '<p class="sp-headline">모두 괜찮아요</p>', body: '<p class="hsub">기능 8개를 24시간 지켜보고 있어요. 문제가 생기면 슬랙으로 바로 알려 드릴게요.</p>' }) + featSec(okFeatures, '최근 24시간, 사용 많은 순')); } });
@@ -166,11 +167,11 @@
      실패: 11/22 1건(5d0e7b2), 오늘 4건(3f2a9c1) */
   var P6 = {
     '24h': { use: [10, 14, 12, 8, 6, 4, 5, 13, 20, 16, 12, 12], fail: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2], med: [1.1, 1.0, 1.1, 1.2, 1.1, 1.0, 1.1, 1.1, 1.2, 1.1, 3.1, 3.4], max: 20,
-      period: '최근 24시간', unit: '2시간마다', failTxt: '실패 4건, 모두 최근 4시간(새 버전 ' + D.badVer + ')', barsLabel: '오후에 가장 많고, 실패 4건은 최근 4시간', axis: '<div class="sp-axis"><span>어제 16시</span><span>지금</span></div>', now: '최근 2시간 보통 3.4초', lineLabel: '최근 4시간에 3.4초로 올라감',
-      rows: [[D.badVer + '<br><span class="sp-sub">오늘 13:50부터</span>', '24건', '17% (4건)', '<b style="color:var(--sp-bad-ink)">3.4초</b>'], [D.oldVer + '<br><span class="sp-sub">어제 15:40부터</span>', '108건', '0%', '1.1초']] },
+      period: '최근 24시간', unit: '2시간마다', failTxt: '실패 4건, 모두 최근 4시간(새 버전 ' + SP.vshow(D.badVer) + ')', barsLabel: '오후에 가장 많고, 실패 4건은 최근 4시간', axis: '<div class="sp-axis"><span>어제 16시</span><span>지금</span></div>', now: '최근 2시간 보통 3.4초', lineLabel: '최근 4시간에 3.4초로 올라감',
+      rows: [[SP.vshow(D.badVer) + '<br><span class="sp-sub">오늘 13:50부터</span>', '24건', '17% (4건)', '<b style="color:var(--sp-bad-ink)">3.4초</b>'], [SP.vshow(D.oldVer) + '<br><span class="sp-sub">어제 15:40부터</span>', '108건', '0%', '1.1초']] },
     '7d': { use: [60, 70, 65, 150, 140, 174, 88], fail: [0, 0, 0, 1, 0, 0, 4], med: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.3], max: 174,
       period: '최근 7일', unit: '하루마다', failTxt: '모두 747건, 실패 5건: 11월 22일 1건, 오늘 4건', barsLabel: '하루 60~174건, 실패는 11월 22일 1건과 오늘 4건', axis: '<div class="sp-axis days"><span>19일</span><span>20일</span><span>21일</span><span>22일</span><span>23일</span><span>24일</span><span>오늘</span></div>', now: '오늘 하루 보통 1.3초(13:50 새 버전 뒤로는 3.4초)', lineLabel: '오늘 1.3초로 올라감',
-      rows: [[D.badVer + '<br><span class="sp-sub">오늘 13:50부터</span>', '24건', '17% (4건)', '<b style="color:var(--sp-bad-ink)">3.4초</b>'], [D.oldVer + '<br><span class="sp-sub">어제 15:40부터</span>', '108건', '0%', '1.1초'], [D.olderVer + '<br><span class="sp-sub">11월 22일부터</span>', '420건', '0.2% (1건, 22일)', '1.0초']], older: '그보다 앞 버전(19~21일, 195건, 실패 없음)은 막대에만 있어요.' }
+      rows: [[SP.vshow(D.badVer) + '<br><span class="sp-sub">오늘 13:50부터</span>', '24건', '17% (4건)', '<b style="color:var(--sp-bad-ink)">3.4초</b>'], [SP.vshow(D.oldVer) + '<br><span class="sp-sub">어제 15:40부터</span>', '108건', '0%', '1.1초'], [SP.vshow(D.olderVer) + '<br><span class="sp-sub">11월 22일부터</span>', '420건', '0.2% (1건, 22일)', '1.0초']], older: '그보다 앞 버전(19~21일, 195건, 실패 없음)은 막대에만 있어요.' }
   };
   var s6Panel = function (k, show) {
     var d = P6[k];
@@ -183,15 +184,15 @@
   };
   /* 버전 비교는 기능명세서 S6대로 기간과 상관없이 "최근 3개 버전"(건수·실패율·보통 시간) 한 표 */
   var verTable = function () {
-    return sec('<h2>최근 버전 3개 비교</h2><table class="sp-table"><caption class="sr">최근 버전 3개의 사용 건수, 실패율, 보통 걸린 시간</caption><thead><tr><th scope="col">버전</th><th scope="col" class="n">사용</th><th scope="col" class="n">실패율</th><th scope="col" class="n">보통 시간</th></tr></thead><tbody>' + P6['7d'].rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td class="n">' + r[1] + '</td><td class="n">' + r[2] + '</td><td class="n">' + r[3] + '</td></tr>'; }).join('') + '</tbody></table><p class="sp-sub">최근 24시간에는 위 두 버전(' + D.badVer + ', ' + D.oldVer + ')만 쓰였어요.</p>');
+    return sec('<h2>최근 버전 3개 비교</h2><table class="sp-table"><caption class="sr">최근 버전 3개의 사용 건수, 실패율, 보통 걸린 시간</caption><thead><tr><th scope="col">버전</th><th scope="col" class="n">사용</th><th scope="col" class="n">실패율</th><th scope="col" class="n">보통 시간</th></tr></thead><tbody>' + P6['7d'].rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td class="n">' + r[1] + '</td><td class="n">' + r[2] + '</td><td class="n">' + r[3] + '</td></tr>'; }).join('') + '</tbody></table><p class="sp-sub">최근 24시간에는 위 두 버전(' + SP.vshow(D.badVer) + ', ' + SP.vshow(D.oldVer) + ')만 쓰였어요.</p>');
   };
   var s6 = function (week) {
     var seg = '<div class="sp-seg" role="group" aria-label="보는 기간"><button data-period="24h" aria-pressed="' + !week + '">24시간</button><button data-period="7d" aria-pressed="' + week + '">7일</button></div>';
-    var errs ='<ul style="margin:4px 0 0;padding-left:18px">' + D.errors.map(function (e) { return '<li><code>' + esc(e) + '</code></li>'; }).join('') + '</ul>';
+    var errs ='<ul style="margin:4px 0 0;padding-left:18px">' + D.errors.map(function (e) { return '<li><code>' + SP.show(e) + '</code></li>'; }).join('') + '</ul>';
     return wrap(K.hdr('분석', '모임모아', '모임모아 홈으로') +
       K.say({ meta: problemMeta(), headline: '<p class="sp-headline">분석이 평소보다 느려요</p>', body: K.cmp(['평소', '1.1'], ['최근 30분', '3.4']) + '<a class="sp-hbtn" href="#s7-open" style="text-decoration:none">열린 문제 보기</a>' }) +
       sec(seg, 'padding-bottom:0') + s6Panel('24h', !week) + s6Panel('7d', week) + verTable() +
-      sec('<details><summary>자세히</summary><code>주소 형태: POST /api/analyze<br>버전: ' + D.badVer + ' / ' + D.oldVer + '<br>오류 종류: TimeoutError 4건, SlowQuery 1건</code><p class="sp-sub" style="margin-top:6px">최근 오류 예시 5개 (개인정보 가림)</p>' + errs + '</details>') +
+      sec('<details><summary>자세히</summary><code>주소 형태: POST /api/analyze<br>버전: ' + SP.vshow(D.badVer) + ' / ' + SP.vshow(D.oldVer) + '<br>오류 종류: TimeoutError 4건, SlowQuery 1건</code><p class="sp-sub" style="margin-top:6px">최근 오류 예시 5개 (개인정보 가림)</p>' + errs + '</details>') +
       sec(K.field({ label: '느림 기준', value: '5초', help: '평소 속도가 아직 없을 때만 써요. 지금은 평소 속도(1.1초)로 판단하고 있어요.' })));
   };
   add({ id: 's6', group: 'S6 기능 상세', title: 'S6 기능 상세: 분석 (24시간)',
@@ -226,7 +227,7 @@
       K.copyBlock({ label: again ? 'AI에 다시 보낼 내용 복사' : 'AI에 보낼 내용 복사', kind: kind, preview: 'closed', blocked: blocked }) + '</div>';
   };
   var tlRows = { start: ['14:05', '처음 감지', '분석이 평소보다 2배 넘게 느려졌어요'], sent: ['14:06', '알림 보냄', '슬랙 #모임모아-알림'], ver: ['15:10', '새 버전 감지', '고친 버전이 배포됐어요'] };
-  var tl = function (rows) { return sec('<h2>지금까지</h2><ol class="sp-tl">' + rows.map(function (t) { return '<li><time>' + t[0] + '</time><span>' + t[1] + '<br><span class="sp-sub">' + t[2] + '</span></span></li>'; }).join('') + '</ol><details><summary>자세히</summary><code>POST /api/analyze<br>버전 ' + D.oldVer + ' → ' + D.badVer + '(문제) → ' + D.newVer + '</code></details>'); };
+  var tl = function (rows) { return sec('<h2>지금까지</h2><ol class="sp-tl">' + rows.map(function (t) { return '<li><time>' + t[0] + '</time><span>' + t[1] + '<br><span class="sp-sub">' + t[2] + '</span></span></li>'; }).join('') + '</ol><details><summary>자세히</summary><code>POST /api/analyze<br>버전 ' + SP.vshow(D.oldVer) + ' → ' + SP.vshow(D.badVer) + '(문제) → ' + SP.vshow(D.newVer) + '</code></details>'); };
   var tlDone = [tlRows.start, tlRows.sent, tlRows.ver, ['15:32', '해결됐어요', '업데이트 후 15건 모두 평소 속도']];
   var hdr7 = function () { return K.hdr('문제 상세', '모임모아', '모임모아 홈으로'); };
   var check = function (inner) { return sec('<h2>업데이트 후 확인</h2>' + inner); };
@@ -241,7 +242,7 @@
     mobile: function () { return wrap(hdr7() + K.say({ meta: problemMeta(), headline: '<p class="sp-headline">분석이 느려졌어요</p>', body: K.cmp(['평소', '1.1'], ['최근 30분', '3.4']) + '<p class="hsub">최근 30분 동안 24건, 보통 걸린 시간이 평소의 3배예요.</p>' }) + aiSec() + check(K.empty('고친 버전을 배포하면 여기서 확인해 드려요', '새 버전이 감지되면 실제 사용 5건을 지켜보고, 모두 평소 속도면 해결로 알려 드려요.')) + tl([tlRows.start, tlRows.sent]) + dismiss()); } });
   add({ id: 's7-first-use', group: 'S7 문제 상세', title: 'S7 업데이트 후 첫 사용 대기',
     desc: '새 버전은 감지했지만 그 버전으로 분석을 쓴 기록이 아직 없다. 문제는 열린 채라 상태는 "문제 있어요" 그대로이고, 숫자 대신 무엇을 기다리는지와 사용자가 할 수 있는 일(직접 한 번 써 보기)을 말한다.',
-    mobile: function () { return wrap(hdr7() + K.say({ meta: K.status('bad') + '<span>15:10 새 버전 감지</span>', headline: '<p class="sp-headline">업데이트 후 첫 사용을 기다리고 있어요</p>', body: '<p class="hsub">누군가 새 버전에서 분석을 쓰면 바로 확인을 시작해요. 직접 한 번 써 봐도 돼요.</p>' }) + recap() + check('<p class="sp-sub">새 버전 ' + D.newVer + '에서 분석 사용 0건. 5건을 확인하면 결과를 알려 드려요.</p>') + aiSec() + tl([tlRows.start, tlRows.sent, tlRows.ver])); } });
+    mobile: function () { return wrap(hdr7() + K.say({ meta: K.status('bad') + '<span>15:10 새 버전 감지</span>', headline: '<p class="sp-headline">업데이트 후 첫 사용을 기다리고 있어요</p>', body: '<p class="hsub">누군가 새 버전에서 분석을 쓰면 바로 확인을 시작해요. 직접 한 번 써 봐도 돼요.</p>' }) + recap() + check('<p class="sp-sub">새 버전 ' + SP.vshow(D.newVer) + '에서 분석 사용 0건. 5건을 확인하면 결과를 알려 드려요.</p>') + aiSec() + tl([tlRows.start, tlRows.sent, tlRows.ver])); } });
   add({ id: 's7-loading', group: 'S7 문제 상세', title: 'S7 업데이트 후 확인 중',
     desc: '새 버전에서 5건 중 3건을 확인한 상태. 확인한 건수를 그대로 보여 준다(꾸민 진행 막대 대신 실제 숫자). 아직 결론이 아니므로 숫자는 상태 색 없이 흰색, 상태는 "문제 있어요" 그대로. 화면 첫 불러오기는 S5와 같은 스켈레톤을 쓴다.',
     mobile: function () { return wrap(hdr7() + K.say({ meta: K.status('bad') + '<span>15:10 새 버전 감지</span>', headline: '<p class="sp-headline">업데이트 후 3건 성공, 2건 더 확인할게요</p>', body: '<div class="sp-cmp"><span class="v now"><span class="n">3</span></span><span class="hsub" style="padding-bottom:6px">/ 5건 평소 속도</span></div><p class="hsub">새 버전으로 분석을 쓴 기록을 기다리고 있어요. 다 확인하면 알려 드릴게요.</p>' }) + recap() + aiSec() + tl([tlRows.start, tlRows.sent, tlRows.ver])); } });
@@ -302,7 +303,7 @@
       var r = D.features[4].deep;
       return wrap(hdr8('모임 신청', '깊게 보는 기능, 모임모아') +
         K.say({ meta: K.status('ok') + '<span>최근 24시간</span>', headline: '<p class="sp-headline">모임 신청 88건 중 84건이 명단 저장까지 끝났어요</p>', body: '<p class="hsub">실패 1건은 경보 기준(30분에 20%)보다 적어요. 보통 1.2초 걸려요.</p>' }) +
-        sec('<h2>최근 24시간 결과</h2>' + K.results(r) + '<details><summary>자세히</summary><code>실패 1건: 단계 save_member, DbError: unique constraint (14:52)<br>시작 기준: 신청 버튼을 누를 때<br>성공 기준: 참가자 명단에 저장됐을 때</code></details>'));
+        sec('<h2>최근 24시간 결과</h2>' + K.results(r) + '<details><summary>자세히</summary><code>' + SP.show('실패 1건: 단계 save_member, DbError: unique constraint (14:52)') + '<br>시작 기준: 신청 버튼을 누를 때<br>성공 기준: 참가자 명단에 저장됐을 때</code></details>'));
     } });
 
   /* ---------------- S9 알림 설정 ---------------- */
@@ -547,7 +548,7 @@
   /* S6: 그래프는 넓게, 옆에 버전 비교·자세히·느림 기준 */
   var s6Pc = function (week) {
     var seg = '<div class="sp-seg" role="group" aria-label="보는 기간"><button data-period="24h" aria-pressed="' + !week + '">24시간</button><button data-period="7d" aria-pressed="' + week + '">7일</button></div>';
-    var errs = '<ul style="margin:4px 0 0;padding-left:18px">' + D.errors.map(function (x) { return '<li><code>' + esc(x) + '</code></li>'; }).join('') + '</ul>';
+    var errs = '<ul style="margin:4px 0 0;padding-left:18px">' + D.errors.map(function (x) { return '<li><code>' + SP.show(x) + '</code></li>'; }).join('') + '</ul>';
     return K.say({ pc: true, meta: problemMeta(), headline: '<p class="sp-headline">분석이 평소보다 느려요</p>', body: '<div><a class="sp-hbtn" href="#s7-open" style="display:inline-flex;text-decoration:none">열린 문제 보기</a></div>', side: K.cmp(['평소', '1.1'], ['최근 30분', '3.4']) }) +
       cols(sec(seg) + s6Panel('24h', !week) + s6Panel('7d', week),
         panel(flat(verTable())) + panel('<h2>주소와 오류 기록</h2><p class="sp-sub">코딩 AI에 직접 물어볼 때만 필요해요.</p><details><summary>자세히</summary><code style="display:block;color:var(--sp-ink-2)">주소 형태: POST /api/analyze<br>오류 종류: TimeoutError 4건, SlowQuery 1건</code><p class="sp-sub" style="margin-top:6px">최근 오류 예시 5개 (개인정보 가림)</p>' + errs + '</details>') +
