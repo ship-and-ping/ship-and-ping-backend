@@ -16,12 +16,23 @@ it.each([
     ),
   ).toBe("앞x[가림]뒤");
 });
-it.each(["sk_", "pk_", "rk_"])("requires a word boundary and 16 alphanumerics for %s", (prefix) => {
+it.each(["sk_", "pk_", "rk_"])("checks the ASCII boundary and minimum length for %s", (prefix) => {
   const token = prefix + "a1".repeat(8);
   expect(displayText("/" + token.toUpperCase())).toBe("/[가림]");
-  for (const normal of ["desk_", "/task_list", token.slice(0, -1), "x" + token, "_" + token]) {
+  for (const normal of ["desk_", "/task_list", token.slice(0, -1), "x" + token, "2" + token]) {
     expect(displayText(normal)).toBe(normal);
   }
+});
+it.each([
+  ["", "sk_live_"],
+  ["/", "sk_test_"],
+  ["_", "pk_live_"],
+  ["한글", "rk_live_"],
+  ["오류", "sk_live_"],
+])("masks %s%s at the 16-character threshold", (before, prefix) => {
+  const key = prefix + "51Habcdefgh";
+  expect(displayText(before + key)).toBe(before + "[가림]");
+  expect(displayText(before + key.slice(0, -1))).toBe(before + key.slice(0, -1));
 });
 it("masks personal data, preserves the member’s own login email exactly", () => {
   expect(

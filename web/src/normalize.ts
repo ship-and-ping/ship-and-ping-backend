@@ -24,7 +24,7 @@ export function displayText(
     .replace(/\b01[016789][- ]?\d{3,4}[- ]?\d{4}\b/g, "[가림]")
     .replace(/Bearer\s+\S+|eyJ[a-z0-9._=-]+/gi, "[가림]")
     .replace(
-      /(?:sp_(?:srv|pub)|sb_(?:secret|publishable))_[a-z0-9_.=+-]*|\b(?:sk|pk|rk)_[a-z0-9]{16,}[a-z0-9_.=+-]*/gi,
+      /(?:sp_(?:srv|pub)|sb_(?:secret|publishable))_[a-z0-9_.=+-]*|(?:^|(?<=[^A-Za-z0-9]))(?:sk|pk|rk)_[A-Za-z0-9_]{16,}[a-z0-9_.=+-]*/gi,
       "[가림]",
     );
 }

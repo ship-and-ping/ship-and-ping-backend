@@ -15,6 +15,13 @@ insert into feature_map_suggestions(app_id,method,route,name)
 select id,'GET',route,'Proposal' from apps cross join (values('/last'),('/extra')) routes(route);
 select is(private.mask('/task_list desk_ sk_short /sk_0123456789abcdef xSp_pub_demo'),
   '/task_list desk_ sk_short /[가림] x[가림]', 'stored text follows the same key boundaries');
+select is(private.mask(leading_text || prefix || '51Habcdefgh'), leading_text || '[가림]',
+          'mask ' || leading_text || prefix || ' at the 16-character threshold')
+from (values ('','sk_live_'), ('/','sk_test_'), ('_','pk_live_'),
+             ('한글','rk_live_'), ('오류','sk_live_')) cases(leading_text, prefix);
+select is(private.mask('sk_live_51Habcdefg xsk_live_51Habcdefgh 2rk_live_51Habcdefgh'),
+          'sk_live_51Habcdefg xsk_live_51Habcdefgh 2rk_live_51Habcdefgh',
+          'preserve short suffixes and prefixes following ASCII letters or digits');
 set local role authenticated;
 select lives_ok($$update apps set name='Renamed'$$,'owner can rename an app with a legacy URL');
 select is((select name from apps),'Renamed','owner updated legacy app');
