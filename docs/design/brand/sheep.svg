@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="150 130 940 1000" width="940" height="1000">
+  <title>쉽앤핑 양 (배경 없음)</title>
+  <!-- ship-and-ping-sheep-1254.png(퍼플 배경 원본)를 보고 브랜드 색만으로 다시 그린 일러스트.
+       좌표는 1254px 원본 기준. 부위별 그룹 id로 나눠 따로 움직일 수 있다.
+       부위 사이 짙은 퍼플(#261B40) 분리선은 같은 색 테두리를 칠 아래에 깔아(paint-order: stroke) 만든다.
+       화면 코드(docs/design/final/src/kit.js SP.sheepParts)와 같은 모양. -->
+  <g id="pings" fill="none" stroke="#76E7C4" stroke-width="18" opacity="0">
+    <circle cx="415" cy="590" r="300"/>
+  </g>
+  <g id="sheep">
+    <g id="leg-3">
+      <path d="M380 995 L470 1015 L482 1045 L400 1045 Z" fill="#F8F4FC" stroke="#261B40" stroke-width="24" stroke-linejoin="round" paint-order="stroke"/>
+      <rect x="392" y="1050" width="98" height="58" rx="16" fill="#F8F4FC" stroke="#261B40" stroke-width="24" stroke-linejoin="round" paint-order="stroke"/>
+    </g>
+    <g id="leg-4">
+      <path d="M752 1005 L818 968 L858 1045 L775 1045 Z" fill="#F8F4FC" stroke="#261B40" stroke-width="24" stroke-linejoin="round" paint-order="stroke"/>
+      <rect x="770" y="1050" width="92" height="58" rx="16" fill="#F8F4FC" stroke="#261B40" stroke-width="24" stroke-linejoin="round" paint-order="stroke"/>
+    </g>
+    <g id="body">
+      <path d="M300 780 C390 810 500 800 575 752 C660 812 760 835 858 838 C858 900 830 950 760 980 C640 1010 500 1000 420 970 C360 950 300 950 275 920 C255 870 262 815 300 780 Z" fill="#F8F4FC" stroke="#261B40" stroke-width="24" stroke-linejoin="round" paint-order="stroke"/>
+    </g>
+    <g id="leg-1">
+      <path d="M300 958 L405 972 L350 1042 L262 1042 Z" fill="#F8F4FC" stroke="#261B40" stroke-width="24" stroke-linejoin="round" paint-order="stroke"/>
+      <rect x="250" y="1050" width="88" height="58" rx="16" fill="#F8F4FC" stroke="#261B40" stroke-width="24" stroke-linejoin="round" paint-order="stroke"/>
+      <circle cx="355" cy="930" r="66" fill="#F8F4FC" stroke="#261B40" stroke-width="24" paint-order="stroke"/>
+      <circle cx="355" cy="930" r="22" fill="#261B40"/>
+    </g>
+    <g id="leg-2">
+      <path d="M625 955 L740 965 L715 1042 L635 1042 Z" fill="#F8F4FC" stroke="#261B40" stroke-width="24" stroke-linejoin="round" paint-order="stroke"/>
+      <rect x="635" y="1050" width="90" height="58" rx="16" fill="#F8F4FC" stroke="#261B40" stroke-width="24" stroke-linejoin="round" paint-order="stroke"/>
+      <circle cx="680" cy="930" r="66" fill="#F8F4FC" stroke="#261B40" stroke-width="24" paint-order="stroke"/>
+      <circle cx="680" cy="930" r="22" fill="#261B40"/>
+    </g>
+    <g id="wool">
+      <g fill="#C3A6FF" stroke="#261B40" stroke-width="24" paint-order="stroke">
+        <circle cx="565" cy="255" r="100"/><circle cx="765" cy="282" r="95"/><circle cx="922" cy="360" r="80"/><circle cx="690" cy="350" r="80"/><circle cx="850" cy="405" r="70"/>
+      </g>
+      <g fill="#C3A6FF">
+        <circle cx="565" cy="255" r="100"/><circle cx="765" cy="282" r="95"/><circle cx="922" cy="360" r="80"/><circle cx="690" cy="350" r="80"/><circle cx="850" cy="405" r="70"/>
+      </g>
+    </g>
+    <g id="horn">
+      <path d="M655 438 C600 330 430 292 318 342 C198 396 168 545 232 645 C292 742 444 760 512 690 C580 620 562 502 470 472 C390 446 318 502 330 572 C335 600 348 610 360 614" fill="none" stroke="#261B40" stroke-width="98" stroke-linecap="round"/>
+      <path d="M655 438 C600 330 430 292 318 342 C198 396 168 545 232 645 C292 742 444 760 512 690 C580 620 562 502 470 472 C390 446 318 502 330 572 C335 600 348 610 360 614" fill="none" stroke="#76E7C4" stroke-width="72" stroke-linecap="round"/>
+      <circle cx="415" cy="600" r="40" fill="#C3A6FF"/>
+    </g>
+    <g id="head">
+      <path d="M535 435 C600 425 680 440 715 445 L800 425 C860 470 930 470 945 478 L970 530 C1010 545 1060 560 1065 600 C1068 640 1058 665 1050 690 C1020 760 900 805 820 805 C730 805 650 775 598 715 C630 650 645 600 640 590 C580 560 535 500 535 435 Z" fill="#F8F4FC" stroke="#261B40" stroke-width="24" stroke-linejoin="round" paint-order="stroke"/>
+      <path id="ear" d="M572 470 C612 482 650 512 668 548 C640 556 610 550 592 530 C578 512 572 492 572 470 Z" fill="none" stroke="#261B40" stroke-width="13" stroke-linejoin="round"/>
+      <path id="mouth" d="M968 670 C990 690 1030 690 1050 665" fill="none" stroke="#261B40" stroke-width="14" stroke-linecap="round"/>
+      <g id="eye">
+        <ellipse cx="835" cy="577" rx="58" ry="62" fill="#261B40"/>
+        <ellipse cx="849" cy="549" rx="20" ry="16" fill="#F8F4FC" transform="rotate(35 849 549)"/>
+      </g>
+    </g>
+  </g>
+</svg>

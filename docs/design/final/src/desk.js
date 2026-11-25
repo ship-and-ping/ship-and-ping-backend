@@ -22,6 +22,7 @@
     var n = { kind: 'app', top: 'apps', app: app, tab: null, crumb: ['내 앱', app], title: '', narrow: false, path: '/apps/' + APPS[app].slug };
     var m = function (o) { for (var k in o) n[k] = o[k]; return n; };
     if (id === 's0') return m({ kind: 'landing', path: '/' });
+    if (id === 'brand-sheep') return m({ kind: 'landing', path: '/brand' });   /* 비교용 한 장(앱 화면 아님) */
     if (id === 's1' || /^s11-(done|logout)/.test(id)) return m({ kind: 'public', path: id === 's1' ? '/login' : '/' });
     if (/^s2/.test(id)) return m({ app: null, crumb: [], title: '내 앱', path: '/apps' });
     if (id === 's3') return m({ app: null, crumb: ['내 앱'], title: '앱 등록', narrow: true, path: '/apps/new' });

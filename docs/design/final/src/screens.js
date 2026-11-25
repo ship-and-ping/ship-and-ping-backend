@@ -89,7 +89,7 @@
     desc: '첫 기록이 도착한 순간. 상태 표시가 "첫 기록을 기다려요"에서 "기록이 도착했어요"로, 양이 하는 말이 "기능 8개를 찾았어요"로 바뀐다. 아래 목록도 정확히 8줄이고, 이름표에 없던 주소는 "이름 없는 기능 1개"로 따로 모은다.',
     mobile: function () {
       return wrap(K.hdr('모임모아 연결하기', '연결 4단계를 모두 마쳤어요', '내 앱 목록으로') +
-        K.say({ meta: K.swapStatus('wait', '첫 기록을 기다려요', 'ok', '기록이 도착했어요') + '<span>오늘 13:42</span>',
+        K.say({ ping: true, meta: K.swapStatus('wait', '첫 기록을 기다려요', 'ok', '기록이 도착했어요') + '<span>오늘 13:42</span>',
           headline: '<div class="sp-swap"><div class="from"><p class="sp-headline">첫 기록을 기다리고 있어요</p></div><div class="to"><p class="sp-headline">기능 <span style="color:var(--sp-ok)">8</span>개를 찾았어요</p></div></div>',
           body: '<p class="hsub">코딩 AI가 붙인 이름이에요. 알림에 이 이름이 쓰이니 맞는지 봐 주세요. 이름이 없는 기능도 1개 있어요.</p>' }) +
         sec('<h2>찾은 기능 8개</h2>' + names() + '<button class="sp-btn block">이 이름으로 지켜보기</button><p class="sp-sub" style="text-align:center">이름은 나중에 앱 설정에서도 고칠 수 있어요</p>'));
@@ -510,10 +510,11 @@
   var landing = function (m) {
     var bar = m ? '<header class="sp-pubbar m"><a class="brand" href="#s0"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="30" height="30">쉽앤핑</a><span class="grow"></span><a class="sp-btn text" href="#s1">로그인</a></header>' : SP.pubbar();
     var acts = '<div class="acts"><a class="sp-btn" href="#s1" style="text-decoration:none">시작하기</a><a class="sp-btn line" href="#s1" style="text-decoration:none">로그인</a></div>';
-    var hero = '<section class="lsec hero" aria-labelledby="l-h1' + (m ? 'm' : '') + '"><div class="txt"><h1 id="l-h1' + (m ? 'm' : '') + '" class="lt1">바이브 코딩으로 낸 내 앱, 쉽앤핑이 대신 지켜볼게요</h1><p class="lead">코딩 AI로 앱을 만들어 공개한 사람을 위한 관리형 모니터링이에요. 문제가 생기면 쉬운 한 문장으로 알려 드리고, 코딩 AI에 보낼 내용까지 챙겨 드려요.</p>' + acts + '</div>' +
-      '<div class="pic">' + K.say({ meta: K.status('ok') + '<span>예시 화면</span>', headline: '<p class="sp-headline">모임모아는 지금 모두 괜찮아요</p>', body: '<p class="hsub">기능 8개를 지켜보고 있어요. 문제가 생기면 슬랙이나 메일로 바로 알려 드릴게요.</p>' }) + '</div></section>';
-    var pains = '<section class="lsec"><h2 class="lt">사용자가 연락해야 문제를 알게 되나요?</h2><p class="lead">코딩 AI로 만든 앱은 빨리 나오지만, 무엇이 멈추거나 느려졌는지는 직접 써 보거나 누가 알려 줘야 알게 되는 경우가 많아요.</p><ul class="three">' +
-      ['신청 버튼은 눌렸는데 저장이 안 된 것을, 사용자 연락을 받고서야 알아요', '평소보다 느려진 기능은 직접 써 보기 전에는 눈치채기 어려워요', '고쳐서 배포했는데 정말 고쳐졌는지 확인할 방법이 없어요'].map(function (t) { return '<li class="sp-panel"><p>' + t + '</p></li>'; }).join('') + '</ul></section>';
+    var hero = '<section class="lsec hero" aria-labelledby="l-h1' + (m ? 'm' : '') + '"><div class="txt"><h1 id="l-h1' + (m ? 'm' : '') + '" class="lt1">힘겹게 모은 사용자,<br>서버 문제로 잃으실 건가요?</h1><p class="lead strong">사용자가 나쁜 리뷰를 남기기 전에, 먼저 알고 고치세요.</p><p class="lead">쉽앤핑은 바이브 코딩으로 앱을 낸 사람을 위한 관리형 모니터링이에요. 문제가 생기면 쉬운 한 문장으로 알려 드리고, 코딩 AI에 보낼 내용까지 챙겨 드려요.</p>' + acts + '</div>' +
+      /* 상자에서 꺼낸 양(크게, S0에서만 반복 움직임: 숨쉬기·깜빡임·뿔 레이더 핑) + 그 양이 하는 말(카드에는 양을 다시 넣지 않음) */
+      '<div class="pic"><div class="bigsheep">' + SP.sheep('live') + '</div>' + K.say({ noAv: true, meta: K.status('ok') + '<span>예시 화면</span>', headline: '<p class="sp-headline">모임모아는 지금 모두 괜찮아요</p>', body: '<p class="hsub">기능 8개를 지켜보고 있어요. 문제가 생기면 슬랙이나 메일로 바로 알려 드릴게요.</p>' }) + '</div></section>';
+    var pains = '<section class="lsec"><h2 class="lt">나쁜 리뷰로 먼저 알게 되면 늦어요</h2><p class="lead">코딩 AI로 만든 앱은 빨리 나오지만, 무엇이 멈추거나 느려졌는지는 사용자가 연락하거나 리뷰를 남겨야 알게 되는 경우가 많아요. 쉽앤핑은 그 전에 먼저 알려 드려요.</p><ul class="three">' +
+      ['신청 버튼은 눌렸는데 저장이 안 된 것을, 사용자 연락이나 리뷰를 보고서야 알아요', '평소보다 느려진 기능은 직접 써 보기 전에는 눈치채기 어려워요', '고쳐서 배포했는데 정말 고쳐졌는지 확인할 방법이 없어요'].map(function (t) { return '<li class="sp-panel"><p>' + t + '</p></li>'; }).join('') + '</ul></section>';
     var does = '<section class="lsec"><h2 class="lt">쉽앤핑이 대신 답해 주는 세 가지</h2><ul class="three">' +
       [['bad', '어디서 막혔나', '모임 신청 20건 중 6건 실패했어요'], ['wait', '평소보다 느려졌나', '분석이 느려졌어요. 평소 1.1초 → 최근 30분 3.4초'], ['ok', '고쳐졌나', '업데이트 후 분석 15건 모두 평소 속도로 끝났어요']].map(function (r) {
         return '<li class="sp-panel"><span class="lic ' + r[0] + '">' + ic[r[0]](22) + '</span><h3>' + r[1] + '</h3><p class="sp-sub">이렇게 알려 드려요</p><p class="say">' + r[2] + '</p></li>';
@@ -522,7 +523,18 @@
       [['요청문 복사', '앱을 등록하면 연결 요청문을 드려요'], ['코딩 AI에 붙여넣기', '쓰던 코딩 AI 대화창에 붙여넣으면 AI가 기록 전송 코드를 넣어요'], ['배포', '배포하고 앱을 한 번 써 보면 첫 기록이 와요']].map(function (r, i) {
         return '<li class="sp-panel"><span class="n" aria-hidden="true">' + (i + 1) + '</span><h3>' + r[0] + '</h3><p class="sp-sub">' + r[1] + '</p></li>';
       }).join('') + '</ol></section>';
-    var shot = '<section class="lsec"><h2 class="lt">실제 화면은 이렇게 생겼어요</h2><p class="sp-sub">앱 홈 화면 예시예요(예시 데이터).</p><div class="shot">' + s5Hero(!m, true) + K.featList(D.features.slice(0, 4)) + '</div></section>';
+    /* "연결하면 이렇게 보여요" 자리 (data-slot="onboarding")
+       지금은 쉽앤핑 화면 축소본(S2 내 앱 → S3 앱 등록 → S4 연결 요청 → S5 앱 홈)으로 채운다.
+       나중에 "앱 온보딩 화면"(가입 → 앱 등록 → 연결) 그림이 생기면 각 단계의 .frame 안만 이미지로 바꾸면 된다(단계 수·제목·설명 구조는 그대로). */
+    var flowStep = function (n, title, sub, inner) {
+      return '<li><figure class="thumb"><div class="frame" aria-hidden="true"><div class="mini" inert>' + inner + '</div></div><figcaption><span class="n">' + n + '</span><b>' + title + '</b><span class="sp-sub">' + sub + '</span></figcaption></figure></li>';
+    };
+    var shot = '<section class="lsec" data-slot="onboarding"><h2 class="lt">연결하면 이렇게 보여요</h2><p class="sp-sub">가입부터 첫 화면까지의 흐름이에요(예시 데이터).</p><ol class="flow">' +
+      flowStep(1, '가입하고 내 앱 보기', 'Google이나 이메일 링크로 들어와요', byId.s2.mobile()) +
+      flowStep(2, '앱 등록', '앱 이름만 적으면 돼요', byId.s3.mobile()) +
+      flowStep(3, '연결 요청 복사', '코딩 AI에 붙여넣고 배포해요', byId['s4-copy'].mobile()) +
+      flowStep(4, '앱 홈', '문제가 생기면 맨 위 카드가 알려 줘요', byId.s5.mobile()) +
+      '</ol></section>';
     var alerts = '<section class="lsec"><h2 class="lt">알림은 슬랙이나 메일로</h2><div class="three two">' +
       '<div class="sp-panel note"><p class="from">' + ic.slack(18) + '슬랙 #모임모아-알림</p><p><b>쉽앤핑</b></p><p>모임모아: 분석이 느려졌어요. 평소 1.1초 → 최근 30분 3.4초 (24건)</p><p class="lnk">쉽앤핑에서 보기</p></div>' +
       '<div class="sp-panel note"><p class="from">' + ic.mail(18) + '메일</p><p><b>[쉽앤핑] 모임모아: 분석이 느려졌어요</b></p><p>평소 1.1초 → 최근 30분 3.4초 (24건). 고친 버전을 배포하면 쉽앤핑이 실제 사용으로 확인해 드려요.</p><p class="lnk">쉽앤핑에서 보기</p></div>' +
@@ -531,6 +543,18 @@
     return '<div class="sp-landing' + (m ? ' m' : '') + '">' + bar + '<main>' + hero + pains + does + steps + shot + alerts + beta + '</main><footer class="lfoot sp-sub">쉽앤핑 무료 베타</footer></div>';
   };
   E.unshift({ id: 's0', group: 'S0 소개 페이지', title: 'S0 소개 페이지 (로그인 전 첫 화면)', path: '/',
-    desc: '로그인 전 첫 화면. 한 문장 소개(바이브 코딩으로 앱을 낸 사람을 위한 관리형 모니터링), 문제 공감(사용자 연락이 와야 아는 문제), 하는 일 세 가지(어디서 막혔나·평소보다 느려졌나·고쳐졌나), 연결 3단계, 실제 화면 예시(앱 홈 카드, 예시 데이터라고 밝힘), 슬랙·메일 알림 예시, 무료 베타 안내, [시작하기]·[로그인]. 가격·성과 숫자·"최고·유일" 같은 말·지어낸 후기는 쓰지 않는다. 양은 맨 위 예시 카드 한 곳에서만 말한다. [시작하기]와 [로그인]은 모두 S1(Google·이메일 링크)으로 간다.',
+    desc: '로그인 전 첫 화면. 큰 제목은 사용자 요청 말투를 살린 "힘겹게 모은 사용자, 서버 문제로 잃으실 건가요?", 바로 아래 "사용자가 나쁜 리뷰를 남기기 전에, 먼저 알고 고치세요." 오른쪽에는 상자에서 꺼낸 SVG 양이 크게 서서 숨쉬고 눈을 깜빡이고 뿔에서 레이더 핑을 보낸다(반복 움직임은 이 화면에서만, 동작 줄이기면 정지). "연결하면 이렇게 보여요"는 나중에 앱 온보딩 화면 그림으로 바꿀 자리이고 지금은 S2→S3→S4→S5 축소본. 한 문장 소개(바이브 코딩으로 앱을 낸 사람을 위한 관리형 모니터링), 문제 공감(사용자 연락·리뷰로 알게 되는 문제), 하는 일 세 가지(어디서 막혔나·평소보다 느려졌나·고쳐졌나), 연결 3단계, 실제 화면 예시(앱 홈 카드, 예시 데이터라고 밝힘), 슬랙·메일 알림 예시, 무료 베타 안내, [시작하기]·[로그인]. 가격·성과 숫자·"최고·유일" 같은 말·지어낸 후기는 쓰지 않는다. 양은 맨 위 큰 양 한 마리뿐이다(예시 카드와 축소본에는 넣지 않음). [시작하기]와 [로그인]은 모두 S1(Google·이메일 링크)으로 간다.',
     mobile: function () { return landing(true); }, pc: function () { return landing(false); } });
+
+  /* ---------------- 양 원본 PNG ↔ SVG 비교 (D4) ---------------- */
+  var compare = function (m) {
+    return '<div class="sp-compare' + (m ? ' m' : '') + '">' +
+      '<figure><div class="box dark"><img src="../brand/ship-and-ping-sheep-1254.png" alt="쉽앤핑 양 원본 그림(퍼플 배경)"></div><figcaption class="sp-sub">원본 PNG 1254px(퍼플 배경). 앱 아이콘·파비콘·SNS용으로 그대로 쓴다</figcaption></figure>' +
+      '<figure><div class="box dark">' + SP.sheep('') + '</div><figcaption class="sp-sub">새 SVG, 같은 퍼플 바탕 위. 원본과 모양을 맞춰 본다</figcaption></figure>' +
+      '<figure><div class="box light">' + SP.sheep('live') + '</div><figcaption class="sp-sub">새 SVG, 밝은 바탕(상자 없음). 짙은 퍼플 분리선이 테두리가 되어 흰 몸이 보인다. 이 칸만 움직임 예시(숨쉬기·깜빡임·뿔 핑)</figcaption></figure>' +
+      '</div>';
+  };
+  insertAfter('s0', { id: 'brand-sheep', group: '브랜드', title: '양 캐릭터: 원본 PNG와 새 SVG 비교', path: '/brand',
+    desc: '사용자가 보낸 1254px 원본(퍼플 배경, 투명 원본·벡터 없음)을 보고 SVG로 다시 그렸다(docs/design/brand/sheep.svg). 민트 나선 뿔과 가운데 라벤더 점, 라벤더 구름 털, 흰 머리·몸, 뾰족한 귀, 검은 눈과 흰 반사, 미소 입, 로봇 다리 4개(관절 원·발판), 부위 사이 짙은 퍼플 분리선. 부위별 그룹(horn, wool, head, eye, body, leg-1~4)이라 따로 움직일 수 있다. 브라우저에서 원본과 나란히 놓고 모양 차이를 확인해야 한다(이 작업에서는 열어 보지 못함).',
+    mobile: function () { return compare(true); }, pc: function () { return compare(false); } });
 })(window.SP);

@@ -83,6 +83,34 @@
 .sp-landing .beta { align-items: flex-start; padding: 32px; }
 .sp-landing .lfoot { text-align: center; padding: 24px 16px 40px; border-top: 1px solid var(--sp-line); }
 .sp-landing .pic .sp-say { margin: 0; }
+/* 큰 제목: 두 줄로 끊어 한 줄을 짧게(PC 46px, 한 줄 최대 약 14자), 줄 간격 1.25, 본문 글자색 */
+.sp-landing .lt1 { text-wrap: balance; color: var(--sp-ink); }
+.sp-landing .lead.strong { color: var(--sp-ink); font-weight: var(--sp-weight-bold); font-size: calc(20px * var(--sp-scale)); }
+/* 상자에서 꺼낸 큰 양: 카드 위에 서 있다 */
+.sp-landing .pic { display: flex; flex-direction: column; align-items: flex-start; }
+.sp-landing .bigsheep { width: 220px; margin: 0 0 -28px 28px; position: relative; z-index: 1; }
+.sp-landing .bigsheep .sp-sheep { width: 100%; height: auto; display: block; overflow: visible; }
+.sp-landing .pic .sp-hero { padding-top: 40px; width: 100%; }
+.sp-landing.m .bigsheep { width: 150px; margin-left: 16px; }
+/* "연결하면 이렇게 보여요" 자리(data-slot="onboarding"): 단계마다 화면 축소본. 나중에 .frame 안을 온보딩 그림으로 바꾼다 */
+.sp-landing .flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.sp-landing .thumb { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.sp-landing .thumb .frame { --s: .58; width: calc(390px * var(--s)); height: calc(640px * var(--s)); overflow: hidden; border-radius: 18px; border: 1px solid var(--sp-line-strong); background: var(--sp-bg); }
+.sp-landing .thumb .mini { width: 390px; transform: scale(var(--s)); transform-origin: top left; pointer-events: none; }
+.sp-landing .thumb .mini .sp-av { display: none; }   /* 축소본에는 양을 넣지 않는다(이 페이지의 양은 맨 위 하나) */
+.sp-landing .thumb .mini .sp-say:not(.noav) > .sp-hero { padding-top: 20px; }
+.sp-landing .thumb figcaption { display: flex; flex-direction: column; gap: 2px; }
+.sp-landing .thumb figcaption .n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--sp-btn); color: var(--sp-on-btn); font-weight: var(--sp-weight-bold); font-size: var(--sp-text-sm); margin-bottom: 4px; }
+.sp-landing.m .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.sp-landing.m .thumb .frame { --s: .4; }
+/* 원본 PNG와 SVG 비교 */
+.sp-compare { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; padding: 40px; align-items: start; }
+.sp-compare figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.sp-compare .box { aspect-ratio: 1; border-radius: 16px; display: grid; place-items: center; border: 1px solid var(--sp-line); overflow: hidden; }
+.sp-compare .box.dark { background: #261B40; } .sp-compare .box.light { background: var(--sp-bg); }
+.sp-compare .box img { width: 100%; height: 100%; object-fit: contain; }
+.sp-compare .box .sp-sheep { width: 78%; height: auto; overflow: visible; }
+.sp-compare.m { grid-template-columns: 1fr; padding: 16px; }
 /* 휴대폰 */
 .sp-pubbar.m { padding: 6px 12px 10px 16px; border-bottom: 0; }
 .sp-landing.m .lsec { padding: 32px 16px; gap: 16px; }
