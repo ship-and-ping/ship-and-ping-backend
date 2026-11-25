@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(39);
+select plan(47);
 
 select is(private.mask(input), expected, 'mask ' || id)
 from (values
@@ -34,7 +34,15 @@ from (values
   (27, E'desk' || E'_live___fixture__', E'desk' || E'_live___fixture__'),
   (28, E'/task' || E'_list', E'/task' || E'_list'),
   (29, E'/task' || E'_list_abcdefghijk', E'/task' || E'_list_abcdefghijk'),
-  (30, E'épk' || E'_abcdefghijklmnop', E'é[가림]')
+  (30, E'épk' || E'_abcdefghijklmnop', E'é[가림]'),
+  (31, E'010-1234-5678로 전송 실패', E'[가림]로 전송 실패'),
+  (32, E'번호01012345678', E'번호[가림]'),
+  (33, E'0101234567890123', E'0101234567890123'),
+  (34, E'메일a@example.test로 전송', E'메일[가림]로 전송'),
+  (35, E'오류Bearer: demo; 값token=demo', E'오류[가림]; 값[가림]'),
+  (36, E'헤더Cookie: sid=one', E'헤더[가림]'),
+  (37, E'인증Basic YWJjZGVmZ2hpamts', E'인증[가림]'),
+  (38, E'인증eyJdemo', E'인증[가림]')
 ) as cases(id, input, expected);
 
 select is(private.route(input), expected, 'route ' || id)

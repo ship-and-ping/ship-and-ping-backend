@@ -13,10 +13,8 @@ export function normalizePromptInput(value: string): string {
   return normalizeText(value).replace(/\n+/g, " ").trim();
 }
 
-// Rust's Unicode word boundary also treats combining marks and connector
-// punctuation as word characters. Short key prefixes have an ASCII boundary.
-const word = "[\\p{Alphabetic}\\p{M}\\p{Nd}\\p{Pc}\\u200c\\u200d]";
-const start = "(?<!" + word + ")";
+// Header and credential names can follow Korean text.
+const start = "(?<![A-Za-z0-9_])";
 const privatePattern = new RegExp([
   start + /(?:set-cookie|cookie)[ \t]*:[^\r\n]*/.source,
   start + /bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;]+/.source,
@@ -25,7 +23,7 @@ const privatePattern = new RegExp([
   "(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|" + start + "eyJ)[a-z0-9_.=-]+",
   /(?<![a-z0-9])(?:sk|pk|rk)_[a-z0-9_]{16,}/.source,
   /[a-z0-9._%+-]+(?:@|%40)[a-z0-9.-]+\.[a-z]{2,}/.source,
-  "\\+?" + start + /\p{Nd}(?:[ ().-]*\p{Nd}){8,14}/u.source + "(?!" + word + ")",
+  /(?<![0-9])\+?\p{Nd}(?:[ ().-]*\p{Nd}){8,14}(?![0-9])/u.source,
 ].join("|"), "giu");
 
 export function maskText(value: string): string {

@@ -119,6 +119,38 @@
     {
       "input": "épk_abcdefghijklmnop",
       "expected": "é[가림]"
+    },
+    {
+      "input": "010-1234-5678로 전송 실패",
+      "expected": "[가림]로 전송 실패"
+    },
+    {
+      "input": "번호01012345678",
+      "expected": "번호[가림]"
+    },
+    {
+      "input": "0101234567890123",
+      "expected": "0101234567890123"
+    },
+    {
+      "input": "메일a@example.test로 전송",
+      "expected": "메일[가림]로 전송"
+    },
+    {
+      "input": "오류Bearer: demo; 값token=demo",
+      "expected": "오류[가림]; 값[가림]"
+    },
+    {
+      "input": "헤더Cookie: sid=one",
+      "expected": "헤더[가림]"
+    },
+    {
+      "input": "인증Basic YWJjZGVmZ2hpamts",
+      "expected": "인증[가림]"
+    },
+    {
+      "input": "인증eyJdemo",
+      "expected": "인증[가림]"
     }
   ],
   "route": [

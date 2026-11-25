@@ -365,6 +365,8 @@ figcaption {
 .app-card:hover {
   border-color: var(--sp-line-strong);
 }
+.workspace .hero-card p,
+.rail nav > small,
 .app-card h2,
 .compact > span {
   overflow-wrap: anywhere;
