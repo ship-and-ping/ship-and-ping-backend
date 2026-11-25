@@ -10,6 +10,17 @@ thread_local! { static LIMITS: RefCell<Limits> = RefCell::default(); }
 
 struct SinkError(u16, &'static str);
 
+struct PendingLookup<'a> {
+    hash: &'a str,
+    missing: bool,
+}
+impl Drop for PendingLookup<'_> {
+    fn drop(&mut self) {
+        let now = Date::now().as_millis() / 1000;
+        LIMITS.with_borrow_mut(|state| state.finish_lookup(self.hash, self.missing, now));
+    }
+}
+
 impl From<worker::Error> for SinkError {
     fn from(_: worker::Error) -> Self {
         Self(503, "storage unavailable")
@@ -87,14 +98,25 @@ impl Supabase {
         if let Some(app) = LIMITS.with_borrow(|state| state.cached(hash, now)) {
             return Ok(app);
         }
+        match LIMITS.with_borrow_mut(|state| state.begin_lookup(hash, now)) {
+            Err(()) => return Err(SinkError(429, "key lookup quota exceeded")),
+            Ok(false) => return Err(SinkError(401, "unknown key")),
+            Ok(true) => {}
+        }
+        let mut pending = PendingLookup {
+            hash,
+            missing: false,
+        };
         let body = json!({"app_key_hash": hash}).to_string().into_bytes();
-        let mut response = self.rpc("lookup_key_app", body).await?;
-        let app = response
+        let app = self
+            .rpc("lookup_key_app", body)
+            .await?
             .json::<Option<uuid::Uuid>>()
             .await
-            .map_err(|_| SinkError(503, "invalid lookup response"))?
-            .ok_or(SinkError(401, "unknown key"))?
-            .to_string();
+            .map_err(|_| SinkError(503, "invalid lookup response"))?;
+        pending.missing = app.is_none();
+        let app = app.ok_or(SinkError(401, "unknown key"))?.to_string();
+        let now = Date::now().as_millis() / 1000;
         LIMITS.with_borrow_mut(|state| state.remember(hash, &app, now));
         Ok(app)
     }
@@ -115,13 +137,13 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
         return error(400, "POST required");
     }
     let headers = req.headers();
-    let auth = headers.get("Authorization")?.unwrap_or_default();
-    let Ok(key) = credential(&auth) else {
-        return error(401, "invalid key format");
-    };
-    let hash = key_hash(key);
+    let auth = headers.get("Authorization")?;
     let content_type = headers.get("Content-Type")?.unwrap_or_default();
     let mime = content_type.split(';').next().unwrap_or("").trim();
+    let beacon = !feature_map && mime.eq_ignore_ascii_case("text/plain");
+    if auth.as_ref().is_some_and(|v| credential(v).is_err()) || (auth.is_none() && !beacon) {
+        return error(401, "invalid key format");
+    }
     if !(mime.eq_ignore_ascii_case("application/json") || mime.eq_ignore_ascii_case("text/plain")) {
         return error(400, "JSON body required");
     }
@@ -132,19 +154,6 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
     {
         return error(413, "batch too large");
     }
-    let now = Date::now().as_millis() as i64;
-    let seconds = (now / 1000) as u64;
-    let db = match Supabase::configured(&env) {
-        Ok(db) => db,
-        Err(SinkError(status, msg)) => return error(status, msg),
-    };
-    let app = match &db {
-        Some(db) => match db.app(&hash, seconds).await {
-            Ok(app) => app,
-            Err(SinkError(status, msg)) => return error(status, msg),
-        },
-        None => hash.clone(),
-    };
     let mut body = Vec::new();
     let Ok(mut stream) = req.stream() else {
         return error(400, "missing body");
@@ -158,6 +167,49 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
         }
         body.extend_from_slice(&chunk);
     }
+    let auth = match auth {
+        Some(header) => header,
+        None => {
+            #[derive(serde::Deserialize)]
+            struct Beacon {
+                key: Option<String>,
+            }
+            let Ok(beacon) = serde_json::from_slice::<Beacon>(&body) else {
+                return error(400, "invalid beacon");
+            };
+            let Some(key) = beacon.key else {
+                return error(401, "missing key");
+            };
+            if key.starts_with("sp_srv_") {
+                return error(400, "server key requires header");
+            }
+            format!("Bearer {key}")
+        }
+    };
+    let Ok(key) = credential(&auth) else {
+        return error(401, "invalid key format");
+    };
+    let hash = key_hash(key);
+    let now = Date::now().as_millis() as i64;
+    let seconds = (now / 1000) as u64;
+    let db = match Supabase::configured(&env) {
+        Ok(db) => db,
+        Err(SinkError(status, msg)) => return error(status, msg),
+    };
+    let app = match &db {
+        Some(db) => match db.app(&hash, seconds).await {
+            Ok(app) => app,
+            Err(SinkError(429, msg)) => {
+                let mut response = error(429, msg)?;
+                response
+                    .headers_mut()
+                    .set("Retry-After", &(60 - seconds % 60).to_string())?;
+                return Ok(response);
+            }
+            Err(SinkError(status, msg)) => return error(status, msg),
+        },
+        None => hash.clone(),
+    };
     let (rpc, counts) = match if feature_map {
         prepare_map(&hash, &body)
     } else {

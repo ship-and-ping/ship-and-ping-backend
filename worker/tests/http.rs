@@ -50,7 +50,7 @@ fn ingest_http_statuses() {
         assert!(Instant::now() < deadline, "workerd startup timeout");
         thread::sleep(Duration::from_millis(30));
     }
-    let send_to = |addr: std::net::SocketAddr, auth: &str, data: &str| {
+    let post = |addr: std::net::SocketAddr, mime: &str, auth: &str, data: &str| {
         let mut child = Command::new("curl")
             .args([
                 "--silent",
@@ -60,7 +60,7 @@ fn ingest_http_statuses() {
                 "--write-out",
                 "\n%{http_code}",
                 "--header",
-                "Content-Type: application/json",
+                &format!("Content-Type: {mime}"),
                 "--header",
                 &format!("Authorization: {auth}"),
                 "--data-binary",
@@ -86,6 +86,7 @@ fn ingest_http_statuses() {
             serde_json::from_str::<Value>(body).unwrap(),
         )
     };
+    let send_to = |addr, auth: &str, data: &str| post(addr, "application/json", auth, data);
     let send = |auth: &str, data: &str| send_to(addr, auth, data);
     let auth = ["Bearer sp", "pub", "fixture"].join("_");
     let key = auth.as_str();
@@ -93,7 +94,7 @@ fn ingest_http_statuses() {
     assert_eq!(send(key, "{").0, 400);
     assert_eq!(send(key, "{}").0, 400);
     assert_eq!(send(key, &" ".repeat(65537)).0, 413);
-    let now: chrono::DateTime<chrono::Utc> = std::time::SystemTime::now().into();
+    let now = "2027-01-15T08:00:59Z";
     let mut batch = json!({"spec":"sp-1","batch_id":"badcafe0-0000-4000-8000-000000000001","app_version":"ok","platform":"server","sent_at":now,
         "records":[{"type":"request","ts":now,"method":"GET","route":"/a","status":200,"duration_ms":1},null]});
     assert_eq!(
@@ -101,6 +102,27 @@ fn ingest_http_statuses() {
         (202, json!({"accepted":1,"dropped":1}))
     );
     assert_eq!(send_to(missing_addr, key, &batch.to_string()).0, 503);
+    let mut beacon = batch.clone();
+    beacon["key"] = json!(auth.strip_prefix("Bearer ").unwrap());
+    let plain =
+        |auth, data: &Value| post(addr, "text/plain;charset=UTF-8", auth, &data.to_string()).0;
+    assert_eq!(plain("", &beacon), 202);
+    assert_eq!(send("", &beacon.to_string()).0, 401);
+    beacon["key"] = json!(["sp", "srv", "fixture"].join("_"));
+    assert_eq!(plain("", &beacon), 400);
+    assert_eq!(plain(key, &beacon), 202);
+    assert_eq!(plain("Bearer malformed", &beacon), 401);
+    for (suffix, status) in [
+        ("missing", 401),
+        ("missing", 401),
+        ("outage", 503),
+        ("outage", 503),
+    ] {
+        assert_eq!(
+            send(&["Bearer sp", "pub", suffix].join("_"), &batch.to_string()).0,
+            status
+        );
+    }
     assert_eq!(
         send_to(dry_addr, key, &batch.to_string()),
         (202, json!({"accepted":1,"dropped":1}))
@@ -142,6 +164,12 @@ fn ingest_http_statuses() {
     let item = json!({"route":"/a/42?q=x","method":"GET","name":"token=example"});
     assert_eq!(feature(&json!([item.clone()]).to_string()), "202");
     assert_eq!(feature("[{}]"), "400");
+    assert_eq!(feature(&json!(vec![item.clone(); 200]).to_string()), "202");
+    for (field, value) in [("route", "relative"), ("method", "get"), ("name", " ")] {
+        let mut bad = item.clone();
+        bad[field] = json!(value);
+        assert_eq!(feature(&json!([item.clone(), bad]).to_string()), "400");
+    }
     assert_eq!(feature(&json!(vec![item; 201]).to_string()), "413");
     let preflight = Command::new("curl")
         .args([
@@ -160,6 +188,8 @@ fn ingest_http_statuses() {
         headers.contains("204")
             && headers.contains("access-control-allow-origin: *")
             && headers.contains("authorization, content-type")
+            && headers.contains("access-control-allow-methods: post, options")
+            && headers.contains("access-control-expose-headers: retry-after")
     );
     batch["app_version"] = json!("quota");
     let mut limited = false;
@@ -187,4 +217,9 @@ fn ingest_http_statuses() {
         assert!(headers.lines().next().unwrap().contains("202"));
     }
     assert!(limited);
+    let unknown = ["Bearer sp", "pub", "missing"].join("_");
+    for _ in 2..100 {
+        assert_eq!(send(&unknown, "{}").0, 401);
+    }
+    assert_eq!(send(&unknown, "{}").0, 429);
 }

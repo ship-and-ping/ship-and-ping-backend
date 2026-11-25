@@ -1,5 +1,6 @@
 using Workerd = import "/workerd/workerd.capnp";
 const ingestModules :List(Workerd.Worker.Module) = [
+    (name = "clock.js", esModule = embed "clock.js"),
     (name = "index.js", esModule = embed "../build/index.js"),
     (name = "index_bg.wasm", wasm = embed "../build/index_bg.wasm")
 ];
