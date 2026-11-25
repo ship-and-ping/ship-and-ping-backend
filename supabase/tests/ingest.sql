@@ -31,19 +31,34 @@ select throws_ok($q$select ingest_batch(current_setting('test.hash'),pg_temp.bat
 update app_keys set revoked_at=null,expires_at=now() where key_hash=current_setting('test.hash');
 select throws_ok($q$select ingest_batch(current_setting('test.hash'),pg_temp.batch(gen_random_uuid()))$q$,'PT401',null,'expired key denied');
 
--- Adjacent aligned buckets straddle the 30-day cutoff.
-insert into stats_5m select app_id,feature_id,version,date_bin('5 minutes',now()-interval '30 days','epoch'),total,failures,
+-- Choose an hour wholly before the same cutoff used to find expired rows.
+select now()-interval '7 days' as cutoff \gset
+insert into stats_5m select app_id,feature_id,version,date_trunc('hour',:'cutoff'::timestamptz)-interval '1 hour',total,failures,
  client_errors,duration_sum_ms,hist from stats_5m;
-insert into stats_5m select app_id,feature_id,version,bucket+interval '5 minutes',total,failures,client_errors,duration_sum_ms,hist
- from stats_5m where bucket < now()-interval '30 days';
+insert into stats_5m select app_id,feature_id,version,bucket+interval '5 minutes',3,1,1,37,array[1,2] || array_fill(0,array[14])
+ from stats_5m where bucket < :'cutoff'::timestamptz;
+insert into private.evaluation_buckets
+ select app_id,feature_id,version,bucket,array_fill(0,array[16]),null,null,total,0,5000 from stats_5m;
 select cleanup_daily();
--- A late 5m row reaches an hour already rolled up on an earlier run.
-insert into stats_5m select app_id,feature_id,version,bucket,3,1,1,37,array[1,2] || array_fill(0,array[14]) from stats_1h;
-select cleanup_daily();
-select is((select count(*) from stats_5m),2::bigint,'recent side retained');
+select is((select count(*) from private.evaluation_buckets),1::bigint,'only recent evaluation inputs remain');
 select results_eq('select total,failures,client_errors,duration_sum_ms,hist from stats_1h',
- 'select 45,43,1,121::bigint,array[43,2] || array_fill(0,array[14])','late bucket adds all metrics to existing hour');
+ 'select 45,43,1,121::bigint,array[43,2] || array_fill(0,array[14])','expired five-minute buckets combine by hour');
+-- A late 5m row reaches an hour already rolled up on an earlier run.
+insert into stats_5m select app_id,feature_id,version,bucket+interval '10 minutes',3,1,1,37,array[1,2] || array_fill(0,array[14]) from stats_1h;
 select cleanup_daily();
-select is((select total from stats_1h),45,'rerun leaves merged hour unchanged');
+select is((select count(*) from stats_5m),1::bigint,'recent side retained');
+select results_eq('select total,failures,client_errors,duration_sum_ms,hist from stats_1h',
+ 'select 48,44,2,158::bigint,array[44,4] || array_fill(0,array[14])','late bucket adds all metrics to existing hour');
+select cleanup_daily();
+select is((select total from stats_1h),48,'rerun leaves merged hour unchanged');
+
+-- Exercise an aligned bucket with a deterministic clock on both sides of seven days.
+select private.rollup_5m(bucket + interval '6 days 23 hours 59 minutes') from stats_5m;
+select is((select count(*) from stats_5m),1::bigint,'6d 23h 59m remains available');
+select private.rollup_5m(bucket + interval '7 days') from stats_5m;
+select is((select count(*) from private.evaluation_buckets),1::bigint,'baseline window includes the exact cutoff');
+select private.rollup_5m(bucket + interval '7 days 1 second') from stats_5m;
+select is_empty('select bucket from stats_5m','older than seven days rolls up');
+select is_empty('select bucket from private.evaluation_buckets','expired evaluation inputs follow their parent');
 select * from finish();
 rollback;

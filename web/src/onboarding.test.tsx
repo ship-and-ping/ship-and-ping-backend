@@ -174,6 +174,17 @@ it("클립보드가 막히면 직접 복사할 전문을 선택한다", async ()
   expect(field.selectionEnd - field.selectionStart).toBe(field.value.length);
   expect(field.value).toBe(buildConnectPrompt(pub, base));
 });
+it("베타 정원이 차면 앱 등록 화면에 이유를 표시한다", async () => {
+  const api = fake();
+  vi.mocked(api.create).mockRejectedValue({ code: "PT409", message: "beta capacity reached" });
+  open("/apps/new", api);
+  fireEvent.change(await screen.findByLabelText("앱 이름 (필수)"), {
+    target: { value: "새 앱" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "등록" }));
+  expect(await screen.findByText("베타 정원이 찼어요")).toBeTruthy();
+  expect(api.issue).not.toHaveBeenCalled();
+});
 it("등록한 수집 키는 미리 보기에서 가리고 화면을 다시 열면 폐기한다", async () => {
   const api = fake();
   open("/apps/new", api);
