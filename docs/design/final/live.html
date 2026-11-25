@@ -39,7 +39,7 @@
       root.setAttribute('data-anim', e.anim || '');
       root.innerHTML = SP.deskHtml(e);
       root.classList.remove('play'); void root.offsetWidth; if (e.anim) root.classList.add('play');
-      document.title = '쉽앤핑 화면: ' + e.title;
+      document.title = '쉽앤핑 화면: ' + SP.mask(e.title);   /* 문서 제목은 글자로만 들어가지만 키는 가린다 */
       if (focus) { var t = null; root.querySelectorAll('[data-ft]').forEach(function (el) { if (!t && el.offsetParent !== null) t = el; }); if (t) t.focus({ preventScroll: true }); }
     }
     window.addEventListener('hashchange', function () { draw(true); window.scrollTo(0, 0); });
