@@ -27,6 +27,7 @@ select results_eq('select name,kind from pg_temp.problems order by name',
  $q$values ('missing','unconfirmed'),('slow','slow'),('streak','failure')$q$,'C6 kinds and features');
 select is((select count(*) from pg_temp.problems where name='fail'),0::bigint,'four results below minimum');
 select is((select count(*) from attempts where status='unconfirmed'),5::bigint,'timeout at ten minutes');
+select is((select metric_at_open->>'consecutive' from pg_temp.problems where name='streak'),'true','incident retains three consecutive failures');
 select is((select p50_ms from baselines join features on id=feature_id where name='learn'),null::int,'C8 29 successes');
 select results_eq($q$select sample_count,observed_min_ms,observed_max_ms from baselines join features on id=feature_id where name='learn'$q$,'select 29,77,77','observations before learning');
 select pg_temp.results('learn','old','success',1,77,'1 minute');

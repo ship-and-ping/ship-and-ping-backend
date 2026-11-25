@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface Feature {
+  kind?: "auto" | "deep";
   hidden?: boolean;
   id: string;
   name: string;
@@ -15,6 +16,7 @@ export interface Feature {
   } | null;
 }
 export interface Stat {
+  attemptStatus?: string;
   feature_id: string;
   version: string;
   bucket: string;
@@ -24,6 +26,8 @@ export interface Stat {
   hist: number[];
 }
 interface Metric {
+  unconfirmed?: number;
+  consecutive?: boolean;
   total?: number;
   failures?: number;
   p50?: number;
@@ -87,7 +91,7 @@ export async function loadMonitor(
     client
       .from("features")
       .select(
-        "id,name,method,route,hidden,slow_threshold_ms,baselines(p50_ms,sample_count,observed_min_ms,observed_max_ms)",
+        "id,kind,name,method,route,hidden,slow_threshold_ms,baselines(p50_ms,sample_count,observed_min_ms,observed_max_ms)",
       )
       .eq("app_id", app)
       .order("id")
@@ -126,7 +130,7 @@ export async function loadMonitor(
     : undefined;
   const cutoff = new Date(
     incident
-      ? Date.parse(incident.opened_at) - 300000
+      ? Date.parse(incident.opened_at) - (incident.kind === "unconfirmed" ? 3600000 : 1800000)
       : now - (selected ? 7 : 1) * 86400000,
   ).toISOString();
   const stats = pages<Stat>((a, b) => {
@@ -147,7 +151,7 @@ export async function loadMonitor(
     status: string;
   };
   const deep = read(features).filter(
-    (f) => !f.method && (!selected || selected === f.id),
+    (f) => f.kind === "deep" && (!selected || selected === f.id),
   );
   const attempts = deep.length
     ? pages<Attempt>((a, b) =>
@@ -177,7 +181,7 @@ export async function loadMonitor(
         .eq("app_id", app)
         .eq("feature_id", selected)
     : null;
-  if (incident) sampleQuery?.gte("at", incident.opened_at);
+  if (incident) sampleQuery?.gte("at", cutoff).lte("at", incident.closed_at ?? new Date(now).toISOString());
   const kindRows = featureId
     ? pages<{ error_kind: string | null; at: string }>((a, b) =>
         client
@@ -198,14 +202,15 @@ export async function loadMonitor(
     sampleQuery
       ? sampleQuery.order("at", { ascending: false }).order("id").limit(5)
       : { data: [], error: null },
-    issueId
+    selected && deep.length
       ? client
           .from("attempts")
           .select("step")
           .eq("app_id", app)
           .eq("feature_id", selected)
           .eq("status", "failure")
-          .gte("ended_at", incident!.opened_at)
+          .gte("ended_at", cutoff)
+          .lte("ended_at", incident?.closed_at ?? new Date(now).toISOString())
           .not("step", "is", null)
           .order("ended_at", { ascending: false })
           .limit(1)
@@ -218,9 +223,10 @@ export async function loadMonitor(
     const bucket = attempt.ended_at ?? attempt.started_at;
     if (!bucket) continue;
     const hist = bounds.map(() => 0);
-    if (attempt.ended_at && attempt.duration_ms != null)
+    if (attempt.status === "success" && attempt.duration_ms != null)
       hist[bounds.findIndex((n) => attempt.duration_ms! <= n)]++;
     rows.push({
+      attemptStatus: attempt.status,
       feature_id: attempt.feature_id,
       version: attempt.version,
       bucket,
@@ -263,11 +269,14 @@ const bounds = [
   Infinity,
 ];
 export function summarize(rows: Stat[]) {
+  let abandoned = 0, unconfirmed = 0;
   let total = 0,
     failures = 0,
     excluded = 0;
   const hist = bounds.map(() => 0);
   for (const row of rows) {
+    if (row.attemptStatus === "abandon") abandoned++;
+    if (row.attemptStatus === "unconfirmed") unconfirmed++;
     excluded += row.client_errors ?? 0;
     total += row.total;
     failures += row.failures;
@@ -277,6 +286,7 @@ export function summarize(rows: Stat[]) {
   let left = Math.ceil(measured / 2);
   const index = hist.findIndex((n) => (left -= n) <= 0);
   return {
+    abandoned, unconfirmed,
     total,
     failures,
     successes: total - failures - excluded,

@@ -561,6 +561,7 @@ summary {
   cursor: pointer;
   padding-block: 0.75em;
 }
+.deep-page pre,
 .monitor pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

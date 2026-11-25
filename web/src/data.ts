@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { loadMonitor, type Monitor } from "./monitor-data";
+import type { DeepFeature, Definitions, FirstResult } from "./deep";
 
 interface AppRow {
   id: string;
@@ -24,6 +25,9 @@ export interface Snapshot {
   labels: Label[];
 }
 export interface Gateway {
+  deepFeatures(app: string): Promise<DeepFeature[]>;
+  saveDeep(app: string, fields: Definitions): Promise<DeepFeature>;
+  firstResult(app: string, feature: string): Promise<FirstResult | null>;
   settings(app: string): Promise<AlertSettings>;
   emailSetting(app: string, enabled: boolean): Promise<void>;
   disconnectSlack(app: string): Promise<void>;
@@ -62,6 +66,21 @@ function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
 export function gateway(client: SupabaseClient): Gateway {
   const columns = "id,name,created_at,first_record_at";
   return {
+    async deepFeatures(app) {
+      return value(await client.from("features").select("id,feature_key,name,start:start_definition,success:success_definition")
+        .eq("app_id", app).eq("kind","deep").order("created_at"));
+    },
+    async saveDeep(app, fields) {
+      return value(await client.rpc("save_deep_feature", {p_app:app,p_feature:null,p_name:fields.name,p_start:fields.start,p_success:fields.success})
+        .select("id,feature_key,name,start:start_definition,success:success_definition").single<DeepFeature>());
+    },
+    async firstResult(app, feature) {
+      const result = await client.from("attempts").select("status,duration_ms")
+        .eq("app_id",app).eq("feature_id",feature).not("ended_at","is",null)
+        .order("result_received_at").order("attempt_id").limit(1).maybeSingle<FirstResult>();
+      if (result.error) throw result.error;
+      return result.data;
+    },
     async settings(app) {
       return value(await client.rpc("notification_settings", { app }));
     },
