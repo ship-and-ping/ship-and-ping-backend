@@ -6,9 +6,6 @@ it.each([
   "sp_pub_",
   "sb_secret_",
   "sb_publishable_",
-  "sk_",
-  "pk_",
-  "rk_",
 ])("normalizes and masks embedded %s", (prefix) => {
   const fullwidth = prefix
     .toUpperCase()
@@ -18,6 +15,13 @@ it.each([
       "앞x" + fullwidth[0] + "\u200b" + fullwidth.slice(1) + "te\u202est123뒤",
     ),
   ).toBe("앞x[가림]뒤");
+});
+it.each(["sk_", "pk_", "rk_"])("requires a word boundary and 16 alphanumerics for %s", (prefix) => {
+  const token = prefix + "a1".repeat(8);
+  expect(displayText("/" + token.toUpperCase())).toBe("/[가림]");
+  for (const normal of ["desk_", "/task_list", token.slice(0, -1), "x" + token, "_" + token]) {
+    expect(displayText(normal)).toBe(normal);
+  }
 });
 it("masks personal data, preserves the member’s own login email exactly", () => {
   expect(

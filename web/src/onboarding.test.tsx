@@ -39,7 +39,7 @@ function fake(user: string | null = "member"): Gateway {
     create: vi.fn(async () => "a"),
     issue: vi.fn(async (_id, kind) => (kind === "pub" ? pub : secret)),
     snapshot: vi.fn(async () => ({ app, labels: [] })),
-    save: vi.fn(),
+    save: vi.fn(async () => []),
   };
 }
 it("서버 키 복사는 현재 앱에 한정되고 요청문은 다시 복사해도 같다", async () => {
@@ -197,8 +197,8 @@ it("회원 앱 카드·연결 안내·이름표·주소는 가린 글자로 보�
       {
         id: "f",
         method: "GET",
-        route: "/xPk_fixture/<b>",
-        name: "기능 &lt;b&gt; s\u200bk_fixture",
+        route: "/xSP_pub_fixture/<b>",
+        name: "기능 &lt;b&gt; s\u200bk_0123456789abcdef",
         hidden: false,
       },
     ],
@@ -252,6 +252,39 @@ function open(path: string, api = fake()) {
     </MemoryRouter>,
   );
 }
+it("한글 조합과 편집 원문을 유지하고 저장할 때 정규화한다", async () => {
+  const api = fake();
+  const label = { id: "f", method: "GET", route: "/a", name: "sp_srv_fixture", hidden: false };
+  vi.mocked(api.snapshot).mockResolvedValue({ app, labels: [label] });
+  open("/apps/a/connect", api);
+  const field = (await screen.findByLabelText("기능 이름 1")) as HTMLInputElement;
+  expect(field.value).toBe("[가림]");
+  fireEvent.compositionStart(field);
+  fireEvent.change(field, { target: { value: "ㅎ" } });
+  expect(field.value).toBe("ㅎ");
+  fireEvent.change(field, { target: { value: "한" } });
+  fireEvent.compositionEnd(field, { data: "한" });
+  const draft = " 한 desk_ Ａ sp_srv_fixture ";
+  fireEvent.change(field, { target: { value: draft } });
+  expect(field.value).toBe(draft);
+  fireEvent.click(screen.getByRole("button", { name: "모두 확인" }));
+  await waitFor(() => expect(api.save).toHaveBeenCalledWith("a", [
+    { ...label, name: "한 desk_ A [가림]" },
+  ]));
+  expect(field.value).toBe("한 desk_ A [가림]");
+});
+it("200개 한도를 넘긴 이름은 저장 성공으로 표시하지 않는다", async () => {
+  const api = fake();
+  const label = { id: null, method: "GET", route: "/extra", name: "초과", hidden: false };
+  vi.mocked(api.snapshot).mockResolvedValue({ app, labels: [label] });
+  vi.mocked(api.save).mockResolvedValue([{ method: "GET", route: "/extra" }]);
+  open("/apps/a/connect", api);
+  fireEvent.click(await screen.findByLabelText("이 이름 확인"));
+  fireEvent.click(screen.getByRole("button", { name: "모두 확인" }));
+  expect(await screen.findByText(/200개를 넘어 저장하지 못했어요/)).toBeTruthy();
+  expect(screen.queryByText(/저장했어요/)).toBeNull();
+  expect(screen.queryByDisplayValue("초과")).toBeNull();
+});
 describe("연결 요청문과 등록 입력", () => {
   it("공개 수집 키와 환경변수 이름만 제공한다", () => {
     const prompt = buildConnectPrompt(pub, base);

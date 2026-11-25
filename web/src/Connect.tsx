@@ -153,7 +153,10 @@ export function Connect({
         const started = revision.current;
         const result = await api.snapshot(id);
         if (active && started === revision.current) {
-          setSnapshot(result);
+          setSnapshot({
+            ...result,
+            labels: result.labels.map((label) => ({ ...label, name: displayText(label.name) })),
+          });
           setPollError(false);
         }
       } catch {
@@ -181,11 +184,8 @@ export function Connect({
       setBusy(false);
     }
   }
-  const identity = (l: Label) => l.method + " " + l.route;
-  const labels = (snapshot?.labels ?? []).map((label) => ({
-    ...label,
-    name: displayText(label.name),
-  }));
+  const identity = (l: Pick<Label, "method" | "route">) => l.method + " " + l.route;
+  const labels = snapshot?.labels ?? [];
   const groups: Record<string, Label[]> = {
     "찾은 기능": [],
     "이름 없는 기능": [],
@@ -218,28 +218,29 @@ export function Connect({
     }));
   }
   async function confirm() {
-    setBusy(true);
     setError("");
+    const normalized = selected.map((l) => ({ ...l, name: displayText(l.name).trim() }));
+    if (normalized.some((l) => !l.name || l.name === "이름 없는 기능" || [...l.name].length > 300)) {
+      setError("기능 이름을 1~300자로 입력해 주세요.");
+      return;
+    }
+    setBusy(true);
     try {
-      await api.save(
-        id,
-        selected.map((l) => ({ ...l, name: displayText(l.name).trim() })),
-      );
+      const skipped = new Set((await api.save(id, normalized)).map(identity));
+      const confirmed = new Map(normalized.map((l) => [identity(l), l]));
       revision.current++;
       setSnapshot(
         (current) =>
           current && {
             ...current,
-            labels: current.labels.map((label) => {
-              const edit = edits[identity(label)];
-              return edit
-                ? { ...label, name: edit.name.trim(), hidden: edit.hidden }
-                : label;
-            }),
+            labels: current.labels
+              .filter((label) => !skipped.has(identity(label)))
+              .map((label) => confirmed.get(identity(label)) ?? label),
           },
       );
       setEdits({});
-      setSaved(true);
+      setSaved(skipped.size === 0);
+      if (skipped.size) setError(`기능 이름표 ${skipped.size}개는 200개를 넘어 저장하지 못했어요.`);
     } catch {
       setError(
         "이름을 모두 저장하지 못했어요. 고친 이름은 그대로예요. 다시 확인해 주세요",
@@ -300,7 +301,7 @@ export function Connect({
                             <label>
                               기능 이름 {index}
                               <input
-                                value={displayText(l.name)}
+                                value={l.name}
                                 placeholder="이름 없는 기능"
                                 maxLength={300}
                                 onChange={(e) =>

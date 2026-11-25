@@ -31,7 +31,7 @@ export interface Gateway {
   create(name: string, url: string): Promise<string>;
   issue(id: string, kind: "pub" | "srv"): Promise<string>;
   snapshot(id: string): Promise<Snapshot>;
-  save(id: string, labels: Label[]): Promise<void>;
+  save(id: string, labels: Label[]): Promise<Pick<Label, "method" | "route">[]>;
 }
 
 function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
@@ -168,7 +168,7 @@ export function gateway(client: SupabaseClient): Gateway {
       return { app: value(appResult), labels };
     },
     async save(id, labels) {
-      const { error } = await client.rpc("confirm_feature_names", {
+      const result = await client.rpc("confirm_feature_names", {
         p_app_id: id,
         p_items: labels.map(({ method, route, name, hidden }) => ({
           method,
@@ -177,7 +177,7 @@ export function gateway(client: SupabaseClient): Gateway {
           hidden,
         })),
       });
-      if (error) throw error;
+      return value(result);
     },
   };
 }

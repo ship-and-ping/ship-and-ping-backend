@@ -38,7 +38,7 @@ it("gateway merges proposed, confirmed, unnamed and overflow rows and sends one 
       query: url.searchParams,
     });
     return path === "confirm_feature_names"
-      ? new Response(null, { status: 204 })
+      ? Response.json([{ method: "GET", route: "/d" }])
       : Response.json(rows[path]);
   });
   const api = gateway(
@@ -60,7 +60,9 @@ it("gateway merges proposed, confirmed, unnamed and overflow rows and sends one 
       (r) => r.query.get(r.path === "apps" ? "id" : "app_id") === "eq.a",
     ),
   ).toBe(true);
-  await api.save("a", [result.labels[0], result.labels[4]]);
+  expect(await api.save("a", [result.labels[0], result.labels[4]])).toEqual([
+    { method: "GET", route: "/d" },
+  ]);
   expect(requests.at(-1)?.path).toBe("confirm_feature_names");
   expect(JSON.parse(requests.at(-1)!.body)).toEqual({
     p_app_id: "a",
