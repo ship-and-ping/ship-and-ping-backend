@@ -1,7 +1,7 @@
 -- Older all-success buckets still carry a usable success histogram.
 create view private.speed_buckets as
  select s.*,case when s.failures+s.client_errors=0 then s.hist else b.success_hist end as success_hist,
-  b.min_ms,b.max_ms,b.result_count,b.threshold_ms,b.slow_count,b.tail
+  b.min_ms,b.max_ms,b.result_count,b.threshold_ms,b.slow_count
  from public.stats_5m s left join private.evaluation_buckets b using(app_id,feature_id,version,bucket);
 
 create function private.refresh_baselines() returns void
@@ -60,30 +60,39 @@ $$;
 
 -- One row per feature and signal, including signals currently below threshold.
 create view private.evaluation_signals as
- with auto as (
-  select s.feature_id,sum(s.total-s.client_errors) results,sum(s.failures) failures,
+ with cutoffs as (
+  select feature_id,kind,max(closed_at) closed_at from public.incidents
+  where closed_at>=now()-interval '1 hour' and status in ('resolved','quiet') group by 1,2
+ ), kinds(kind) as (values ('failure'),('slow')), auto as (
+  select s.feature_id,k.kind,sum(s.total-s.client_errors) results,sum(s.failures) failures,
    sum(s.total) timed,private.hist_percentile(private.sum_hist(s.hist),0.5) p50,
    sum(case when s.threshold_ms=f.slow_threshold_ms and s.result_count=s.total-s.client_errors then s.slow_count
     else (select coalesce(sum(n),0) from unnest(s.hist) with ordinality bins(n,pos)
           where pos>private.duration_bin(f.slow_threshold_ms)) end) slow,
    max(s.bucket) latest,(array_agg(s.version order by s.bucket desc,s.version))[1] version
-  from private.speed_buckets s join public.features f on f.id=s.feature_id
-  where s.bucket between now()-interval '30 minutes' and now() group by s.feature_id
+  from private.speed_buckets s join public.features f on f.id=s.feature_id cross join kinds k
+  left join cutoffs c on c.feature_id=s.feature_id and c.kind=k.kind
+  where s.bucket between now()-interval '30 minutes' and now()
+   and (c.closed_at is null or s.bucket>c.closed_at) group by s.feature_id,k.kind
  ), deep as (
-  select a.feature_id,count(*) results,count(*) filter(where status='failure') failures,
+  select a.feature_id,k.kind,count(*) results,count(*) filter(where status='failure') failures,
    count(duration_ms) timed,percentile_disc(0.5) within group(order by duration_ms) p50,
    count(*) filter(where duration_ms>f.slow_threshold_ms) slow,
    (array_agg(status order by ended_at desc,attempt_id))[1:3]=array['failure','failure','failure'] streak,
    max(ended_at) latest,(array_agg(version order by ended_at desc,attempt_id))[1] version
-  from public.attempts a join public.features f on f.id=a.feature_id
-  where ended_at between now()-interval '30 minutes' and now() and status in ('success','failure') group by a.feature_id
+  from public.attempts a join public.features f on f.id=a.feature_id cross join kinds k
+  left join cutoffs c on c.feature_id=a.feature_id and c.kind=k.kind
+  where ended_at between now()-interval '30 minutes' and now() and status in ('success','failure')
+   and (c.closed_at is null or ended_at>c.closed_at) group by a.feature_id,k.kind
  ), missing as (
-  select feature_id,count(*) tried,count(*) filter(where status='unconfirmed') missing,
+  select a.feature_id,count(*) tried,count(*) filter(where status='unconfirmed') missing,
    max(started_at) latest,(array_agg(version order by started_at desc,attempt_id))[1] version
-  from public.attempts where started_at between now()-interval '1 hour' and now() group by feature_id
+  from public.attempts a left join cutoffs c on c.feature_id=a.feature_id and c.kind='unconfirmed'
+  where started_at between now()-interval '1 hour' and now()
+   and (c.closed_at is null or started_at>c.closed_at) group by a.feature_id
  ), recent as (
   select *,false as consecutive from auto
-  union all select feature_id,results,failures,timed,p50,slow,latest,version,streak from deep
+  union all select feature_id,kind,results,failures,timed,p50,slow,latest,version,streak from deep
  )
  select f.app_id,f.id feature_id,k.kind,
   case k.kind when 'failure' then (r.results>=5 and r.failures*5>=r.results) or r.consecutive
@@ -98,7 +107,7 @@ create view private.evaluation_signals as
   case when k.kind='unconfirmed' then m.version else r.version end version,
   case when k.kind='unconfirmed' then m.latest else r.latest end latest
  from public.features f cross join (values ('failure'),('slow'),('unconfirmed')) k(kind)
- left join public.baselines b on b.feature_id=f.id left join recent r on r.feature_id=f.id
+ left join public.baselines b on b.feature_id=f.id left join recent r on r.feature_id=f.id and r.kind=k.kind
  left join missing m on m.feature_id=f.id where k.kind<>'unconfirmed' or f.kind='deep';
 
 create function private.recovery_version(issue public.incidents) returns text
@@ -114,12 +123,14 @@ language sql stable set search_path='' as $$
      and a.ended_at between issue.opened_at and now()
     union all
     select (t->>0)::timestamptz,(t->>2)::boolean,(t->>1)::int
-    from private.speed_buckets s cross join lateral jsonb_array_elements(
-     case when s.result_count=s.total-s.client_errors then s.tail else
-      -- Legacy mixed buckets have unknown ordering. A failure breaks the streak.
-      to_jsonb(array_fill(jsonb_build_array(s.bucket,private.hist_percentile(s.hist,1),s.failures=0),
-       array[least(5,s.total-s.client_errors)])) end
-    ) t where s.feature_id=f.id and s.version=v.version and s.bucket>=date_bin('5 minutes',issue.opened_at,'epoch')
+    from private.latest_results r cross join lateral jsonb_array_elements(r.tail) t
+    where r.app_id=v.app_id and r.feature_id=f.id and r.version=v.version
+    union all
+    -- Legacy mixed buckets have unknown ordering. A failure breaks the streak.
+    select s.bucket,s.failures=0,private.hist_percentile(s.hist,1)
+    from private.speed_buckets s cross join lateral generate_series(1,least(5,s.total-s.client_errors)) n
+    where s.app_id=v.app_id and s.feature_id=f.id and s.version=v.version and s.bucket>=issue.opened_at
+     and s.result_count is distinct from s.total-s.client_errors
    ) events where stamp between issue.opened_at and now() order by stamp desc,success,ms desc limit 5
   ) last_results
  ) proof

@@ -31,5 +31,9 @@ select ingest_batch(repeat('0',64),pg_temp.batch('new',4,1,'30 seconds'));
 select is(evaluate_all(),'[]'::jsonb,'new version ends with only four successes');
 select ingest_batch(repeat('0',64),pg_temp.batch('new',1,0,'10 seconds'));
 select is(evaluate_all()->0->>'event','resolved','fifth success in mixed bucket proves recovery');
+select ingest_batch(repeat('0',64),pg_temp.batch('new',0,5,'10 minutes'));
+select results_eq($q$select jsonb_array_length(tail),bool_and((t->>2)::boolean)
+ from private.latest_results cross join lateral jsonb_array_elements(tail) t where version='new' group by tail$q$,
+ 'select 5,true','out-of-order batch preserves only the latest five results per version');
 select * from finish();
 rollback;

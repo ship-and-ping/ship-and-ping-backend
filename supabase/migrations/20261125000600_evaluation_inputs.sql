@@ -1,5 +1,5 @@
 -- stats_5m.hist includes failures and client errors. Keep a success-only
--- histogram, exact extrema, threshold count and the last five result summaries.
+-- histogram, exact extrema, threshold count and a bounded per-version tail.
 -- The bounded tail contains only a timestamp, duration and success flag.
 create function private.duration_bounds() returns integer[]
 language sql immutable parallel safe set search_path='' as $$
@@ -27,8 +27,12 @@ create table private.evaluation_buckets (
  app_id uuid, feature_id uuid, version text, bucket timestamptz,
  success_hist integer[] not null, min_ms integer,max_ms integer,
  result_count integer not null, slow_count integer not null, threshold_ms integer not null,
- tail jsonb not null,
  primary key(app_id,feature_id,version,bucket),
+ foreign key(app_id,feature_id,version,bucket) references public.stats_5m on delete cascade
+);
+create table private.latest_results (
+ app_id uuid, feature_id uuid, version text, bucket timestamptz not null, tail jsonb not null,
+ primary key(app_id,feature_id,version),
  foreign key(app_id,feature_id,version,bucket) references public.stats_5m on delete cascade
 );
 create index on public.stats_5m(feature_id,bucket);
@@ -62,14 +66,18 @@ begin
   select app,feature,trim(payload->>'app_version'),(item->>'bucket')::timestamptz,
    array(select coalesce(n,0)::integer from generate_series(1,16) g left join bins on g=bin order by g),
    min(ms) filter(where success),max(ms) filter(where success),count(success),count(*) filter(where ms>threshold),
-   threshold,private.last_five(item->'timings')
+   threshold
   from timings
   on conflict(app_id,feature_id,version,bucket) do update set
    success_hist=private.add_hist(b.success_hist,excluded.success_hist),
    min_ms=least(b.min_ms,excluded.min_ms),max_ms=greatest(b.max_ms,excluded.max_ms),
    result_count=b.result_count+excluded.result_count,slow_count=b.slow_count+excluded.slow_count,
-   threshold_ms=case when b.threshold_ms=excluded.threshold_ms then b.threshold_ms else -1 end,
-   tail=private.last_five(b.tail||excluded.tail);
+   threshold_ms=case when b.threshold_ms=excluded.threshold_ms then b.threshold_ms else -1 end;
+  insert into private.latest_results as r
+   select app,feature,trim(payload->>'app_version'),(item->>'bucket')::timestamptz,tail
+   from (select private.last_five(item->'timings') tail) batch where tail<>'[]'::jsonb
+   on conflict(app_id,feature_id,version) do update set
+    bucket=greatest(r.bucket,excluded.bucket),tail=private.last_five(r.tail||excluded.tail);
  end loop;
  return result;
 end $$;
