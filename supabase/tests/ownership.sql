@@ -53,6 +53,12 @@ select set_config('test.other_app',(select id::text from apps where owner_id='00
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
 select * from pg_temp.check_visibility();
+select is_empty($q$update apps set name='changed' where id=current_setting('test.other_app')::uuid returning id$q$,'other app update affects zero rows');
+select is_empty($q$update features set hidden=true where app_id=current_setting('test.other_app')::uuid returning id$q$,'other feature update affects zero rows');
+select is_empty($q$update alert_channels set email_enabled=false where owner_id='00000000-0000-0000-0000-000000000002' returning owner_id$q$,'other settings update affects zero rows');
+select throws_ok($q$delete from features where app_id=current_setting('test.other_app')::uuid$q$,'42501',null,'feature deletion denied');
+select throws_ok($q$delete from alert_channels where owner_id='00000000-0000-0000-0000-000000000002'$q$,'42501',null,'settings deletion denied');
+select is_empty($q$delete from apps where id=current_setting('test.other_app')::uuid returning id$q$,'other app deletion affects zero rows');
 select throws_ok('select key_hash from app_keys','42501',null,'hash hidden');
 select ok(not exists(select from information_schema.columns where table_name='app_key_list' and column_name='key_hash'),'view omits hash');
 select throws_ok('select issue_key(gen_random_uuid(),''pub'')','42501',null,'unowned app key denied');

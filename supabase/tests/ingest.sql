@@ -37,8 +37,13 @@ insert into stats_5m select app_id,feature_id,version,date_bin('5 minutes',now()
 insert into stats_5m select app_id,feature_id,version,bucket+interval '5 minutes',total,failures,client_errors,duration_sum_ms,hist
  from stats_5m where bucket < now()-interval '30 days';
 select cleanup_daily();
+-- A late 5m row reaches an hour already rolled up on an earlier run.
+insert into stats_5m select app_id,feature_id,version,bucket,3,1,1,37,array[1,2] || array_fill(0,array[14]) from stats_1h;
 select cleanup_daily();
 select is((select count(*) from stats_5m),2::bigint,'recent side retained');
-select results_eq('select total,hist[1] from stats_1h','select 42,42','expired side rolled up exactly once');
+select results_eq('select total,failures,client_errors,duration_sum_ms,hist from stats_1h',
+ 'select 45,43,1,121::bigint,array[43,2] || array_fill(0,array[14])','late bucket adds all metrics to existing hour');
+select cleanup_daily();
+select is((select total from stats_1h),45,'rerun leaves merged hour unchanged');
 select * from finish();
 rollback;
