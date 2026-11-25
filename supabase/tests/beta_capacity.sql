@@ -16,7 +16,12 @@ create function pg_temp.record(hash text, path text) returns jsonb language sql 
  select ingest_batch(repeat(hash,64),jsonb_build_object('batch_id',gen_random_uuid(),'app_version','v1',
    'stats',jsonb_build_array(pg_temp.stats(path))))
 $$;
-select pg_temp.record('a','/route-'||n) from generate_series(1,100) n;
+select matches(pg_get_functiondef('private.feature_admitted(uuid,uuid,timestamptz)'::regprocedure),
+ 'update\s+private\.settings\s+set\s+[^;]+\s+where\s+singleton\s*;',
+ 'quota update targets the singleton settings row as required by safeupdate');
+select is(pg_temp.record('a','/route-1'), '{"accepted":1,"dropped":0}'::jsonb,
+ 'first admission accepts the record');
+select pg_temp.record('a','/route-'||n) from generate_series(2,100) n;
 select is(private.active_feature_count(),20::bigint,'one pub key can activate only 20 of 100 routes');
 select is((select total from stats_5m join features on feature_id=id where method='*'),80,'80 routes share one overflow bucket');
 -- Four other apps already occupy 79 slots.

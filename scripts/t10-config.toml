@@ -1,0 +1,21 @@
+project_id = "ship-and-ping-t10"
+[api]
+port = 57421
+[db]
+major_version = 17
+port = 57422
+shadow_port = 57420
+[db.seed]
+enabled = false
+[studio]
+enabled = false
+[inbucket]
+enabled = false
+[storage]
+enabled = false
+[realtime]
+enabled = false
+[analytics]
+enabled = false
+[edge_runtime]
+enabled = false

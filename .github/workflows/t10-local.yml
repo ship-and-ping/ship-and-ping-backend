@@ -1,0 +1,32 @@
+name: T10 local verification
+on:
+  pull_request:
+    paths:
+      - 'examples/**'
+      - 'scripts/t10-*'
+      - 'scripts/verify-local.*'
+      - 'worker/src/**'
+      - 'supabase/migrations/**'
+      - 'web/src/domain.ts'
+      - '.github/workflows/t10-local.yml'
+permissions:
+  contents: read
+jobs:
+  examples:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CHROME_BIN: /usr/bin/google-chrome
+      SUPABASE_INTERNAL_IMAGE_REGISTRY: docker.io
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - run: rustup toolchain install
+        working-directory: worker
+      - run: cargo install worker-build --version 0.9.0 --locked
+        working-directory: worker
+      - run: bash scripts/verify-local.sh

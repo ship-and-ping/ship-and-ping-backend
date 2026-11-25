@@ -20,6 +20,21 @@ fn run(input: Value) -> Result<Value, ApiError> {
     Ok(serde_json::from_slice(&rpc).unwrap())
 }
 #[test]
+fn app_version_preserves_build_times_and_masks_key_prefixes() {
+    for (version, expected) in [
+        ("2026.11.26.1530", "2026.11.26.1530"),
+        ("1764120000", "1764120000"),
+        ("v20261126-1530", "v20261126-1530"),
+        ("1764120000-ＳＰ＿ＰＵＢ＿demo", "1764120000-[가림]"),
+        ("v1-sk_abcdefghijklmnop", "v1-[가림]"),
+        ("v1xsk_abcdefghijklmnop", "v1xsk_abcdefghijklmnop"),
+    ] {
+        let mut input = batch(vec![request()]);
+        input["app_version"] = json!(version);
+        assert_eq!(run(input).unwrap()["payload"]["app_version"], expected);
+    }
+}
+#[test]
 fn masks_identifiers_and_private_text_before_rpc() {
     let mut r = request();
     r["route"] = json!(format!("/a/123/{ID}/a123456789012345/short?email=x"));
@@ -29,7 +44,10 @@ fn masks_identifiers_and_private_text_before_rpc() {
         short_key(),
         "가".repeat(400)
     ));
-    let rpc = run(batch(vec![r])).unwrap();
+    let mut input = batch(vec![r]);
+    input["app_version"] = json!(format!("v1-{}", ["sp", "srv", "fixture"].join("_")));
+    let rpc = run(input).unwrap();
+    assert_eq!(rpc["payload"]["app_version"], "v1-[가림]");
     assert_eq!(rpc["payload"]["stats"][0]["route"], "/a/:id/:id/:id/short");
     let msg = rpc["payload"]["error_samples"][0]["message"]
         .as_str()
@@ -185,6 +203,7 @@ fn limits_inclusive() {
 fn validates_envelope_fields_and_records() {
     for (k, v) in [
         ("spec", json!("old")),
+        ("app_id", json!(ID)),
         ("batch_id", json!("x")),
         ("platform", json!("x")),
         ("sent_at", json!(0)),

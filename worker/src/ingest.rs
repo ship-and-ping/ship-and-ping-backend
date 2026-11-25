@@ -45,6 +45,7 @@ pub struct Counts {
 #[derive(Deserialize)]
 struct Batch {
     spec: String,
+    app_id: Option<serde::de::IgnoredAny>,
     batch_id: Uuid,
     app_version: String,
     platform: String,
@@ -235,6 +236,33 @@ fn short_keys(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
             })
             .map(|start| start..hit.end())
     })
+}
+fn mask_version(version: String) -> String {
+    static KEY: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_)[a-z0-9_.=\-]+")
+            .expect("version key prefixes")
+    });
+    let normalized = normalize(&version);
+    let mut spans: Vec<_> = KEY
+        .find_iter(&normalized)
+        .map(|m| m.range())
+        .chain(short_keys(&normalized))
+        .collect();
+    if spans.is_empty() {
+        return version;
+    }
+    spans.sort_by_key(|span| span.start);
+    let mut result = String::new();
+    let mut end = 0;
+    for span in spans {
+        if end <= span.start {
+            result.push_str(&normalized[end..span.start]);
+            result.push_str("[가림]");
+        }
+        end = end.max(span.end);
+    }
+    result.push_str(&normalized[end..]);
+    result.chars().take(64).collect()
 }
 pub(crate) fn mask(text: &str) -> String {
     let normalized = normalize(text);
@@ -449,7 +477,8 @@ pub fn prepare_ingest(
         return Err(ApiError::TooLarge);
     }
     require(
-        batch.spec == "sp-1"
+        batch.app_id.is_none()
+            && batch.spec == "sp-1"
             && bounded(&batch.app_version, 64)
             && matches!(batch.platform.as_str(), "server" | "browser"),
     )?;
@@ -477,8 +506,10 @@ pub fn prepare_ingest(
             value
         })
         .collect();
+    // Retain the release label for display validation unless it contains private data.
+    let version = mask_version(batch.app_version);
     let rpc = json!({"app_key_hash":hash,"payload":{
-        "batch_id":batch.batch_id,"app_version":batch.app_version,"platform":batch.platform,"sent_at":batch.sent_at,
+        "batch_id":batch.batch_id,"app_version":version,"platform":batch.platform,"sent_at":batch.sent_at,
         "stats":stats,"attempts":attempts,"error_samples":samples
     }});
     Ok((
