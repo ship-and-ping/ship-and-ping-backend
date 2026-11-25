@@ -157,16 +157,10 @@ fn boundary(text: &str, start: usize) -> bool {
     start == 0 || !text.as_bytes()[start - 1].is_ascii_alphanumeric()
 }
 fn phones(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
-    static PHONE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"\+?[0-9](?:[ ().\-]*[0-9]){8,14}").expect("phone pattern"));
-    PHONE
-        .find_iter(text)
-        .filter(|hit| {
-            let bytes = text.as_bytes();
-            (hit.start() == 0 || !bytes[hit.start() - 1].is_ascii_digit())
-                && bytes.get(hit.end()).is_none_or(|b| !b.is_ascii_digit())
-        })
-        .map(|hit| hit.range())
+    static PHONE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"\+?(?-u:\b)[0-9](?:[ ().\-]*[0-9]){8,14}(?-u:\b)").expect("phone pattern")
+    });
+    PHONE.find_iter(text).map(|hit| hit.range())
 }
 fn private_segment(part: &str) -> bool {
     if phones(part).next().is_some() {
