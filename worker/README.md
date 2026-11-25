@@ -1,4 +1,4 @@
-# 쉽앤핑 수집 Worker PoC
+# 쉽앤핑 수집 Worker
 
 `POST /v1/ingest`는 한 앱·버전의 묶음을 읽어 주소·메서드·UTC 5분별 통계와 정제한 오류 예시, 깊게 보기 시도를 만든다. 본문은 65,536바이트, `records`는 100건까지 받는다.
 
@@ -21,6 +21,7 @@ npx --yes wrangler@4.168.0 dev --local --var INGEST_DRY_RUN:true
 
 ```sh
 cargo build --release --example bench
+python3 bench_http.py --ascii
 python3 bench_http.py
 ```
 
@@ -37,6 +38,14 @@ cargo test --locked --test http -- --ignored
 
 키 형식 오류는 401, JSON·묶음 공통 필드 오류는 400, 상한 초과는 413이다. 개별 기록의 필드가 잘못됐거나 수신 시각 기준 ±24시간을 벗어나면 그 기록만 `dropped`에 더한다. 브라우저 키로 보낸 서버 출처 결과도 버린다.
 
-**T4 전에는 DB 환경값을 넣어 배포하지 않는다.** 키 진위 확인과 앱별 요청 한도(429)가 남아 있다. 로컬에서만 `INGEST_DRY_RUN=true`를 지정하면 두 DB 설정이 비어 있을 때 RPC 본문 직렬화 후 202를 받는다. 일반 실행은 DB 설정이 빠지면 503을 반환한다. 로컬 DB 연동 시 `.dev.vars.example`을 `.dev.vars`로 복사하고 두 값을 채운다. 모두 설정하면 `BatchSink`가 `/rest/v1/rpc/ingest_batch`에 `{app_key_hash,payload}`를 한 번 보내고 DB가 반환한 건수에 Worker에서 버린 건수를 반영한다. RPC의 HTTP 401과 본문 코드 `PT401`이 함께 오면 401, HTTP 400과 `22023`이 함께 오면 400을 반환한다. Supabase 서비스 키 오류와 그 밖의 RPC·연결 오류는 503으로 반환한다. 키 조회·캐시는 T4 범위다. 앱 식별, 중복 묶음 처리, 앱당 주소 200개 제한과 오류 예시 보관은 DB가 맡는다. RPC에는 요청 원본·원문 키가 들어가지 않는다.
+두 엔드포인트 모두 Authorization의 Bearer 키로 인증한다. `/v1/ingest`에서 `text/plain` JSON은 헤더가 없을 때 최상위 `key`의 수집 키로도 인증한다. 브라우저는 페이지를 떠날 때 `sendBeacon`으로 보낼 수 있다. 본문으로 서버 키를 사용하면 400을 반환한다.
+
+POST /v1/feature-map은 route, method, name을 가진 배열을 받는다. 최대 200개이며 배열 전체를 검증하고 이름과 주소를 정제한 뒤 suggest_feature_map에 제안만 저장한다. 성공은 202와 accepted·dropped 건수, 개별 항목 오류는 400이다.
+
+Worker는 키의 SHA-256 해시로 `lookup_key_app`을 호출한다. `service_role`만 실행할 수 있고, 유효한 키의 앱 UUID 또는 null을 반환한다. isolate는 성공을 5분, 실패를 60초간 보관한다. UTC 분마다 실패한 인증 100회까지 허용하며 이후 새 조회 요청에 429를 반환한다. DB 장애는 503을 반환한다. 저장 RPC는 `lock_key`로 폐기·만료를 다시 검사한다.
+
+두 경로는 앱별로 UTC 분당 20묶음, UTC 하루 2,000묶음의 한도를 공유한다. 검증된 묶음은 저장 직전에 한도를 사용한다. 초과하면 429와 다음 창까지의 초를 Retry-After에 담는다. isolate 재시작과 병렬 isolate 때문에 이 값은 근사치다.
+
+SUPABASE_URL과 SUPABASE_SECRET_KEY가 모두 비어 있고 INGEST_DRY_RUN=true인 로컬 실행에서는 RPC를 생략하고 키 해시별로 한도를 센다. 나머지 설정 누락은 503이다.
 
 측정 결과와 재현 절차는 [BENCH.md](BENCH.md)에 있다.

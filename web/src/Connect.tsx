@@ -2,7 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Gateway, Label, Snapshot } from "./data";
 import { buildConnectPrompt, connectRestriction } from "./domain";
-import { displayText } from "./normalize";
+import { displayText, sanitizeRoute } from "./normalize";
 import { Hero, CurrentAppName } from "./Layout";
 
 function copyWithEvent(text: string) {
@@ -311,7 +311,7 @@ export function Connect({
                             </label>
                             <details>
                               <summary>주소 자세히</summary>
-                              <code>{displayText(identity(l))}</code>
+                              <code>{displayText(l.method)} {displayText(sanitizeRoute(l.route))}</code>
                             </details>
                             <label className="check">
                               <input
