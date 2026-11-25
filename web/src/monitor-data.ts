@@ -43,6 +43,7 @@ export interface Incident {
   notifications: { event: string; sent_at: string; ok: boolean }[];
 }
 export interface Monitor {
+  verificationIncidentId?: string;
   verification?: {
     version: string | null;
     consecutive_successes: number;
@@ -119,6 +120,10 @@ export async function loadMonitor(
   if ((issueId || featureId) && !read(features).some((f) => f.id === selected))
     throw Error("상세 기록을 찾지 못했어요");
   const incident = incidents.find((i) => i.id === issueId);
+  const verificationIssue = incident?.status === "open" ? incident : !selected
+    ? incidents.find((i) => i.status === "open" && versions.some((v) =>
+        v.version !== i.opened_version && Date.parse(v.last_seen_at) > Date.parse(i.opened_at)))
+    : undefined;
   const cutoff = new Date(
     incident
       ? Date.parse(incident.opened_at) - 300000
@@ -205,8 +210,8 @@ export async function loadMonitor(
           .order("ended_at", { ascending: false })
           .limit(1)
       : { data: [], error: null },
-    incident?.status === "open"
-      ? client.rpc("incident_verification", { incident_id: incident.id })
+    verificationIssue
+      ? client.rpc("incident_verification", { incident_id: verificationIssue.id })
       : undefined,
   ]);
   for (const attempt of deepRows) {
@@ -227,6 +232,7 @@ export async function loadMonitor(
   }
   return {
     name: read(header).name,
+    verificationIncidentId: verificationIssue?.id,
     verification: proof ? read<NonNullable<Monitor["verification"]>>(proof) : undefined,
     features: read(features),
     incidents,

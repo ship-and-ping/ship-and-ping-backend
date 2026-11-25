@@ -19,14 +19,17 @@ export function Hero({
   title,
   detail,
   arrived = false,
+  badge,
 }: {
   title: string;
   detail: string;
   arrived?: boolean;
+  badge?: ReactNode;
 }) {
   return (
     <section className={"hero-card" + (arrived ? " arrived" : "")}>
       <Sheep />
+      {badge}
       <h2>{title}</h2>
       <p role="status">{detail}</p>
     </section>

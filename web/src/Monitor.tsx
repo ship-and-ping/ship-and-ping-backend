@@ -14,7 +14,7 @@ import {
 } from "./monitor-data";
 
 const day = 86400000;
-const when = (s: string) => new Date(s).toLocaleString("ko-KR");
+const when = (s: string) => new Date(s).toLocaleString("ko-KR", { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
 const time = (ms: number | string | null) =>
   typeof ms === "string" ? displayText(ms) : ms == null
     ? "기록 없음"
@@ -27,6 +27,14 @@ const status = {
   quiet: "잠잠해졌어요",
   dismissed: "문제 아님으로 닫았어요",
 };
+function StatusBadge({ state }: { state: keyof typeof status | "healthy" | "waiting" }) {
+  const icons = { open: "⚠", resolved: "✓", quiet: "◷", dismissed: "−", healthy: "✓", waiting: "◷" };
+  const label = state === "healthy" ? "정상" : state === "waiting" ? "기록 대기" : status[state];
+  return <span className={"status-badge " + state}><span aria-hidden="true">{icons[state]}</span> {label}</span>;
+}
+function observedAt(v: Monitor["versions"][number], i?: Incident) {
+  return i && Date.parse(v.first_seen_at) <= Date.parse(i.opened_at) ? v.last_seen_at : v.first_seen_at;
+}
 const title = (f: Feature | undefined, i: Incident) =>
   displayText(f?.name ?? "기능") +
   {
@@ -160,16 +168,14 @@ function Home({ data, base }: { data: Monitor; base: string }) {
       s: summarize(data.stats.filter((r) => r.feature_id === f.id)),
     }))
     .sort((a, b) => Number(problems.has(b.f.id)) - Number(problems.has(a.f.id)) || b.s.total - a.s.total);
-  const latest = data.versions[0];
-  const updated =
-    latest &&
-    open.find(
-      (i) => Date.parse(i.opened_at) < Date.parse(latest.first_seen_at),
-    );
+  const updated = open.find((i) => i.id === data.verificationIncidentId && data.verification?.version != null);
+  const latest = updated ? data.versions.find((v) => v.version === data.verification?.version) : data.versions[0];
+  const bannerVersion = updated ? data.verification?.version : latest?.version;
   return (
     <>
       <h1 tabIndex={-1}>{displayText(data.name)}</h1>
       <Hero
+        badge={<StatusBadge state={open.length ? "open" : data.versions.length ? "healthy" : "waiting"} />}
         title={
           open.length
             ? title(find(open[0]), open[0])
@@ -187,10 +193,10 @@ function Home({ data, base }: { data: Monitor; base: string }) {
             하루 동안 기록이 없어요 — 사용자가 없었거나 연결이 끊겼을 수 있어요
           </p>
         )}
-      {latest && (
+      {bannerVersion != null && (
         <p className="panel">
-          새 버전 {displayVersion(latest.version)} 감지 (
-          {when(latest.first_seen_at)}){" "}
+          새 버전 {displayVersion(bannerVersion)} 감지
+          {latest && " (" + when(observedAt(latest, updated)) + ")"}{" "}
           {updated && (
             <Link to={base + "/issues/" + updated.id + "#verification"}>
               업데이트 후 확인
@@ -204,7 +210,7 @@ function Home({ data, base }: { data: Monitor; base: string }) {
           data.incidents.map((i) => (
             <p key={i.id}>
               <Link to={base + "/issues/" + i.id}>
-                {title(find(i), i)} · {status[i.status]}
+                {title(find(i), i)} · <StatusBadge state={i.status} />
               </Link>{" "}
               {details(i, find(i))}
             </p>
@@ -289,6 +295,7 @@ function Chart({
       ),
     ),
   }));
+  const current = points.slice().reverse().find((p) => p.median != null)?.median;
   const max = Math.max(1, ...points.map((p) => p.total));
   const speed = (n: number) => Math.min(n, 30001);
   const peak = Math.max(1, speed(baseline ?? 0), ...points.map((p) => speed(p.median ?? 0)));
@@ -296,7 +303,7 @@ function Chart({
   const x = (i: number) => (i * 600) / count + 300 / count;
   return (
     <>
-      <p>{baseline != null ? "점선은 평소 속도 " + time(baseline) + ", " : ""}실선은 보통 걸린 시간이에요.</p>
+      <p>지금 {time(current ?? null)}{baseline != null && " · 평소 " + time(baseline)}</p>
       <svg
         viewBox="0 0 600 210"
         width="100%"
@@ -342,7 +349,7 @@ function Chart({
         {baseline != null && <line x1="0" x2="600" y1={205 - 90 * speed(baseline) / peak}
           y2={205 - 90 * speed(baseline) / peak} stroke="var(--sp-chart-usual)" strokeDasharray="5 4" strokeWidth="2.5" />}
       </svg>
-      <p className="chart-legend"><span>사용</span> <span>실패</span> · {when(new Date(start).toISOString())} ~ {when(new Date(now).toISOString())}</p>
+      <p className="chart-legend"><span>사용</span> <span>실패</span> <span className="time-line">보통 시간</span> {baseline != null && <span className="usual-line">평소 속도</span>} · {when(new Date(start).toISOString())} ~ {when(new Date(now).toISOString())}</p>
       <details>
         <summary>표로 보기</summary>
         <table>
@@ -523,21 +530,17 @@ function Issue({
   const [feedback, setFeedback] = useState(""),
     [busy, setBusy] = useState(false),
     [dismissed, setDismissed] = useState(false);
-  const fresh = data.versions.find(
-    (v) =>
-      Date.parse(v.first_seen_at) > Date.parse(i.opened_at) &&
-      (!data.verification?.version || v.version === data.verification.version) &&
-      (!i.resolved_version || v.version === i.resolved_version),
-  );
+  const proof = data.verification;
+  const version = i.resolved_version ?? proof?.version;
+  const fresh = data.versions.find((v) => v.version === version);
   const after = summarize(
     data.stats.filter(
       (r) =>
         r.feature_id === f.id &&
-        r.version === fresh?.version &&
+        r.version === version &&
         Date.parse(r.bucket) + 300000 > Date.parse(i.opened_at),
     ),
   );
-  const proof = fresh && fresh.version === data.verification?.version ? data.verification : undefined;
   const streak = proof?.consecutive_successes ?? 0;
   const duration = proof?.latest_duration_ms;
   const threshold = f.baselines?.p50_ms == null ? f.slow_threshold_ms : f.baselines.p50_ms * 1.5;
@@ -548,7 +551,7 @@ function Issue({
       const result = i.kind === "slow" ? "평소 속도로 끝났어요." : "성공했어요.";
       return "업데이트 후 " + displayText(f.name) + " 최근 5건이 모두 " + result;
     }
-    if (!fresh) return "고친 버전을 배포하면 여기서 확인해 드려요";
+    if (version == null) return "고친 버전을 배포하면 여기서 확인해 드려요";
     if (proof?.latest_success == null) return "업데이트 후 첫 사용을 기다리고 있어요";
     if (slow) return "업데이트 후에도 최근 사용이 " + time(duration ?? null) + " 걸렸어요.";
     if (!proof.latest_success) {
@@ -571,14 +574,16 @@ function Issue({
         text: n.event === "worse" ? "더 나빠짐 · 알림 보냄" : "알림 보냄",
       })),
   ];
-  if (fresh)
+  const observed = fresh && observedAt(fresh, i);
+  if (fresh && observed && (!i.closed_at || Date.parse(observed) <= Date.parse(i.closed_at)))
     events.push({
-      at: fresh.first_seen_at,
+      at: observed,
       text: "새 버전 감지 · " + displayVersion(fresh.version),
     });
-  if (i.closed_at) events.push({ at: i.closed_at, text: status[i.status] });
-  const versions = fresh
-    ? [fresh.version, i.opened_version]
+  if (i.closed_at) events.push({ at: i.closed_at, text: status[i.status] +
+    (i.resolved_version != null ? " · " + displayVersion(i.resolved_version) : "") });
+  const versions = version != null
+    ? [version, i.opened_version]
     : [
         i.opened_version,
         ...data.versions
@@ -624,7 +629,7 @@ function Issue({
   return (
     <>
       <h1 tabIndex={-1}>{title(f, i)}</h1>
-      <Hero arrived={i.status === "resolved"} title={status[i.status]} detail={
+      <Hero badge={<StatusBadge state={i.status} />} arrived={i.status === "resolved"} title={status[i.status]} detail={
         i.status === "dismissed" && i.closed_at
           ? when(new Date(Date.parse(i.closed_at) + day).toISOString()) + "까지 다시 알리지 않아요."
           : details(i, f)} />
@@ -643,7 +648,9 @@ function Issue({
       </ol>
       {(i.status === "open" || i.status === "resolved") && <section id="verification" className="panel">
         <h2>업데이트 후 확인</h2>
+        {version != null && <p>{i.status === "resolved" ? "해결 버전" : "확인 버전"} · {displayVersion(version)}</p>}
         <p>{verificationMessage()}</p>
+        {i.status === "resolved" && <div className="resolved-fill" aria-hidden="true" />}
       </section>}
       <section className="panel">
         <h2>코딩 AI에 맡기기</h2>

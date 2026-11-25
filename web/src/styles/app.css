@@ -624,3 +624,31 @@ summary {
     50% { transform: translateY(-6px); }
   }
 }
+
+.monitor h1:focus:not(:focus-visible) { outline: none; }
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .35em;
+  padding: .2em .65em;
+  border-radius: 1em;
+  color: var(--sp-ink);
+  background: var(--sp-surface-2);
+  font-size: .875rem;
+}
+.status-badge.open { color: var(--sp-bad-ink); background: var(--sp-bad-soft); }
+.status-badge.resolved, .status-badge.healthy { color: var(--sp-ok-ink); background: var(--sp-ok-soft); }
+.hero-card .status-badge { background: var(--sp-surface); }
+.chart-legend .time-line::before, .chart-legend .usual-line::before {
+  width: 1.4em;
+  height: 0;
+  vertical-align: middle;
+  background: none;
+  border-top: 3px solid var(--sp-chart-time);
+}
+.chart-legend .usual-line::before { border-top: 3px dashed var(--sp-chart-usual); }
+.resolved-fill { height: .4rem; border-radius: 1rem; background: var(--sp-ok-ink); transform-origin: left; }
+@media (prefers-reduced-motion: no-preference) {
+  .resolved-fill { animation: verification-fill .5s ease-out; }
+  @keyframes verification-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+}

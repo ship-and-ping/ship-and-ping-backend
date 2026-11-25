@@ -139,7 +139,7 @@ it("앱 홈에서 기능 상세까지 가린 JSX를 쓰고 기간과 느림 기�
   expect(container.textContent).not.toContain(key);
   expect(container.querySelector("b")).toBeNull();
   expect(
-    requests.every(
+    requests.filter((u) => !u.pathname.includes("/rpc/")).every(
       (u) =>
         u.searchParams.get(u.pathname.endsWith("/apps") ? "id" : "app_id") ===
         "eq.a",
@@ -156,7 +156,7 @@ it.each([
   ["failed", "업데이트 후에도 4건 중 1건 실패했어요"],
 ])("업데이트 확인 상태 %s", async (state, expected) => {
   const { container } = setup("/apps/a/issues/i", [], (rows) => {
-    if (state === "none") rows.app_versions = [];
+    if (state === "none") rows.incident_verification = { version: null };
     const proof = rows.incident_verification as Record<string, unknown>;
     if (state === "waiting") Object.assign(proof, { latest_success: null, latest_duration_ms: null });
     if (state === "checking") Object.assign(proof, { latest_success: true, consecutive_successes: 4 });
@@ -231,4 +231,30 @@ it("S7을 열면 경고와 기본 복사 옵션을 자동으로 선택한다", a
   );
   await screen.findByRole("heading", { name: "문제 아님으로 닫았어요" });
   expect(container.querySelector("#verification")).toBeNull();
+});
+
+it("되돌린 버전으로 홈 띠와 문제 흐름, 확인 결과, 요청문을 표시한다", async () => {
+  const { container } = setup("/apps/a", [], (rows) => {
+    const now = Date.now();
+    const date = (minutes: number) => new Date(now - minutes * 60000).toISOString();
+    rows.app_versions = [
+      { version: "v3", first_seen_at: date(30), last_seen_at: date(1) },
+      { version: "v0", first_seen_at: date(240), last_seen_at: date(10) },
+    ];
+    rows.incident_verification = { version: "v0", latest_success: true, consecutive_successes: 4 };
+  });
+  const link = await screen.findByRole("link", { name: "업데이트 후 확인" });
+  expect(link.parentElement?.textContent).toContain("새 버전 v0 감지");
+  fireEvent.click(link);
+  await screen.findByText("업데이트 후 4건 성공, 1건 더 확인할게요");
+  expect(container.querySelector("ol li:last-child")?.textContent).toContain("새 버전 감지 · v0");
+  expect(container.querySelector("pre")?.textContent).toContain("v0");
+  expect(container.querySelector("pre")?.textContent).not.toContain("v3");
+});
+it("버전 목록에서 빠져도 서버에 기록된 해결 버전을 보여 준다", async () => {
+  const { container } = setup("/apps/a/issues/i", [], (rows) => {
+    Object.assign((rows.incidents as object[])[0], { status: "resolved", resolved_version: "v0" });
+  });
+  await screen.findByText("해결 버전 · v0");
+  expect(container.querySelector("pre")?.textContent).toContain("v0");
 });
