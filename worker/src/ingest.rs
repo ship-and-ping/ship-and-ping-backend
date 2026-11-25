@@ -86,6 +86,8 @@ struct Stats {
     client_errors: u32,
     duration_sum_ms: u64,
     hist: [u32; 16],
+    // Transient inputs for DB-side aggregation with the feature's current threshold.
+    timings: Vec<(usize, u32, Option<bool>)>,
 }
 
 fn require(ok: bool) -> Result<(), ApiError> {
@@ -311,6 +313,7 @@ impl Aggregate {
         value: &serde_json::value::RawValue,
         now_ms: i64,
         key: &str,
+        position: usize,
     ) -> Result<(), ApiError> {
         let data: Data = serde_json::from_str(value.get()).map_err(|_| ApiError::Invalid)?;
         let ts = match &data {
@@ -350,6 +353,8 @@ impl Aggregate {
                 row.client_errors += u32::from(client);
                 row.duration_sum_ms += u64::from(duration_ms);
                 row.hist[BOUNDS.partition_point(|bound| *bound < duration_ms)] += 1;
+                row.timings
+                    .push((position, duration_ms, (!client).then_some(!failed)));
             }
             Data::AttemptStart {
                 ts: _,
@@ -450,8 +455,8 @@ pub fn prepare_ingest(
     )?;
     let mut counters = Counts::default();
     let mut aggregate = Aggregate::default();
-    for value in batch.records {
-        if aggregate.add(&value, now_ms, key).is_ok() {
+    for (position, value) in batch.records.into_iter().enumerate() {
+        if aggregate.add(&value, now_ms, key, position).is_ok() {
             counters.accepted += 1;
         } else {
             counters.dropped += 1;

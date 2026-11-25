@@ -114,9 +114,13 @@ stats_5m과 같은 열, bucket = 1시간. 매일 Cron이 30일 지난 5분 요�
 | dismissed_until | timestamptz null | 문제 아님 → 24시간 |
 
 ### notifications — 알림 이력 (30일)
+활성 채널마다 한 행을 만든다. 설정이 없으면 문제는 화면에서 확인한다. 대기와 완료 모두 등록 후 30일이면 정리한다.
+
 | 열 | 형식 |
 |---|---|
-| id, incident_id, channel(`slack`/`email`), event(`open`/`worse`/`resolved`), sent_at, ok, error | |
+| id, incident_id, channel(`slack`/`email`), event(`open`/`worse`/`resolved`), queued_at, claimed_at, sent_at, ok, error | 선점 전 claimed_at은 null, 완료 전 sent_at·ok는 null |
+
+`private.latest_results`는 해결 판정용 예외로 기능·버전별 최근 요청 결과 20건의 서버 수신 시각·묶음 내 순서·소요 시간·성공 여부를 최대 30일 보관한다. 깊게 보기 결과의 수신 시각은 `attempts.result_received_at`에 기록한다.
 
 ### alert_channels — 알림 받을 곳 (회원 단위)
 | 열 | 형식 | 설명 |
@@ -143,6 +147,10 @@ stats_5m과 같은 열, bucket = 1시간. 매일 Cron이 30일 지난 5분 요�
 | `suggest_feature_map(app_key_hash, items jsonb)` | 이름표 제안 저장 |
 | `evaluate_all()` | 미확인 처리, 평소 속도 갱신(6시간마다), 문제 열기·다시 알림·해결·잠잠 판정 → 알림 보낼 목록 반환 |
 | `record_notification(...)` | 알림 결과 기록 |
+| `claim_notifications(limit)` | 등록 순으로 대기 행 선점. 잠긴 행은 건너뛰며 10분 지난 선점은 재시도 가능 |
+| `complete_notification(id, ok, error)` | 선점한 행의 발송 결과를 기록하고 오류에 포함된 URL과 민감 정보를 가린다 |
+| `dismiss_incident(incident_id)` | 회원이 자기 앱의 열린 문제를 24시간 숨기고 선점 전 대기 알림을 취소한다. 이미 닫힌 문제에 다시 호출하면 기존 상태를 유지한다 |
+| `incident_verification(incident_id)` | 회원이 자기 앱의 문제 이후 버전과 연속 성공 수(0~5), 마지막 결과의 소요 시간·성공 여부를 조회한다. 느려짐 문제는 해결 속도 기준을 충족한 성공만 연속 횟수에 포함한다 |
 | `cleanup_daily()` | 30일 지난 5분 요약 → stats_1h, 오래된 행 삭제 |
 | `issue_key(app_id, kind)` | 회원 호출 가능(본인 앱만): 키 생성, 해시 저장, 원문은 한 번만 반환 |
 
