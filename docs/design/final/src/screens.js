@@ -165,7 +165,7 @@
       rows: [[D.badVer + '<br><span class="sp-sub">오늘 13:50부터</span>', '24건', '17% (4건)', '<b style="color:var(--sp-bad-ink)">3.4초</b>'], [D.oldVer + '<br><span class="sp-sub">어제 15:40부터</span>', '108건', '0%', '1.1초']] },
     '7d': { use: [60, 70, 65, 150, 140, 174, 88], fail: [0, 0, 0, 1, 0, 0, 4], med: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.3], max: 174,
       period: '최근 7일', unit: '하루마다', failTxt: '모두 747건, 실패 5건: 11월 22일 1건, 오늘 4건', barsLabel: '하루 60~174건, 실패는 11월 22일 1건과 오늘 4건', axis: '<div class="sp-axis days"><span>19일</span><span>20일</span><span>21일</span><span>22일</span><span>23일</span><span>24일</span><span>오늘</span></div>', now: '오늘 하루 보통 1.3초(13:50 새 버전 뒤로는 3.4초)', lineLabel: '오늘 1.3초로 올라감',
-      rows: [[D.badVer + '<br><span class="sp-sub">오늘 13:50부터</span>', '24건', '17% (4건)', '<b style="color:var(--sp-bad-ink)">3.4초</b>'], [D.oldVer + '<br><span class="sp-sub">어제 15:40부터</span>', '108건', '0%', '1.1초'], [D.olderVer + '<br><span class="sp-sub">11월 22일부터</span>', '420건', '0.2% (1건, 22일)', '1.0초'], ['c91a2f0<br><span class="sp-sub">19일~21일</span>', '195건', '0%', '1.0초']] }
+      rows: [[D.badVer + '<br><span class="sp-sub">오늘 13:50부터</span>', '24건', '17% (4건)', '<b style="color:var(--sp-bad-ink)">3.4초</b>'], [D.oldVer + '<br><span class="sp-sub">어제 15:40부터</span>', '108건', '0%', '1.1초'], [D.olderVer + '<br><span class="sp-sub">11월 22일부터</span>', '420건', '0.2% (1건, 22일)', '1.0초']], older: '그보다 앞 버전(19~21일, 195건, 실패 없음)은 막대에만 있어요.' }
   };
   var s6Panel = function (k, show) {
     var d = P6[k];
@@ -174,22 +174,26 @@
         '<div class="sp-bars" role="img" aria-label="' + d.period + ' 사용 건수 막대. ' + d.barsLabel + '">' + bars(d.use, d.fail, d.max) + '</div>' + d.axis +
         '<ul class="sp-legend"><li><i class="u"></i>사용</li><li><i class="f"></i>실패</li></ul>') +
       sec('<h2>' + d.period + ' 보통 걸린 시간</h2><p class="sp-sub">점선이 평소 속도 1.1초예요. 지금은 ' + d.now + '예요.</p><div role="img" aria-label="보통 걸린 시간 선. 평소 1.1초 근처였다가 ' + d.lineLabel + '">' + lineSvg(d.med, 1.1, 4) + '</div>' + d.axis + '<ul class="sp-legend"><li><i class="ln"></i>보통 걸린 시간</li><li><i class="dash"></i>평소 속도</li></ul>') +
-      sec('<h2>' + d.period + ' 버전별 비교</h2><table class="sp-table"><caption class="sr">' + d.period + '에 쓰인 버전 비교</caption><thead><tr><th scope="col">버전</th><th scope="col" class="n">사용</th><th scope="col" class="n">실패율</th><th scope="col" class="n">보통 시간</th></tr></thead><tbody>' + d.rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td class="n">' + r[1] + '</td><td class="n">' + r[2] + '</td><td class="n">' + r[3] + '</td></tr>'; }).join('') + '</tbody></table>') + '</div>';
+      (d.older ? sec('<p class="sp-sub">' + d.older + '</p>') : '') + '</div>';
+  };
+  /* 버전 비교는 기능명세서 S6대로 기간과 상관없이 "최근 3개 버전"(건수·실패율·보통 시간) 한 표 */
+  var verTable = function () {
+    return sec('<h2>최근 버전 3개 비교</h2><table class="sp-table"><caption class="sr">최근 버전 3개의 사용 건수, 실패율, 보통 걸린 시간</caption><thead><tr><th scope="col">버전</th><th scope="col" class="n">사용</th><th scope="col" class="n">실패율</th><th scope="col" class="n">보통 시간</th></tr></thead><tbody>' + P6['7d'].rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td class="n">' + r[1] + '</td><td class="n">' + r[2] + '</td><td class="n">' + r[3] + '</td></tr>'; }).join('') + '</tbody></table><p class="sp-sub">최근 24시간에는 위 두 버전(' + D.badVer + ', ' + D.oldVer + ')만 쓰였어요.</p>');
   };
   var s6 = function (week) {
     var seg = '<div class="sp-seg" role="group" aria-label="보는 기간"><button data-period="24h" aria-pressed="' + !week + '">24시간</button><button data-period="7d" aria-pressed="' + week + '">7일</button></div>';
     var errs ='<ul style="margin:4px 0 0;padding-left:18px">' + D.errors.map(function (e) { return '<li><code>' + esc(e) + '</code></li>'; }).join('') + '</ul>';
     return wrap(K.hdr('분석', '모임모아', '모임모아 홈으로') +
       K.say({ meta: problemMeta(), headline: '<p class="sp-headline">분석이 평소보다 느려요</p>', body: K.cmp(['평소', '1.1'], ['최근 30분', '3.4']) + '<a class="sp-hbtn" href="#s7-open" style="text-decoration:none">열린 문제 보기</a>' }) +
-      sec(seg, 'padding-bottom:0') + s6Panel('24h', !week) + s6Panel('7d', week) +
+      sec(seg, 'padding-bottom:0') + s6Panel('24h', !week) + s6Panel('7d', week) + verTable() +
       sec('<details><summary>자세히</summary><code>주소 형태: POST /api/analyze<br>버전: ' + D.badVer + ' / ' + D.oldVer + '<br>오류 종류: TimeoutError 4건, SlowQuery 1건</code><p class="sp-sub" style="margin-top:6px">최근 오류 예시 5개 (개인정보 가림)</p>' + errs + '</details>') +
       sec(K.field({ label: '느림 기준', value: '5초', help: '평소 속도가 아직 없을 때만 써요. 지금은 평소 속도(1.1초)로 판단하고 있어요.' })));
   };
   add({ id: 's6', group: 'S6 기능 상세', title: 'S6 기능 상세: 분석 (24시간)',
-    desc: 'S5의 분석 행을 누르거나 Enter로 온다. 양이 지금 상태를 한 문장으로 말하고, 아래에 기간 고르기(24시간 / 7일), 사용·실패 막대, 보통 걸린 시간 선과 평소 속도 점선, 버전별 실패율 비교, [자세히](주소 형태·오류 종류별 건수·최근 오류 예시 5개)를 둔다. 막대 색은 바탕과 4.40:1, 실패는 6.2:1이고 범례 글자와 막대 설명이 함께 있다. [7일]을 누르면 목업에서도 같은 자리의 막대·선·버전 표가 바로 바뀐다.',
+    desc: 'S5의 분석 행을 누르거나 Enter로 온다. 양이 지금 상태를 한 문장으로 말하고, 아래에 기간 고르기(24시간 / 7일), 사용·실패 막대, 보통 걸린 시간 선과 평소 속도 점선, 최근 버전 3개 비교(기능명세서 S6: 건수·실패율·보통 시간, 기간과 상관없이 같은 표), [자세히](주소 형태·오류 종류별 건수·최근 오류 예시 5개)를 둔다. 막대 색은 바탕과 4.40:1, 실패는 6.2:1이고 범례 글자와 막대 설명이 함께 있다. [7일]을 누르면 목업에서도 같은 자리의 막대와 선이 바로 바뀐다.',
     mobile: function () { return s6(false); } });
   add({ id: 's6-7d', group: 'S6 기능 상세', title: 'S6 기능 상세: 7일 보기',
-    desc: '[7일]을 고른 모습(움직임 없이 바로 바뀜, [24시간]으로 돌아갈 수 있음). 날짜 칸을 7개 모두 적어, 11월 22일 실패 1건과 오늘 실패 4건이 막대 아래쪽 색으로 어느 날인지 보인다. 버전 표도 7일 동안 쓰인 4개 버전으로 바뀌고 건수 합(747건)과 실패 날짜가 막대와 같다.',
+    desc: '[7일]을 고른 모습(움직임 없이 바로 바뀜, [24시간]으로 돌아갈 수 있음). 날짜 칸을 7개 모두 적어, 11월 22일 실패 1건과 오늘 실패 4건이 막대 아래쪽 색으로 어느 날인지 보인다. 버전 표는 명세대로 최근 3개 버전(실패 22일 1건, 오늘 4건이 막대와 같음)이고, 그보다 앞 버전(19~21일 195건)은 막대에만 있다고 표 위에 적는다. 막대 합은 747건 = 표의 552건 + 앞 버전 195건.',
     mobile: function () { return s6(true); } });
 
   /* ---------------- S7 문제 상세 ---------------- */
@@ -240,7 +244,7 @@
   /* ---------------- S8 깊게 볼 기능 추가 ---------------- */
   var hdr8 = function (t, sub) { return K.hdr(t, sub, '모임모아 홈으로', ''); };
   add({ id: 's8', group: 'S8 깊게 볼 기능 추가', title: 'S8 깊게 볼 기능 추가',
-    desc: '"시작"과 "실제 성공"의 차이를 예시 문장으로 칸 위에 보여 준다(칸 안 흐린 글씨는 쓰지 않음). 앱마다 5개까지이고 지금 몇 개인지 머리에 적는다. 세 칸의 값이 그대로 들어간(칸을 고치면 목업에서도 바로 바뀌고 복사 내용도 같음)추가 연결 요청 전문(기능명세서 6.2)이 미리 보기에 보인다.',
+    desc: '"시작"과 "실제 성공"의 차이를 예시 문장으로 칸 위에 보여 준다(칸 안 흐린 글씨는 쓰지 않음). 앱마다 5개까지이고 지금 몇 개인지 머리에 적는다. 칸을 비우면 요청문의 그 자리는 예시로 채우지 않고 "(입력 필요)"로 보이며, 세 칸이 다 찰 때까지 복사 단추가 비활성이고 이유를 단추 아래에 쓴다.세 칸의 값이 그대로 들어간(칸을 고치면 목업에서도 바로 바뀌고 복사 내용도 같음)추가 연결 요청 전문(기능명세서 6.2)이 미리 보기에 보인다.',
     mobile: function () {
       return wrap(hdr8('깊게 볼 기능 추가', '모임모아, 지금 1개 / 5개') +
         sec('<h1>저장까지 됐는지 확인할 기능</h1><p class="sp-sub">화면에 "성공"이 떠도 실제로 저장이 안 될 때가 있어요. 중요한 기능 하나를 골라 끝까지 확인해요.</p>' +
@@ -315,9 +319,9 @@
 
   /* ---------------- S10 앱 설정 ---------------- */
   add({ id: 's10', group: 'S10 앱 설정', title: 'S10 앱 설정',
-    desc: '이름·주소, 기능 이름표, 키. 키는 앞 글자만 보이고 재발급은 "이전 키는 24시간 뒤 멈춰요", 폐기는 "지금 바로 멈춰요"를 단추 옆에 미리 쓴다. 앱 삭제는 맨 아래, 앱 이름을 다시 적어야 눌린다.',
+    desc: '이름·주소, 기능 이름표, 키. 키는 앞 글자만 보이고 재발급은 "이전 키는 24시간 뒤 멈춰요", 폐기는 "최대 5분 안에 이 키로 기록 받기가 멈춰요"(수집 서버의 키 확인 캐시 5분, 기능명세서 S11)를 단추 옆에 미리 쓴다. 앱 삭제는 맨 아래, 앱 이름을 다시 적어야 눌린다.',
     mobile: function () {
-      var key = function (name, pfx, note) { return '<div class="sp-card"><div style="display:flex;align-items:center;gap:8px">' + ic.key(18) + '<b>' + name + '</b></div><code style="font-size:14px">' + pfx + '········</code><p class="sp-sub">' + note + '</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="sp-btn line">새 키 만들기</button><button class="sp-btn danger">폐기</button></div><p class="sp-sub">새 키를 만들면 이전 키는 24시간 뒤에 멈춰요. 폐기하면 지금 바로 멈춰요.</p></div>'; };
+      var key = function (name, pfx, note) { return '<div class="sp-card"><div style="display:flex;align-items:center;gap:8px">' + ic.key(18) + '<b>' + name + '</b></div><code style="font-size:14px">' + pfx + '········</code><p class="sp-sub">' + note + '</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="sp-btn line">새 키 만들기</button><button class="sp-btn danger">폐기</button></div><p class="sp-sub">새 키를 만들면 이전 키는 24시간 뒤에 멈춰요. 폐기하면 최대 5분 안에 이 키로 기록 받기가 멈춰요.</p></div>'; };
       return wrap(K.hdr('앱 설정', '모임모아', '모임모아 홈으로', '') +
         sec('<h2>앱 정보</h2>' + K.field({ label: '앱 이름', value: '모임모아' }) + K.field({ label: '앱 주소', opt: true, value: 'https://moim-moa.pages.dev' }) + '<button class="sp-btn">저장</button>') +
         sec('<h2>기능 이름표</h2><a class="sp-appcard" href="#s10-names"><span class="r"><b style="font-size:var(--sp-text-md)">기능 8개, 이름 없는 기능 1개</b>' + ic.chev(18) + '</span><span class="sp-sub">숨긴 기능 1개. 주소 형태가 200개를 넘어 일부를 "기타"로 묶었어요</span></a>') +
@@ -348,26 +352,37 @@
       return sec('<h2>내 앱</h2><dl class="sp-kv"><div><dt>등록한 앱</dt><dd>3개 / 3개</dd></div></dl><p class="sp-sub">무료 베타는 앱 3개까지예요.</p><a class="sp-btn line block" href="#s2" style="text-decoration:none">내 앱 목록 보기</a>');
     },
     out: function () { return sec('<h2>로그아웃</h2><p class="sp-sub">이 기기에서만 로그아웃돼요. 알림은 계속 와요.</p><button class="sp-btn line block" data-go="s11-logout">로그아웃</button>'); },
-    leave: function () { return sec('<h2>회원 탈퇴</h2><p class="sp-sub">모든 앱과 기록이 지워지고 되돌릴 수 없어요. 무엇이 지워지는지 다음 화면에서 한 번 더 보여 드려요.</p><a class="sp-btn danger block" href="#s11-delete" style="text-decoration:none">회원 탈퇴</a>'); }
+    leave: function (none) { return sec('<h2>회원 탈퇴</h2><p class="sp-sub">' + (none ? '계정이 지워지고 되돌릴 수 없어요.' : '모든 앱과 기록이 지워지고 되돌릴 수 없어요.') + ' 무엇이 지워지는지 다음 화면에서 한 번 더 보여 드려요.</p><a class="sp-btn danger block" href="#' + (none ? 's11-delete-noapps' : 's11-delete') + '" style="text-decoration:none">회원 탈퇴</a>'); }
   };
   add({ id: 's11', group: 'S11 내 계정', title: 'S11 내 계정', path: '/account',
     desc: 'S2 내 앱 목록 머리말 오른쪽 사람 아이콘(PC도 같은 자리)으로 온다. 계정 정보, 앱마다의 알림 받을 곳 요약(누르면 S9), 등록한 앱 수, 로그아웃, 회원 탈퇴. 설정 화면이라 큰 문장 카드와 양은 쓰지 않는다.',
     mobile: function () { return wrap(K.hdr('내 계정', null, '내 앱 목록으로', '') + s11Parts.account() + s11Parts.alerts() + s11Parts.apps() + s11Parts.out() + s11Parts.leave()); },    pc: function () { return '<header class="sp-top"><img class="sp-tile" src="' + SP.IMG.wordmark + '" alt="" width="30" height="30"><span class="crumb">내 앱 › <b>내 계정</b></span><span style="flex:1"></span><a class="sp-ibtn" href="#s11" aria-label="내 계정" aria-current="page">' + ic.user(22) + '</a></header><div class="sp-pcw"><h1 style="font-size:var(--sp-text-xl)">내 계정</h1><div class="sp-pc2"><div style="display:flex;flex-direction:column;gap:8px">' + flat(s11Parts.account()) + flat(s11Parts.alerts()) + '</div><div style="display:flex;flex-direction:column;gap:8px">' + flat(s11Parts.apps()) + flat(s11Parts.out()) + flat(s11Parts.leave()) + '</div></div></div>'; } });
-  var leaveScreen = function (state) {
-    var gone = '<ul class="sp-steps">' + [
+  /* 키가 멈추는 시점 문구 — 기능명세서 S11·C13과 같은 말 */
+  var STOP_TXT = '탈퇴 후 최대 5분 안에 기록 받기가 멈춰요';
+  /* 탈퇴 화면. state: 확인(없음) / busy 진행 / checking 응답 끊김 뒤 확인 중 / error 실패
+     none: 등록한 앱이 0개인 계정 — 앱 관련 문구를 쓰지 않는다 */
+  var leaveScreen = function (state, none) {
+    var items = none ? [
+      ['user', '<b>계정과 로그인 정보가 지워져요</b><br><span class="sp-sub">등록한 앱이 없어서 함께 지워질 앱·기록·키는 없어요</span>'],
+      ['retry', '<b>되돌릴 수 없어요</b><br><span class="sp-sub">같은 이메일로 다시 가입하면 처음부터 시작해요</span>']
+    ] : [
       ['bad', '<b>앱 3개가 모두 지워져요</b><br><span class="sp-sub">모임모아, 독서노트, 우리동네 장터와 그 안의 기록·문제·알림 설정 전부</span>'],
-      ['key', '<b>앱에 넣은 키가 멈춰요</b><br><span class="sp-sub">늦어도 5분 안에 그 키로 보내는 기록을 받지 않아요. 앱 코드에서 전송 부분을 빼도 돼요</span>'],
+      ['key', '<b>' + STOP_TXT + '</b><br><span class="sp-sub">앱에 넣은 키로 보내는 기록을 더 받지 않아요. 앱 코드에서 전송 부분을 빼도 돼요</span>'],
       ['bell', '<b>슬랙·이메일 알림이 더 오지 않아요</b><br><span class="sp-sub">슬랙 채널에 남은 지난 메시지는 슬랙에서 지워야 해요</span>'],
       ['retry', '<b>되돌릴 수 없어요</b><br><span class="sp-sub">같은 이메일로 다시 가입하면 처음부터 시작해요</span>']
-    ].map(function (r) { return '<li><span class="num" style="background:var(--sp-bad-soft);color:var(--sp-bad-ink)">' + ic[r[0]](14) + '</span><span>' + r[1] + '</span></li>'; }).join('') + '</ul>';
+    ];
+    var gone = '<ul class="sp-steps">' + items.map(function (r) { return '<li><span class="num" style="background:var(--sp-bad-soft);color:var(--sp-bad-ink)">' + ic[r[0]](14) + '</span><span>' + r[1] + '</span></li>'; }).join('') + '</ul>';
     /* 확인: 빈 칸 + 비활성 단추(정확히 같게 적으면 눌림 → 진행 화면)
        진행: 적은 값 그대로 잠금 + "탈퇴하는 중" 단추 하나
        실패: 적은 값 유지 + 오류 안내 안의 [다시 시도] 하나(따로 탈퇴 단추를 두지 않음) */
     var label = '확인을 위해 로그인 이메일을 적어 주세요';
+    var locked = function () { return confirmField(label, EMAIL, '', '', { value: EMAIL, locked: true, noButton: true }); };
+    var spinBtn = function (t) { return '<button class="sp-btn danger block" aria-busy="true" aria-disabled="true"><span class="sp-spin" aria-hidden="true"></span>' + t + '</button>'; };
     var body;
-    if (state === 'busy') body = confirmField(label, EMAIL, '', '', { value: EMAIL, locked: true, noButton: true }) + '<button class="sp-btn danger block" aria-busy="true" aria-disabled="true"><span class="sp-spin" aria-hidden="true"></span>탈퇴하는 중</button><p class="sp-sub" role="status">앱 3개와 기록을 지우고 있어요. 보통 10초 안에 끝나요. 이 화면을 닫아도 계속 진행돼요.</p>';
-    else if (state === 'error') body = confirmField(label, EMAIL, '', '', { value: EMAIL, locked: true, noButton: true }) + K.error('탈퇴를 마치지 못했어요', '중간에 연결이 끊겼어요. 계정은 아직 남아 있고 로그인도 돼요. 다시 시도하면 남은 삭제를 이어서 해요.', '<button class="sp-btn danger" data-go="s11-deleting">' + ic.retry(16) + '다시 시도</button>') + '<a class="sp-btn text" href="#s11">나중에 하기</a>';
-    else body = confirmField(label, EMAIL, '모든 앱과 기록을 지우고 탈퇴', 's11-deleting') + '<a class="sp-btn text" href="#s11">탈퇴하지 않고 돌아가기</a>';
+    if (state === 'busy') body = locked() + spinBtn('탈퇴하는 중') + '<p class="sp-sub" role="status">' + (none ? '계정을 지우고 있어요.' : '앱 3개와 기록을 지우고 있어요.') + ' 보통 10초 안에 끝나요. 이 화면을 닫아도 계속 진행돼요.</p>';
+    else if (state === 'checking') body = locked() + spinBtn('탈퇴 결과를 확인하는 중') + '<p class="sp-sub" role="status">응답이 중간에 끊겼어요. 탈퇴는 서버에서 계속 진행 중일 수 있어서 바로 실패로 보지 않아요. 10초마다 계정이 남아 있는지 다시 확인하고(최대 2분), 계정이 없어지면 탈퇴가 끝난 거예요.</p>';
+    else if (state === 'error') body = locked() + K.error('탈퇴를 마치지 못했어요', '2분 동안 다시 확인해도 계정이 남아 있어요(또는 서버가 실패를 알려 왔어요). 로그인도 그대로 돼요. 다시 시도하면 남은 삭제를 이어서 해요.', '<button class="sp-btn danger" data-go="s11-deleting">' + ic.retry(16) + '다시 시도</button>') + '<a class="sp-btn text" href="#s11">나중에 하기</a>';
+    else body = confirmField(label, EMAIL, none ? '계정을 지우고 탈퇴' : '모든 앱과 기록을 지우고 탈퇴', none ? 's11-done-noapps' : 's11-deleting') + '<a class="sp-btn text" href="#' + (none ? 's11-noapps' : 's11') + '">탈퇴하지 않고 돌아가기</a>';
     return wrap(K.hdr('회원 탈퇴', null, '내 계정으로', '') + sec('<h1>탈퇴하면 이렇게 돼요</h1>' + gone) + sec(body));
   };
   add({ id: 's11-delete', group: 'S11 내 계정', title: 'S11 탈퇴 확인',
@@ -376,16 +391,25 @@
   add({ id: 's11-deleting', group: 'S11 내 계정', title: 'S11 탈퇴 진행 중',
     desc: '누르면 단추가 "탈퇴하는 중"으로 바뀌고 다시 눌리지 않는다. 입력 칸도 잠근다. 서버에서 키 폐기 → 앱·기록 삭제 → 계정 삭제 순서로 진행하며, 화면을 닫아도 계속된다.',
     mobile: function () { return leaveScreen('busy'); } });
+  add({ id: 's11-delete-checking', group: 'S11 내 계정', title: 'S11 탈퇴 응답 끊김: 확인 중',
+    desc: '탈퇴 요청 뒤 응답이 끊기거나 30초가 넘으면, "계정이 아직 있다"는 한 번의 확인만으로 실패라고 하지 않는다(서버에서 삭제가 계속 진행 중일 수 있음). "확인 중" 상태로 두고 10초마다 세션 갱신으로 다시 확인한다. 계정이 없어지면 완료(S1 + 탈퇴를 마쳤어요), 2분이 지나도 계정이 있으면 실패 화면으로 간다(기능명세서 S11).',
+    mobile: function () { return leaveScreen('checking'); } });
   add({ id: 's11-delete-error', group: 'S11 내 계정', title: 'S11 탈퇴 실패',
-    desc: '중간에 실패하면 무엇이 안 됐는지와 지금 계정 상태(아직 남아 있음, 로그인 됨)를 쓰고, 할 일은 오류 안내 안의 [다시 시도] 하나만 둔다(남은 삭제를 이어서 함). 적은 이메일은 잠근 채 그대로 둔다. 응답이 끊겨 결과를 모르면 이 화면 전에 다시 로그인을 시도해 계정이 없으면 완료 화면으로 보낸다(기능명세서 S11).',
+    desc: '서버가 실패를 알려 왔거나, 응답이 끊긴 뒤 2분 동안 다시 확인해도 계정이 남아 있을 때. 무엇이 안 됐는지와 지금 계정 상태(아직 남아 있음, 로그인 됨)를 쓰고, 할 일은 오류 안내 안의 [다시 시도] 하나만 둔다(남은 삭제를 이어서 함). 적은 이메일은 잠근 채 그대로 둔다.',
     mobile: function () { return leaveScreen('error'); } });
   add({ id: 's11-done', group: 'S11 내 계정', title: 'S11 탈퇴 완료 → 첫 화면',
     desc: '탈퇴가 끝나면 로그아웃된 첫 화면(S1)으로 보내고, 맨 위 띠로 결과를 한 번 알린다. 띠는 다음 방문부터 보이지 않는다.',
-    mobile: function () { return s1('<div class="sp-banner info top" role="status">' + ic.ok(18) + '<div><b>탈퇴를 마쳤어요.</b> 앱 3개와 모든 기록을 지웠어요. 앱에 넣은 키는 늦어도 5분 안에 멈춰요.</div></div>'); } });
+    mobile: function () { return s1('<div class="sp-banner info top" role="status">' + ic.ok(18) + '<div><b>탈퇴를 마쳤어요.</b> 앱 3개와 모든 기록을 지웠어요. ' + STOP_TXT + '.</div></div>'); } });
   add({ id: 's11-logout', group: 'S11 내 계정', title: 'S11 로그아웃 → 첫 화면',
     desc: '[로그아웃]을 누르면 확인 없이 바로 이 기기의 로그인을 끝내고 첫 화면(S1)으로 보낸다. 맨 위 띠로 결과와 알림이 계속 온다는 것을 한 번 알린다. 다시 로그인하면 S2 내 앱 목록으로 간다.',
     mobile: function () { return s1('<div class="sp-banner info top" role="status">' + ic.ok(18) + '<div><b>로그아웃했어요.</b> 문제가 생기면 알림은 계속 보내 드려요.</div></div>'); } });
   add({ id: 's11-noapps', group: 'S11 내 계정', title: 'S11 내 계정: 앱 0개',
     desc: '등록한 앱이 없을 때. 알림 받을 곳은 앱마다 정하므로 빈 상자로 이유를 쓰고, 내 앱 칸은 "0개 / 3개"와 [앱 등록하기](S3)를 기본 단추로 둔다. 로그아웃·탈퇴는 그대로.',
-    mobile: function () { return wrap(K.hdr('내 계정', null, '내 앱 목록으로', '') + s11Parts.account() + s11Parts.alerts(true) + s11Parts.apps(true) + s11Parts.out() + s11Parts.leave()); } });
+    mobile: function () { return wrap(K.hdr('내 계정', null, '내 앱 목록으로', '') + s11Parts.account() + s11Parts.alerts(true) + s11Parts.apps(true) + s11Parts.out() + s11Parts.leave(true)); } });
+  add({ id: 's11-delete-noapps', group: 'S11 내 계정', title: 'S11 탈퇴 확인: 앱 0개',
+    desc: '앱이 없는 계정의 탈퇴 확인. 지워지는 것은 실제 앱 수대로 쓴다: 앱이 0개면 앱·기록·키 문구는 빼고 "계정과 로그인 정보가 지워져요"와 "되돌릴 수 없어요" 두 줄만. 단추도 "계정을 지우고 탈퇴". 확인 칸 규칙은 같다. 맞게 적고 누르면(진행·확인 중·실패 화면은 앱 문구만 빠지고 같음) 완료 화면으로 간다.',
+    mobile: function () { return leaveScreen(null, true); } });
+  add({ id: 's11-done-noapps', group: 'S11 내 계정', title: 'S11 탈퇴 완료: 앱 0개',
+    desc: '앱이 없던 계정의 탈퇴 완료. 지운 것이 계정뿐이므로 띠에도 앱·기록·키 문구를 쓰지 않는다.',
+    mobile: function () { return s1('<div class="sp-banner info top" role="status">' + ic.ok(18) + '<div><b>탈퇴를 마쳤어요.</b> 계정과 로그인 정보를 지웠어요.</div></div>'); } });
 })(window.SP);

@@ -71,6 +71,8 @@
 .sp-copy[data-state="done"] { background: var(--sp-ok); color: var(--sp-on-ok); }
 .sp-copy[data-state="fail"] { background: transparent; color: var(--sp-ink); border: 1.5px solid var(--sp-line-strong); }
 .sp-copyblock { display: flex; flex-direction: column; gap: 8px; }
+.sp-copyblock .err-line { display: flex; gap: 6px; align-items: flex-start; font-size: var(--sp-text-sm); color: var(--sp-bad-ink); font-weight: var(--sp-weight-medium); }
+.sp-copyblock .err-line[hidden] { display: none; }
 .sp-copy-manual { display: flex; flex-direction: column; gap: 6px; }
 .sp-copy-manual[hidden] { display: none; }
 .sp-pre { white-space: pre-wrap; background: var(--sp-surface-2); border-radius: var(--sp-radius-sm); padding: 12px; margin: 0; line-height: 1.5; color: var(--sp-ink); }

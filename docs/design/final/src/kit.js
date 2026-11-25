@@ -99,9 +99,12 @@ window.SP = window.SP || {};
   SP.deepDefault = { name: '모임 신청', start: '신청 버튼을 누를 때', ok: '참가자 명단에 저장됐을 때' };
   SP.deepVals = function (root) {
     var v = { name: SP.deepDefault.name, start: SP.deepDefault.start, ok: SP.deepDefault.ok };
-    if (root && root.querySelectorAll) root.querySelectorAll('[data-deep]').forEach(function (i) { var t = i.value.trim(); if (t) v[i.getAttribute('data-deep')] = t; });
+    /* 화면의 칸이 있으면 그 값을 그대로 쓴다. 빈 칸은 예시로 채우지 않고 '(입력 필요)'로 보여 준다 */
+    v.missing = false;
+    if (root && root.querySelectorAll) root.querySelectorAll('[data-deep]').forEach(function (i) { var t = i.value.trim(); if (!t) { t = SP.NEED; v.missing = true; } v[i.getAttribute('data-deep')] = t; });
     return v;
   };
+  SP.NEED = '(입력 필요)';
   /* AI에 보낼 내용(6.3). mode: first 처음 / again 새 버전에서도 느림 / worse 더 나빠져 다시 알림 — 화면 숫자와 같게 */
   SP.aiText = function (mode) {
     var D = SP.D;
@@ -148,6 +151,7 @@ window.SP = window.SP || {};
     return '<div class="sp-copyblock" data-kind="' + o.kind + '">' + K.copy(o.label, o.kind, o.line ? ' line block' : ' block', o.blocked ? 'fail' : null) +
       '<div class="sp-copy-manual"' + (o.blocked ? '' : ' hidden') + '><div class="sp-banner warn">' + ic.bad(18) + '<div><b>자동 복사가 막혔어요.</b> 아래 상자를 누르면 전부 선택돼요. 그대로 복사하세요(휴대폰은 길게 눌러 "복사").</div></div><pre class="sp-pre" tabindex="0" aria-label="' + name + ', 눌러서 모두 선택">' + esc(t) + '</pre></div>' +
       (o.preview && !o.blocked ? '<details' + (o.preview === 'open' ? ' open' : '') + '><summary>보낼 내용 미리 보기</summary><pre class="sp-pre scroll" tabindex="0" aria-label="' + name + '">' + esc(t) + '</pre></details>' : '') +
+      (o.kind === 'deep' ? '<p class="sp-need err-line" role="status" hidden>' + ic.bad(16) + '빈 칸이 있어요. 세 칸을 모두 채우면 복사할 수 있어요.</p>' : '') +
       (o.note ? '<p class="sp-sub">' + o.note + '</p>' : '') + '</div>';
   };
   /* 깊게 보기 결과 4가지 — 상태가 아니라 결과 종류. 색 + 아이콘 + 글자 */
@@ -217,7 +221,7 @@ window.SP = window.SP || {};
   document.addEventListener('click', function (e) {
     var c = e.target.closest('[data-copy]');
     if (c) {
-      if (c.getAttribute('data-state') === 'done' || c.getAttribute('aria-busy') === 'true') return;
+      if (c.getAttribute('data-state') === 'done' || c.getAttribute('aria-busy') === 'true' || c.getAttribute('aria-disabled') === 'true') return;
       var kind = c.getAttribute('data-copy'), label = c.getAttribute('data-label') || '복사';
       var text = SP.texts[kind] ? SP.texts[kind](c.closest('.sp')) : '';
       var lbl = c.querySelector('.lbl'), box = c.closest('.sp-copyblock'), manual = box ? box.querySelector('.sp-copy-manual') : null;
@@ -274,8 +278,14 @@ window.SP = window.SP || {};
     var t = e.target;
     /* S8: 세 칸을 고치면 미리 보기 전문도 바로 바뀜(복사 내용과 같음) */
     if (t.hasAttribute && t.hasAttribute('data-deep')) {
-      var root = t.closest('.sp'), txt = SP.texts.deep(root);
+      var root = t.closest('.sp'), txt = SP.texts.deep(root), miss = SP.deepVals(root).missing;
       root.querySelectorAll('.sp-copyblock[data-kind="deep"] pre').forEach(function (p) { p.textContent = txt; });
+      /* 빈 칸이 하나라도 있으면 복사 단추를 막고 이유를 보여 줌 */
+      root.querySelectorAll('.sp-copyblock[data-kind="deep"]').forEach(function (b) {
+        var btn = b.querySelector('[data-copy]'), why = b.querySelector('.sp-need');
+        if (btn) btn.setAttribute('aria-disabled', String(miss));
+        if (why) why.hidden = !miss;
+      });
     }
     /* 확인 입력: 적은 값이 data-confirm과 정확히 같을 때만 단추가 눌림 */
     if (t.hasAttribute && t.hasAttribute('data-confirm')) {
