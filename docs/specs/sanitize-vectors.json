@@ -82,7 +82,7 @@
     },
     {
       "input": "Bearer: demo; token=test",
-      "expected": "[가림]; [가림]"
+      "expected": "[가림]; token=[가림]"
     },
     {
       "input": "한글sk_live___fixture__",
@@ -138,7 +138,7 @@
     },
     {
       "input": "오류Bearer: demo; 값token=demo",
-      "expected": "오류[가림]; 값[가림]"
+      "expected": "오류[가림]; 값token=[가림]"
     },
     {
       "input": "헤더Cookie: sid=one",
@@ -151,6 +151,38 @@
     {
       "input": "인증eyJdemo",
       "expected": "인증[가림]"
+    },
+    {
+      "input": "refresh_token=abc",
+      "expected": "refresh_token=[가림]"
+    },
+    {
+      "input": "id_token=one&api_key=two",
+      "expected": "id_token=[가림]&api_key=[가림]"
+    },
+    {
+      "input": "my_api_key=one; apikey=two",
+      "expected": "my_api_key=[가림]; apikey=[가림]"
+    },
+    {
+      "input": "client_secret=one",
+      "expected": "client_secret=[가림]"
+    },
+    {
+      "input": "X-Api-Key: two",
+      "expected": "X-Api-Key: [가림]"
+    },
+    {
+      "input": "db-PASSWD : one Pwd=two password=three",
+      "expected": "db-PASSWD : [가림] Pwd=[가림] password=[가림]"
+    },
+    {
+      "input": "monkey=banana",
+      "expected": "monkey=[가림]"
+    },
+    {
+      "input": "tokenizer=one secret_hint: two",
+      "expected": "tokenizer=one secret_hint: two"
     }
   ],
   "route": [
@@ -188,6 +220,10 @@
     },
     {
       "input": "/a/１２３",
+      "expected": "/a/:id"
+    },
+    {
+      "input": "/a/my_api_key=one",
       "expected": "/a/:id"
     }
   ]

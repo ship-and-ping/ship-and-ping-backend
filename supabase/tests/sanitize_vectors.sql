@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(47);
+select plan(56);
 
 select is(private.mask(input), expected, 'mask ' || id)
 from (values
@@ -25,7 +25,7 @@ from (values
   (18, E'sp' || E'_\u202esrv_\u2066demo\u2069', E'[가림]'),
   (19, E'Cookie: sid=one\u2028safe\u2029next\u0085end', E'[가림]\nsafe\nnext\nend'),
   (20, E'a%40example.test 010-1234-5678', E'[가림] [가림]'),
-  (21, E'Bearer: demo; token=test', E'[가림]; [가림]'),
+  (21, E'Bearer: demo; token=test', E'[가림]; token=[가림]'),
   (22, E'한글sk' || E'_live___fixture__', E'한글[가림]'),
   (23, E'sk' || E'_test___fixture__', E'[가림]'),
   (24, E'(pk' || E'_live___fixture__)', E'([가림])'),
@@ -39,10 +39,18 @@ from (values
   (32, E'번호01012345678', E'번호[가림]'),
   (33, E'0101234567890123', E'0101234567890123'),
   (34, E'메일a@example.test로 전송', E'메일[가림]로 전송'),
-  (35, E'오류Bearer: demo; 값token=demo', E'오류[가림]; 값[가림]'),
+  (35, E'오류Bearer: demo; 값token=demo', E'오류[가림]; 값token=[가림]'),
   (36, E'헤더Cookie: sid=one', E'헤더[가림]'),
   (37, E'인증Basic YWJjZGVmZ2hpamts', E'인증[가림]'),
-  (38, E'인증eyJdemo', E'인증[가림]')
+  (38, E'인증eyJdemo', E'인증[가림]'),
+  (39, E'refresh_token=abc', E'refresh_token=[가림]'),
+  (40, E'id_token=one&api_key=two', E'id_token=[가림]&api_key=[가림]'),
+  (41, E'my_api_key=one; apikey=two', E'my_api_key=[가림]; apikey=[가림]'),
+  (42, E'client_secret=one', E'client_secret=[가림]'),
+  (43, E'X-Api-Key: two', E'X-Api-Key: [가림]'),
+  (44, E'db-PASSWD : one Pwd=two password=three', E'db-PASSWD : [가림] Pwd=[가림] password=[가림]'),
+  (45, E'monkey=banana', E'monkey=[가림]'),
+  (46, E'tokenizer=one secret_hint: two', E'tokenizer=one secret_hint: two')
 ) as cases(id, input, expected);
 
 select is(private.route(input), expected, 'route ' || id)
@@ -55,7 +63,8 @@ from (values
   (6, E'/a/aBcDeFGhiJKlm_NOP', E'/a/:id'),
   (7, E'/a/42;jsessionid=secret?q=x#frag', E'/a/:id'),
   (8, E'/a/v1sp' || E'_srv_demo', E'/a/:id'),
-  (9, E'/a/１２３', E'/a/:id')
+  (9, E'/a/１２３', E'/a/:id'),
+  (10, E'/a/my_api_key=one', E'/a/:id')
 ) as cases(id, input, expected);
 
 select * from finish();

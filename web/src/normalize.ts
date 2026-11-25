@@ -19,7 +19,7 @@ const privatePattern = new RegExp([
   start + /(?:set-cookie|cookie)[ \t]*:[^\r\n]*/.source,
   start + /bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;]+/.source,
   start + /basic[ \t]+(?:[a-z0-9+/]{14,}==|[a-z0-9+/]{15,}=|[a-z0-9+/]{16,})/.source,
-  start + /(?:access_token|token|key|password)=[^&\s,;#]+/.source,
+  /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]*(?:token|key|secret|password|passwd|pwd)[ \t]*[=:][ \t]*)[^&\s,;#]+/.source,
   "(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|" + start + "eyJ)[a-z0-9_.=-]+",
   /(?<![a-z0-9])(?:sk|pk|rk)_[a-z0-9_]{16,}/.source,
   /[a-z0-9._%+-]+(?:@|%40)[a-z0-9.-]+\.[a-z]{2,}/.source,
@@ -27,7 +27,8 @@ const privatePattern = new RegExp([
 ].join("|"), "giu");
 
 export function maskText(value: string): string {
-  return [...normalizeText(value).replace(privatePattern, "[가림]")].slice(0, 300).join("");
+  // Capture 1 retains the name and separator for credential parameters.
+  return [...normalizeText(value).replace(privatePattern, "$1[가림]")].slice(0, 300).join("");
 }
 
 const uuid = "[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}";
