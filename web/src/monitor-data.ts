@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface Feature {
+  hidden?: boolean;
   id: string;
   name: string;
   method: string | null;
@@ -42,6 +43,12 @@ export interface Incident {
   notifications: { event: string; sent_at: string; ok: boolean }[];
 }
 export interface Monitor {
+  verification?: {
+    version: string | null;
+    consecutive_successes: number;
+    latest_duration_ms: number | null;
+    latest_success: boolean | null;
+  };
   name: string;
   features: Feature[];
   incidents: Incident[];
@@ -79,10 +86,9 @@ export async function loadMonitor(
     client
       .from("features")
       .select(
-        "id,name,method,route,slow_threshold_ms,baselines(p50_ms,sample_count,observed_min_ms,observed_max_ms)",
+        "id,name,method,route,hidden,slow_threshold_ms,baselines(p50_ms,sample_count,observed_min_ms,observed_max_ms)",
       )
       .eq("app_id", app)
-      .eq("hidden", false)
       .order("id")
       .returns<Feature[]>(),
     pages<Incident>((a, b) =>
@@ -180,7 +186,7 @@ export async function loadMonitor(
           .range(a, b),
       )
     : [];
-  const [rows, deepRows, errorKinds, samples, steps] = await Promise.all([
+  const [rows, deepRows, errorKinds, samples, steps, proof] = await Promise.all([
     stats,
     attempts,
     kindRows,
@@ -199,6 +205,9 @@ export async function loadMonitor(
           .order("ended_at", { ascending: false })
           .limit(1)
       : { data: [], error: null },
+    incident?.status === "open"
+      ? client.rpc("incident_verification", { incident_id: incident.id })
+      : undefined,
   ]);
   for (const attempt of deepRows) {
     const bucket = attempt.ended_at ?? attempt.started_at;
@@ -218,6 +227,7 @@ export async function loadMonitor(
   }
   return {
     name: read(header).name,
+    verification: proof ? read<NonNullable<Monitor["verification"]>>(proof) : undefined,
     features: read(features),
     incidents,
     versions,
@@ -264,6 +274,7 @@ export function summarize(rows: Stat[]) {
     total,
     failures,
     successes: total - failures - excluded,
+    eligible: total - excluded,
     median: measured ? bounds[index] : null,
     min: measured ? (bounds[hist.findIndex((n) => n > 0) - 1] ?? 0) : null,
     max: measured ? bounds[hist.map((n) => n > 0).lastIndexOf(true)] : null,

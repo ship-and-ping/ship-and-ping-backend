@@ -26,7 +26,7 @@ export interface Snapshot {
 export interface Gateway {
   monitor(app: string, feature?: string, issue?: string): Promise<Monitor>;
   threshold(app: string, feature: string, ms: number): Promise<void>;
-  dismiss(app: string, issue: string): Promise<void>;
+  dismiss(issue: string): Promise<void>;
   session(): Promise<string | null>;
   listen(fn: (id: string | null) => void): () => void;
   login(email?: string): Promise<void>;
@@ -59,10 +59,9 @@ export function gateway(client: SupabaseClient): Gateway {
           .single(),
       );
     },
-    async dismiss(app, issue) {
+    async dismiss(issue) {
       const { error } = await client.rpc("dismiss_incident", {
-        p_app_id: app,
-        p_incident_id: issue,
+        incident_id: issue,
       });
       if (error) throw error;
     },

@@ -594,3 +594,33 @@ summary {
     transform: none;
   }
 }
+.monitor {
+  --sp-chart-failure: var(--sp-bad-ink);
+  --sp-chart-time: var(--sp-ink);
+  --sp-chart-usual: var(--sp-ink-2);
+}
+.chart-legend span::before {
+  content: "";
+  display: inline-block;
+  background: var(--sp-chart);
+  width: .8em;
+  height: .8em;
+  margin-right: .3em;
+}
+.chart-legend span + span::before { background: var(--sp-chart-failure); }
+.chart-period { display: flex; gap: .25rem; }
+.chart-period button { min-height: 44px; }
+.feature-status.problem { color: var(--sp-bad-ink); }
+.feature-status.healthy { color: var(--sp-ok-ink); }
+.monitor-loading div {
+  margin-block: 1rem;
+  height: 8rem;
+  border-radius: 1rem;
+  background: var(--sp-line);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .monitor .arrived #sheep { animation: resolved-hop .45s ease-out; }
+  @keyframes resolved-hop {
+    50% { transform: translateY(-6px); }
+  }
+}

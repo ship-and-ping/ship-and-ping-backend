@@ -10,7 +10,7 @@ import { Sheep } from "./Sheep";
 import { displayText } from "./normalize";
 import mark from "./assets/wordmark.png";
 
-type AppHeading = { id: string; name: string };
+type AppHeading = { id: string; name: string; issues?: number };
 export const CurrentAppName = createContext<(heading: AppHeading) => void>(
   () => {},
 );
@@ -63,7 +63,7 @@ export function Shell({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
-  const { pathname } = useLocation();
+  const { pathname, hash: currentHash } = useLocation();
   const [heading, setHeading] = useState<AppHeading>();
   const currentName =
     heading && pathname.split("/")[2] === heading.id
@@ -121,10 +121,12 @@ export function Shell({
             ].map(([label, hash]) => (
               <Link
                 key={label}
+                aria-current={(pathname === "/apps/" + heading.id && currentHash === hash) ||
+                  (hash && pathname.startsWith("/apps/" + heading.id + "/" + hash.slice(1) + "/")) ? "page" : undefined}
                 onClick={() => setOpen(false)}
                 to={"/apps/" + heading.id + hash}
               >
-                {label}
+                {label}{hash === "#issues" && heading.issues != null ? " " + heading.issues : ""}
               </Link>
             ))}
           {(currentName

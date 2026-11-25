@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
+import { Copy } from "./Connect";
 import type { Gateway } from "./data";
 import { Hero, CurrentAppName } from "./Layout";
 import { displayText, sanitizeRoute } from "./normalize";
@@ -24,7 +25,7 @@ const status = {
   open: "진행 중",
   resolved: "해결됐어요",
   quiet: "잠잠해졌어요",
-  dismissed: "문제 아님으로 닫음",
+  dismissed: "문제 아님으로 닫았어요",
 };
 const title = (f: Feature | undefined, i: Incident) =>
   displayText(f?.name ?? "기능") +
@@ -37,15 +38,14 @@ const route = (f: Feature) =>
   displayText(
     [f.method, sanitizeRoute(f.route ?? "")].filter(Boolean).join(" "),
   );
-function details(i: Incident) {
+function details(i: Incident, f?: Feature) {
   const m = i.metric_worst ?? i.metric_at_open;
   if (!m) return when(i.opened_at) + "부터";
   if (i.kind === "unconfirmed")
     return "사용 결과를 확인하지 못했어요 · " + when(i.opened_at) + "부터";
   if (i.kind === "slow")
     return (
-      "평소 " +
-      time(m.baseline ?? null) +
+      (m.baseline == null ? "기준 " + time(f?.slow_threshold_ms ?? 5000) : "평소 " + time(m.baseline)) +
       " → 최근 30분 " +
       time(m.p50 ?? null) +
       (m.total == null ? "" : " (" + displayText(String(m.total)) + "건)")
@@ -81,6 +81,7 @@ function MonitorPage({
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const heading = useContext(CurrentAppName);
+  const { hash } = useLocation();
   useEffect(() => {
     let active = true;
     setError(false);
@@ -89,7 +90,7 @@ function MonitorPage({
       .then((result) => {
         if (active) {
           setData(result);
-          heading({ id, name: result.name });
+          heading({ id, name: result.name, issues: result.incidents.filter((i) => i.status === "open").length });
         }
       })
       .catch(() => {
@@ -101,13 +102,13 @@ function MonitorPage({
   }, [api, id, feature, issue, attempt, heading]);
   useEffect(() => {
     if (!data) return;
-    const target = window.location.hash.slice(1);
+    const target = hash.slice(1);
     if (target) document.getElementById(target)?.scrollIntoView?.();
     else document.querySelector<HTMLElement>(".monitor h1")?.focus();
-  }, [data]);
+  }, [data, hash]);
   const retry = () => setAttempt((n) => n + 1);
   const base = "/apps/" + encodeURIComponent(id);
-  if (error)
+  if (error && !data)
     return (
       <section role="alert">
         <h1 tabIndex={-1}>기록을 불러오지 못했어요</h1>
@@ -115,13 +116,14 @@ function MonitorPage({
         <Link to="/apps">내 앱</Link>
       </section>
     );
-  if (!data) return <p role="status">기록을 불러오는 중</p>;
+  if (!data) return <section role="status" aria-busy="true" className="monitor-loading">기록을 불러오는 중<div aria-hidden="true" /></section>;
   const incident = data.incidents.find((i) => i.id === issue);
   const selected = data.features.find(
     (f) => f.id === (feature ?? incident?.feature_id),
   );
   return (
     <div className="monitor">
+      {error && <p role="alert">새 기록을 불러오지 못했어요. 마지막으로 확인한 내용이에요. <button onClick={retry}>다시 불러오기</button></p>}
       {(feature || issue) && (
         <Link to={base}>{displayText(data.name)} 홈으로</Link>
       )}
@@ -131,7 +133,7 @@ function MonitorPage({
           feature={selected}
           issue={incident}
           dismiss={async () => {
-            await api.dismiss(id, incident.id);
+            await api.dismiss(incident.id);
             retry();
           }}
         />
@@ -151,16 +153,17 @@ function Home({ data, base }: { data: Monitor; base: string }) {
   const open = data.incidents.filter((i) => i.status === "open");
   const find = (i: Incident) =>
     data.features.find((f) => f.id === i.feature_id);
-  const rows = data.features
+  const problems = new Set(open.map((i) => i.feature_id));
+  const rows = data.features.filter((f) => !f.hidden)
     .map((f) => ({
       f,
       s: summarize(data.stats.filter((r) => r.feature_id === f.id)),
     }))
-    .sort((a, b) => b.s.total - a.s.total);
+    .sort((a, b) => Number(problems.has(b.f.id)) - Number(problems.has(a.f.id)) || b.s.total - a.s.total);
   const latest = data.versions[0];
   const updated =
     latest &&
-    data.incidents.find(
+    open.find(
       (i) => Date.parse(i.opened_at) < Date.parse(latest.first_seen_at),
     );
   return (
@@ -174,7 +177,7 @@ function Home({ data, base }: { data: Monitor; base: string }) {
               ? "모두 괜찮아요"
               : "첫 기록을 기다리고 있어요"
         }
-        detail={open.length ? details(open[0]) : "열린 문제가 없어요"}
+        detail={open.length ? details(open[0], find(open[0])) : "열린 문제가 없어요"}
       />
       {latest &&
         data.versions.every(
@@ -203,7 +206,7 @@ function Home({ data, base }: { data: Monitor; base: string }) {
               <Link to={base + "/issues/" + i.id}>
                 {title(find(i), i)} · {status[i.status]}
               </Link>{" "}
-              {details(i)}
+              {details(i, find(i))}
             </p>
           ))
         ) : (
@@ -225,7 +228,8 @@ function Home({ data, base }: { data: Monitor; base: string }) {
                 to={base + "/features/" + f.id}
               >
                 <h3>{displayText(f.name)}</h3>
-                <span>
+                <span className={"feature-status " + (issue ? "problem" : s.total ? "healthy" : "")}>
+                  <span aria-hidden="true">{issue ? "⚠ " : s.total ? "✓ " : "◷ "}</span>
                   {issue
                     ? title(f, issue)
                     : s.total
@@ -233,7 +237,7 @@ function Home({ data, base }: { data: Monitor; base: string }) {
                       : "사용을 기다려요"}
                 </span>
                 <p>
-                  사용 {s.total}건 · 실패 {s.failures}건 · 보통 {time(s.median)}
+                  사용 {s.total}건 중 {s.failures}건이 실패했어요. 보통 걸린 시간은 {time(s.median)}예요.
                 </p>
                 {b?.p50_ms != null
                   ? "평소 " + time(b.p50_ms)
@@ -260,12 +264,14 @@ function Chart({
   rows,
   days,
   now,
+  baseline,
 }: {
   rows: Stat[];
   days: number;
   now: number;
+  baseline: number | null;
 }) {
-  const count = days === 1 ? 24 : 7,
+  const count = days === 1 ? 12 : 7,
     width = (days * day) / count,
     start = now - days * day;
   const points = Array.from({ length: count }, (_, i) => ({
@@ -285,13 +291,14 @@ function Chart({
   }));
   const max = Math.max(1, ...points.map((p) => p.total));
   const speed = (n: number) => Math.min(n, 30001);
-  const peak = Math.max(1, ...points.map((p) => speed(p.median ?? 0)));
+  const peak = Math.max(1, speed(baseline ?? 0), ...points.map((p) => speed(p.median ?? 0)));
+  const failureHeight = (n: number) => n ? Math.max(4, 45 * n / max) : 0;
   const x = (i: number) => (i * 600) / count + 300 / count;
   return (
     <>
-      <p>막대는 사용·실패 건수, 선은 보통 시간이에요.</p>
+      <p>{baseline != null ? "점선은 평소 속도 " + time(baseline) + ", " : ""}실선은 보통 걸린 시간이에요.</p>
       <svg
-        viewBox="0 0 600 110"
+        viewBox="0 0 600 210"
         width="100%"
         role="img"
         aria-label="사용·실패 건수와 보통 시간 추이. 아래 표에서 수치를 확인할 수 있어요."
@@ -300,39 +307,42 @@ function Chart({
           <g key={i}>
             <rect
               x={x(i) - 180 / count}
-              y={105 - (100 * p.total) / max}
+              y={105 - failureHeight(p.failures) - (p.failures ? 2 : 0) - (45 * p.total) / max}
               width={360 / count}
-              height={(100 * p.total) / max}
-              fill="var(--sp-primary, #6941ad)"
+              height={(45 * p.total) / max}
+              fill="var(--sp-chart)"
             />
             <rect
               x={x(i) - 180 / count}
-              y={105 - (100 * p.failures) / max}
+              y={105 - failureHeight(p.failures)}
               width={360 / count}
-              height={(100 * p.failures) / max}
-              fill="var(--sp-bad-ink, #b43846)"
+              height={failureHeight(p.failures)}
+              fill="var(--sp-chart-failure)"
             />
             {p.median !== null && (
               <circle
                 cx={x(i)}
-                cy={105 - (100 * speed(p.median)) / peak}
+                cy={205 - (90 * speed(p.median)) / peak}
                 r="2"
-                fill="currentColor"
+                fill="var(--sp-chart-time)"
               />
             )}
             {p.median !== null && i > 0 && points[i - 1].median !== null && (
               <line
                 x1={x(i - 1)}
                 x2={x(i)}
-                y1={105 - (100 * speed(points[i - 1].median!)) / peak}
-                y2={105 - (100 * speed(p.median)) / peak}
-                stroke="currentColor"
-                strokeWidth="2"
+                y1={205 - (90 * speed(points[i - 1].median!)) / peak}
+                y2={205 - (90 * speed(p.median)) / peak}
+                stroke="var(--sp-chart-time)"
+                strokeWidth="2.5"
               />
             )}
           </g>
         ))}
+        {baseline != null && <line x1="0" x2="600" y1={205 - 90 * speed(baseline) / peak}
+          y2={205 - 90 * speed(baseline) / peak} stroke="var(--sp-chart-usual)" strokeDasharray="5 4" strokeWidth="2.5" />}
       </svg>
+      <p className="chart-legend"><span>사용</span> <span>실패</span> · {when(new Date(start).toISOString())} ~ {when(new Date(now).toISOString())}</p>
       <details>
         <summary>표로 보기</summary>
         <table>
@@ -413,12 +423,12 @@ function FeaturePage({
       />
       <section className="panel">
         <h2>사용 흐름</h2>
-        {[1, 7].map((d) => (
+        <div className="chart-period" role="group" aria-label="조회 기간">{[1, 7].map((d) => (
           <button key={d} aria-pressed={d === days} onClick={() => period(d)}>
             {d === 1 ? "24시간" : "7일"}
           </button>
-        ))}
-        <Chart rows={rows} days={days} now={data.now} />
+        ))}</div>
+        <Chart rows={rows} days={days} now={data.now} baseline={f.baselines?.p50_ms ?? null} />
       </section>
       <section>
         <h2>최근 버전 비교</h2>
@@ -444,7 +454,7 @@ function FeaturePage({
                     <th>{displayVersion(v.version)}</th>
                     <td>{s.total}건</td>
                     <td>
-                      {s.total ? Math.round((100 * s.failures) / s.total) : 0}%
+                      {s.eligible ? Math.round((100 * s.failures) / s.eligible) + "%" : "기록 없음"}
                     </td>
                     <td>{time(s.median)}</td>
                   </tr>
@@ -479,7 +489,7 @@ function FeaturePage({
           />
         </label>
         <small>평소 속도가 없을 때만 사용해요.</small>
-        <button disabled={busy}>저장</button>
+        <button disabled={busy} aria-busy={busy}>{busy ? "저장하는 중" : "저장"}</button>
         <p role="status">{result}</p>
       </form>
     </>
@@ -511,11 +521,12 @@ function Issue({
   dismiss: () => Promise<void>;
 }) {
   const [feedback, setFeedback] = useState(""),
-    [manual, setManual] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [dismissed, setDismissed] = useState(false);
   const fresh = data.versions.find(
     (v) =>
       Date.parse(v.first_seen_at) > Date.parse(i.opened_at) &&
+      (!data.verification?.version || v.version === data.verification.version) &&
       (!i.resolved_version || v.version === i.resolved_version),
   );
   const after = summarize(
@@ -526,12 +537,28 @@ function Issue({
         Date.parse(r.bucket) + 300000 > Date.parse(i.opened_at),
     ),
   );
-  const slow =
-    i.kind === "slow" &&
-    after.median !== null &&
-    after.median >
-      (f.baselines?.p50_ms ? f.baselines.p50_ms * 1.5 : f.slow_threshold_ms);
-  const again = (!!after.failures || slow) && i.status === "open";
+  const proof = fresh && fresh.version === data.verification?.version ? data.verification : undefined;
+  const streak = proof?.consecutive_successes ?? 0;
+  const duration = proof?.latest_duration_ms;
+  const threshold = f.baselines?.p50_ms == null ? f.slow_threshold_ms : f.baselines.p50_ms * 1.5;
+  const slow = i.kind === "slow" && duration != null && duration > threshold;
+  const again = (proof?.latest_success === false || slow) && i.status === "open";
+  function verificationMessage() {
+    if (i.status === "resolved") {
+      const result = i.kind === "slow" ? "평소 속도로 끝났어요." : "성공했어요.";
+      return "업데이트 후 " + displayText(f.name) + " 최근 5건이 모두 " + result;
+    }
+    if (!fresh) return "고친 버전을 배포하면 여기서 확인해 드려요";
+    if (proof?.latest_success == null) return "업데이트 후 첫 사용을 기다리고 있어요";
+    if (slow) return "업데이트 후에도 최근 사용이 " + time(duration ?? null) + " 걸렸어요.";
+    if (!proof.latest_success) {
+      return after.failures
+        ? "업데이트 후에도 " + after.eligible + "건 중 " + after.failures + "건 실패했어요"
+        : "업데이트 후 최근 사용이 실패했어요";
+    }
+    return "업데이트 후 " + streak + "건 성공, " +
+      (streak < 5 ? 5 - streak + "건 더 확인할게요" : "해결 판정을 기다리고 있어요");
+  }
   const events = [
     {
       at: i.opened_at,
@@ -579,30 +606,14 @@ function Issue({
     failures: metric?.failures,
     p50: metric?.p50,
     baseline: metric?.baseline,
-    errors: data.samples.map(
-      (s) =>
-        new Date(s.at).toISOString().slice(11, 16) +
-        " " +
-        (s.error_kind ? s.error_kind + ": " : "") +
-        (s.message ?? ""),
-    ),
+    errors: data.samples,
   };
   const prompt = buildIssuePrompt(input);
-  async function copy(all: boolean) {
-    const text = buildIssuePrompt(input, all).text;
-    try {
-      await navigator.clipboard.writeText(text);
-      setManual("");
-      setFeedback("복사했어요");
-    } catch {
-      setManual(text);
-      setFeedback("아래 내용을 직접 선택해 복사해 주세요.");
-    }
-  }
   async function close() {
     setBusy(true);
     try {
       await dismiss();
+      setDismissed(true);
       setFeedback("문제 아님으로 닫았어요");
     } catch {
       setFeedback("닫지 못했어요. 다시 시도해 주세요.");
@@ -613,7 +624,10 @@ function Issue({
   return (
     <>
       <h1 tabIndex={-1}>{title(f, i)}</h1>
-      <Hero title={status[i.status]} detail={details(i)} />
+      <Hero arrived={i.status === "resolved"} title={status[i.status]} detail={
+        i.status === "dismissed" && i.closed_at
+          ? when(new Date(Date.parse(i.closed_at) + day).toISOString()) + "까지 다시 알리지 않아요."
+          : details(i, f)} />
       <p>
         현재 상태 · {status[i.status]}　시작 {when(i.opened_at)}
       </p>
@@ -627,34 +641,10 @@ function Issue({
             </li>
           ))}
       </ol>
-      <section id="verification" className="panel">
+      {(i.status === "open" || i.status === "resolved") && <section id="verification" className="panel">
         <h2>업데이트 후 확인</h2>
-        <p>
-          {i.status === "resolved"
-            ? "업데이트 후 해결됐어요" +
-              (after.total ? " · 확인한 사용 " + after.total + "건" : "")
-            : !fresh
-              ? "고친 버전을 배포하면 여기서 확인해 드려요"
-              : !after.total
-                ? "업데이트 후 첫 사용을 기다리고 있어요"
-                : slow && again
-                  ? "업데이트 후에도 보통 시간이 " +
-                    time(after.median) +
-                    "로 느려요"
-                  : again
-                    ? "업데이트 후에도 " +
-                      after.total +
-                      "건 중 " +
-                      after.failures +
-                      "건 실패했어요"
-                    : "업데이트 후 " +
-                      after.successes +
-                      "건 성공, " +
-                      (after.successes < 5
-                        ? 5 - after.successes + "건 더 확인할게요"
-                        : "해결 판정을 기다리고 있어요")}
-        </p>
-      </section>
+        <p>{verificationMessage()}</p>
+      </section>}
       <section className="panel">
         <h2>코딩 AI에 맡기기</h2>
         <p>
@@ -678,7 +668,7 @@ function Issue({
           </p>
         ) : (
           prompt.weakCount > 0 && (
-            <p>
+            <p role="status">
               외부 주소나 명령어가 들어간 오류 기록이 {prompt.weakCount}줄
               있어요. 보통은 정상 오류 메시지라 그대로 넣어요.
             </p>
@@ -688,7 +678,7 @@ function Issue({
           (s, n) =>
             prompt.levels[n] !== "normal" && (
               <p key={n}>
-                <mark>{s}</mark>
+                <mark>{prompt.levels[n] === "strong" ? "강함" : "약함"} · {s}</mark>
               </p>
             ),
         )}
@@ -702,25 +692,14 @@ function Issue({
             </details>
           )}
         </details>
-        <button onClick={() => copy(false)}>
-          {prompt.strongCount
+        <Copy compact text={prompt.text} title={prompt.strongCount
             ? "그 줄 빼고 복사"
             : again
               ? "AI에 다시 보낼 내용 복사"
-              : "AI에 보낼 내용 복사"}
-        </button>{" "}
+              : "AI에 보낼 내용 복사"} />
         {prompt.strongCount > 0 && (
-          <button className="secondary" onClick={() => copy(true)}>
-            그대로 복사
-          </button>
-        )}
-        {manual && (
-          <textarea
-            aria-label="직접 복사할 내용"
-            readOnly
-            value={manual}
-            onFocus={(e) => e.currentTarget.select()}
-          />
+          <><p>그대로 복사하면 강함으로 표시한 줄도 데이터 블록에 포함돼요.</p>
+          <Copy compact text={buildIssuePrompt(input, true).text} title="그대로 복사" /></>
         )}
       </section>
       <details>
@@ -728,11 +707,11 @@ function Issue({
         <p>{route(f)}</p>
         <Samples data={data} />
       </details>
-      {i.status === "open" && (
+      {i.status === "open" && !dismissed && (
         <section>
           <p>닫으면 같은 기능의 같은 문제는 24시간 동안 다시 열리지 않아요.</p>
-          <button disabled={busy} onClick={close}>
-            문제 아님으로 닫기
+          <button disabled={busy} aria-busy={busy} onClick={close}>
+            {busy ? "닫는 중" : "문제 아님으로 닫기"}
           </button>
         </section>
       )}

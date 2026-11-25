@@ -14,7 +14,7 @@ function line(value: string) {
   return displayText(
     displayText(value)
       .replace(/[\x60~]/g, "")
-      .replace(/={5,}/g, "")
+      .replace(/={4,}/g, "")
       .replace(/\s+/gu, " ")
       .trim(),
   );
@@ -22,7 +22,7 @@ function line(value: string) {
 const strong = [
   /(이전|앞의|위의|기존|지금까지의?)\s*(의\s*)?(모든\s*)?(지시|명령|규칙|요청|내용).{0,12}(무시|잊)/,
   /(지시|명령|규칙)[을를은는]?\s*(모두\s*)?(무시해|무시하고|무시하라|잊어)/,
-  /\b(ignore|disregard|forget)\s+(?:(?:all|any|the)\s+)*(previous|prior|above|earlier|your)\s+(instructions?|prompts?|rules?|messages?|context)/i,
+  /\b(ignore|disregard|forget)\s+(?:(?:all|any|the|your)\s+)*(previous|prior|above|earlier|your)\s+(instructions?|prompts?|rules?|messages?|context)/i,
   /(시스템\s*프롬프트|system\s*prompt).{0,20}(출력해|보여\s*줘|알려\s*줘)|(print|show|reveal|repeat|output).{0,20}system\s*prompt/i,
   /(환경\s*변수|process\.env|\.env\b|비밀\s*키|서버\s*키|토큰).{0,60}(보내|전송해|출력해|알려|보여)\s*(줘|라|세요|주세요)/,
   /\b(send|upload|post|leak|dump|print)\s+(?:(?:all|every|the|your|my)\s+)*(env(?:ironment)?(?:\s*var(?:iable)?s?)?|process\.env|\.env|secrets?|api[\s_-]*keys?|credentials?|tokens?)\b/i,
@@ -35,7 +35,7 @@ export interface IssueInput {
   feature: string;
   route: string;
   versions: string[];
-  errors: string[];
+  errors: (string | { at: string; error_kind: string | null; message: string | null })[];
   step?: string;
   mode?: "first" | "again" | "worse";
   opened?: string;
@@ -46,12 +46,17 @@ export interface IssueInput {
   baseline?: number;
 }
 export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
-  const lines = input.errors.slice(0, 5).map(line);
+  const records = input.errors.slice(0, 5);
+  const clock = (at: string) => new Date(at).toLocaleTimeString("en-GB", {
+    timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit",
+  }) + " KST";
+  const lines = records.map((r) => line(typeof r === "string" ? r :
+    [clock(r.at), r.error_kind && r.error_kind + ":", r.message].filter(Boolean).join(" ")));
   const levels = lines.map((s) =>
     isStrong(s) ? "strong" : weak.test(s) ? "weak" : "normal",
   );
-  const messages = lines.map((s) =>
-    s.replace(/^(?:\d{1,2}:\d{2}\s+)?(?:[\w.]+:\s*)?/i, ""),
+  const messages = records.map((r, i) =>
+    typeof r === "string" ? lines[i].replace(/^\d{1,2}:\d{2}\s+(?:[^:]+:\s+)?/, "") : line(r.message ?? ""),
   );
   for (let size = 2; size <= lines.length; size++) {
     for (let i = 0; i + size <= lines.length; i++) {
@@ -89,7 +94,7 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
       status +
       (metrics ? " · " + metrics : "") +
       (Number.isFinite(since)
-        ? " — " + new Date(since).toISOString() + "부터"
+        ? " — " + new Date(since).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) + " KST부터"
         : ""),
     invalid
       ? "앱 버전: (형식이 맞지 않아 아래 데이터 블록 안에 넣었어요)"

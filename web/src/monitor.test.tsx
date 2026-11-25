@@ -63,6 +63,7 @@ function setup(
       message,
     })),
     attempts: [],
+    incident_verification: { version, consecutive_successes: 0, latest_duration_ms: 100, latest_success: false },
   };
   change?.(rows);
   const requests: URL[] = [];
@@ -70,10 +71,11 @@ function setup(
     const url = new URL(String(input));
     requests.push(url);
     const table = url.pathname.split("/").pop()!;
+    if (table === "incident_verification")
+      expect(JSON.parse(String(init?.body))).toEqual({ incident_id: "i" });
     if (table === "dismiss_incident") {
       expect(JSON.parse(String(init?.body))).toEqual({
-        p_app_id: "a",
-        p_incident_id: "i",
+        incident_id: "i",
       });
       rows.incidents = [
         {
@@ -82,6 +84,7 @@ function setup(
           closed_at: date(0),
         },
       ];
+      if (rows.failRefresh) rows.apps = null;
       return new Response(null, { status: 204 });
     }
     if (init?.method === "PATCH") {
@@ -147,14 +150,21 @@ it.each([
   ["none", "고친 버전을 배포하면 여기서 확인해 드려요"],
   ["waiting", "업데이트 후 첫 사용을 기다리고 있어요"],
   ["checking", "업데이트 후 4건 성공, 1건 더 확인할게요"],
-  ["resolved", "업데이트 후 해결됐어요"],
+  ["resolved", "업데이트 후"],
+  ["slow", "최근 사용이 5.01초 걸렸어요"],
+  ["threshold", "업데이트 후 1건 성공"],
   ["failed", "업데이트 후에도 4건 중 1건 실패했어요"],
 ])("업데이트 확인 상태 %s", async (state, expected) => {
   const { container } = setup("/apps/a/issues/i", [], (rows) => {
     if (state === "none") rows.app_versions = [];
-    if (state === "waiting") rows.stats_5m = [];
-    if (state === "checking")
-      (rows.stats_5m as { failures: number }[])[0].failures = 0;
+    const proof = rows.incident_verification as Record<string, unknown>;
+    if (state === "waiting") Object.assign(proof, { latest_success: null, latest_duration_ms: null });
+    if (state === "checking") Object.assign(proof, { latest_success: true, consecutive_successes: 4 });
+    if (state === "slow" || state === "threshold") {
+      (rows.incidents as { kind: string }[])[0].kind = "slow";
+      Object.assign(proof, { latest_success: true, latest_duration_ms: state === "slow" ? 5010 : 5000,
+        consecutive_successes: state === "slow" ? 0 : 1 });
+    }
     if (state === "resolved")
       (rows.incidents as { status: string }[])[0].status = "resolved";
   });
@@ -162,6 +172,35 @@ it.each([
   expect(container.querySelector("#verification")?.textContent).toContain(
     expected,
   );
+});
+it("숨긴 기능은 목록에서 빠지고 해당 문제 상세는 열린다", async () => {
+  const { container, requests } = setup("/apps/a", [], (rows) => {
+    (rows.features as {hidden: boolean}[])[0].hidden = true;
+  });
+  fireEvent.click(await screen.findByRole("link", { name: /실패가 늘었어요/ }));
+  await screen.findByRole("heading", { name: "지금까지 흐름" });
+  expect(requests.filter((r) => r.pathname.endsWith("/features"))
+    .every((r) => !r.searchParams.has("hidden"))).toBe(true);
+  expect(container.querySelector("section#features")).toBeNull();
+});
+it("닫기 뒤 재조회 실패 시 마지막 상세 내용과 재시도를 유지한다", async () => {
+  setup("/apps/a/issues/i", [], (rows) => { rows.failRefresh = true; });
+  fireEvent.click(await screen.findByRole("button", { name: "문제 아님으로 닫기" }));
+  await screen.findByRole("button", { name: "다시 불러오기" });
+  expect(screen.getByRole("heading", { name: "지금까지 흐름" })).toBeTruthy();
+  expect(screen.getByRole("alert").textContent).toContain("마지막");
+});
+it.each([false, true])("첫 요청·악화 요청의 상태와 약함·버전 안내 (%s)", async (worse) => {
+  const { container } = setup("/apps/a/issues/i", ["fetch failed"], (rows) => {
+    (rows.incident_verification as Record<string, unknown>).latest_success = null;
+    if (worse) (rows.incidents as {notifications: object[]}[])[0].notifications.push({
+      event: "worse", ok: true, sent_at: new Date().toISOString(),
+    });
+  });
+  await screen.findByRole("button", {name: "AI에 보낼 내용 복사"});
+  expect(screen.getByText(/외부 주소나 명령어/).getAttribute("role")).toBe("status");
+  expect(screen.getByText(/앱이 보낸 버전 값/).getAttribute("role")).toBe("status");
+  expect(container.querySelector("pre")?.textContent).toContain(worse ? "문제가 더 나빠졌어요" : "문제를 감지했어요");
 });
 it("S7을 열면 경고와 기본 복사 옵션을 자동으로 선택한다", async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
@@ -190,5 +229,6 @@ it("S7을 열면 경고와 기본 복사 옵션을 자동으로 선택한다", a
       screen.queryByRole("button", { name: "문제 아님으로 닫기" }),
     ).toBeNull(),
   );
-  expect(container.textContent).toContain("문제 아님으로 닫음");
+  await screen.findByRole("heading", { name: "문제 아님으로 닫았어요" });
+  expect(container.querySelector("#verification")).toBeNull();
 });
