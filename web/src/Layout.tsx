@@ -20,15 +20,17 @@ export function Hero({
   detail,
   arrived = false,
   badge,
+  mood = "neutral",
 }: {
   title: string;
   detail: string;
   arrived?: boolean;
   badge?: ReactNode;
+  mood?: "neutral" | "waiting" | "worried" | "relieved";
 }) {
   return (
-    <section className={"hero-card" + (arrived ? " arrived" : "")}>
-      <Sheep />
+    <section className={"hero-card" + (arrived ? " arrived" : "")} data-mood={mood}>
+      <Sheep key={mood} />
       {badge}
       <h2>{title}</h2>
       <p role="status">{detail}</p>
@@ -172,6 +174,19 @@ export function Shell({
 }
 
 export function Landing() {
+  const landing = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!landing.current || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add("in-view");
+        observer.unobserve(entry.target);
+      }
+    });
+    landing.current.querySelectorAll("section:not(.intro)").forEach(section => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
   const acts = (
     <div className="actions">
       <Link className="button" to="/login">
@@ -188,7 +203,7 @@ export function Landing() {
         본문으로 가기
       </a>
       <PublicBar />
-      <main id="main" className="landing">
+      <main ref={landing} id="main" className="landing">
         <section className="intro">
           <div>
             <h1 tabIndex={-1}>

@@ -16,6 +16,7 @@ export function Notifications({ api, origin }: Props) {
   const { hash } = useLocation();
   const navigate = useNavigate();
   const [apps, setApps] = useState<AppSummary[]>();
+  const [listFailed, setListFailed] = useState(false);
   const [message, setMessage] = useState("");
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -26,7 +27,7 @@ export function Notifications({ api, origin }: Props) {
         if (active) setApps(list);
       })
       .catch(() => {
-        if (active) setMessage("앱 목록을 불러오지 못했어요.");
+        if (active) setListFailed(true);
       });
     return () => {
       active = false;
@@ -66,11 +67,15 @@ export function Notifications({ api, origin }: Props) {
       <h1 tabIndex={-1}>알림 설정</h1>
       {message && <p role="alert">{message}</p>}
       {!apps ? (
-        <button onClick={() => setAttempt((n) => n + 1)}>
-          앱 목록 다시 불러오기
-        </button>
+        listFailed ? <div role="alert">
+          앱 목록을 불러오지 못했어요.{" "}
+          <button onClick={() => {
+            setListFailed(false);
+            setAttempt(n => n + 1);
+          }}>앱 목록 다시 불러오기</button>
+        </div> : <p role="status">알림을 설정할 앱을 불러오는 중이에요.</p>
       ) : !apps.length ? (
-        <Link to="/apps/new">앱 등록하기</Link>
+        <p>알림을 받을 앱이 아직 없어요. <Link to="/apps/new">앱 등록하기</Link></p>
       ) : (
         <>
           <label>

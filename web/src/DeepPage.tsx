@@ -79,6 +79,7 @@ function Arrival({
     <>
     <Hero
       arrived={result?.status === "success"}
+      mood={!result ? "waiting" : result.status === "success" ? "relieved" : "worried"}
       title={
         result
           ? "첫 " + displayText(feature.name) + " 기록이 도착했어요."

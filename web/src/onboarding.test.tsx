@@ -60,6 +60,16 @@ function fake(user: string | null = "member"): Gateway {
     save: vi.fn(async () => []),
   };
 }
+it("알림 앱 목록은 실패한 뒤에만 재시도를 제공한다", async () => {
+  const api = fake();
+  vi.mocked(api.apps).mockRejectedValueOnce(Error("offline"));
+  vi.mocked(api.apps).mockImplementationOnce(() => new Promise(() => {}));
+  open("/apps/notifications", api);
+  fireEvent.click(await screen.findByRole("button", { name: "앱 목록 다시 불러오기" }));
+  await screen.findByText("알림을 설정할 앱을 불러오는 중이에요.");
+  expect(screen.queryByRole("button", { name: "앱 목록 다시 불러오기" })).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
 it("시작한 탭의 state만 슬랙 코드 교환에 사용한다", async () => {
   const api = fake();
   sessionStorage.setItem("ship-ping-slack-state", "original");

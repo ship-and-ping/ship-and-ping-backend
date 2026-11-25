@@ -276,6 +276,7 @@ export function Connect({
                   "에서 보낸 기록을 5초마다 확인해요."
             }
             arrived={arrived}
+            mood={arrived ? "relieved" : "waiting"}
           />
           {(arrived || labels.length > 0) && (
             <section className="panel">

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>쉽앤핑 화면 전후 비교</title>
+<link rel="stylesheet" href="../../../web/src/styles/tokens.css">
+<style>
+*{box-sizing:border-box}body{font:1rem/1.6 var(--sp-font);background:var(--sp-bg);color:var(--sp-ink);margin:0;padding:1rem}
+header,main{max-width:1440px;margin:auto}h1{margin:0}form,main{display:flex;flex-wrap:wrap;gap:1rem}
+form{margin-block:1rem}label{display:grid}select{min-height:44px;font:inherit;background:var(--sp-surface);color:var(--sp-ink)}
+figure{margin:0;flex:1;min-width:0}figcaption{font-weight:700}img{width:100%;height:auto;border:1px solid var(--sp-line)}
+@media(max-width:640px){main{display:grid}}
+</style>
+<header><h1>쉽앤핑 화면 전후 비교</h1><form>
+<label>화면과 상태<select id="scene"></select></label>
+<label>보기 조건<select id="profile">
+<option value="1440-light">PC · 1440 · 밝게</option>
+<option value="1280-dark">노트북 · 1280 · 어둡게</option>
+<option value="390-light">휴대폰 · 390 · 밝게</option>
+<option value="390-dark" selected>휴대폰 · 390 · 어둡게 · 글자 200% · 동작 줄이기</option>
+</select></label></form></header>
+<main><figure><figcaption>수정 전</figcaption><a id="old"><img alt="수정 전 원본 열기"></a></figure>
+<figure><figcaption>수정 후</figcaption><a id="updated"><img alt="수정 후 원본 열기"></a></figure></main>
+<script>
+const scenes = [
+  ["소개","normal"],["로그인","normal"],["내 앱","normal"],["빈 앱 목록","empty"],
+  ["앱 등록","normal"],["연결 대기","waiting"],["앱 홈","normal"],["첫 기록 대기","waiting"],
+  ["문제 있는 홈","failure"],["기능 상세","normal"],["문제 상세 · 실패","failure"],
+  ["문제 상세 · 느림","slow"],["문제 상세 · 결과 미확인","unconfirmed"],["문제 상세 · 해결","resolved"],
+  ["깊게 보기","normal"],["알림 설정","normal"],["알림 목록 불러오기","loading"],
+  ["알림 목록 오류","error"],["기록 로딩","loading"],["기록 오류","error"]
+];
+const scene = document.querySelector("#scene"), profile = document.querySelector("#profile");
+scenes.forEach(([label,state],i)=>scene.add(new Option(label,String(i).padStart(2,"0")+"-"+state)));
+scene.selectedIndex=5;
+function compare(){
+  for(const [id,phase] of [["old","before"],["updated","after"]]){
+    const link=document.getElementById(id);
+    link.href=phase+"/"+scene.value+"-"+profile.value+".jpg";
+    link.firstElementChild.src=link.href;
+  }
+}
+document.querySelector("form").addEventListener("change",compare);
+compare();
+</script>
+</html>

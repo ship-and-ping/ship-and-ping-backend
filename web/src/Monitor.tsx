@@ -180,6 +180,7 @@ function Home({ data, base }: { data: Monitor; base: string }) {
       <h1 tabIndex={-1}>{displayText(data.name)}</h1>
       <Hero
         badge={<StatusBadge state={open.length ? "open" : data.versions.length ? "healthy" : "waiting"} />}
+        mood={open.length ? "worried" : latest ? "relieved" : "waiting"}
         title={
           open.length
             ? title(find(open[0]), open[0])
@@ -187,7 +188,7 @@ function Home({ data, base }: { data: Monitor; base: string }) {
               ? "모두 괜찮아요"
               : "첫 기록을 기다리고 있어요"
         }
-        detail={open.length ? details(open[0], find(open[0])) : "열린 문제가 없어요"}
+        detail={open.length ? details(open[0], find(open[0])) : latest ? "열린 문제가 없어요" : "연결한 앱을 한 번 사용하면 첫 기록을 확인할 수 있어요."}
       />
       {latest &&
         data.versions.every(
@@ -641,7 +642,7 @@ function Issue({
     <>
       <h1 tabIndex={-1}>{title(f, i)}</h1>
       {f.kind === "deep" && <section><h2>문제 감지 구간부터의 결과</h2><Outcomes stats={summarize(data.stats.filter(r => r.feature_id === f.id && Date.parse(r.bucket) <= Date.parse(i.closed_at ?? new Date(data.now).toISOString())))} /></section>}
-      <Hero badge={<StatusBadge state={i.status} />} arrived={i.status === "resolved"} title={status[i.status]} detail={
+      <Hero badge={<StatusBadge state={i.status} />} mood={i.status === "open" ? "worried" : "relieved"} arrived={i.status === "resolved"} title={status[i.status]} detail={
         i.status === "dismissed" && i.closed_at
           ? when(new Date(Date.parse(i.closed_at) + day).toISOString()) + "까지 다시 알리지 않아요."
           : details(i, f)} />
