@@ -12,6 +12,7 @@ import type { AppSummary, Gateway } from "./data";
 import { validateApp } from "./domain";
 import { displayText } from "./normalize";
 import { Hero, Landing, PublicBar, Shell } from "./Layout";
+import { MonitorRoute } from "./Monitor";
 import { Connect } from "./Connect";
 
 function useApps(api: Gateway) {
@@ -191,7 +192,7 @@ function Apps({ api }: { api: Gateway }) {
               <Link
                 className="panel app-card"
                 key={app.id}
-                to={"/apps/" + app.id + "/connect"}
+                to={"/apps/" + app.id + (app.first_record_at ? "" : "/connect")}
               >
                 <span
                   className={
@@ -444,6 +445,15 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
                       }
                     />
                   }
+                />
+                <Route path=":id" element={<MonitorRoute api={api} />} />
+                <Route
+                  path=":id/features/:feature"
+                  element={<MonitorRoute api={api} />}
+                />
+                <Route
+                  path=":id/issues/:issue"
+                  element={<MonitorRoute api={api} />}
                 />
                 <Route path="*" element={<Navigate to="/apps" replace />} />
               </Routes>

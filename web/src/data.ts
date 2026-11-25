@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { loadMonitor, type Monitor } from "./monitor-data";
+
 interface AppRow {
   id: string;
   name: string;
@@ -22,6 +24,9 @@ export interface Snapshot {
   labels: Label[];
 }
 export interface Gateway {
+  monitor(app: string, feature?: string, issue?: string): Promise<Monitor>;
+  threshold(app: string, feature: string, ms: number): Promise<void>;
+  dismiss(issue: string): Promise<void>;
   session(): Promise<string | null>;
   listen(fn: (id: string | null) => void): () => void;
   login(email?: string): Promise<void>;
@@ -42,6 +47,24 @@ function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
 export function gateway(client: SupabaseClient): Gateway {
   const columns = "id,name,created_at,first_record_at";
   return {
+    monitor: (app, feature, issue) => loadMonitor(client, app, feature, issue),
+    async threshold(app, feature, ms) {
+      value(
+        await client
+          .from("features")
+          .update({ slow_threshold_ms: ms })
+          .eq("app_id", app)
+          .eq("id", feature)
+          .select("id")
+          .single(),
+      );
+    },
+    async dismiss(issue) {
+      const { error } = await client.rpc("dismiss_incident", {
+        incident_id: issue,
+      });
+      if (error) throw error;
+    },
     async session() {
       const { data, error } = await client.auth.getSession();
       if (error) throw error;

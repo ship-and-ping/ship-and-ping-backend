@@ -10,7 +10,7 @@ import { Sheep } from "./Sheep";
 import { displayText } from "./normalize";
 import mark from "./assets/wordmark.png";
 
-type AppHeading = { id: string; name: string };
+type AppHeading = { id: string; name: string; issues?: number };
 export const CurrentAppName = createContext<(heading: AppHeading) => void>(
   () => {},
 );
@@ -19,14 +19,17 @@ export function Hero({
   title,
   detail,
   arrived = false,
+  badge,
 }: {
   title: string;
   detail: string;
   arrived?: boolean;
+  badge?: ReactNode;
 }) {
   return (
     <section className={"hero-card" + (arrived ? " arrived" : "")}>
       <Sheep />
+      {badge}
       <h2>{title}</h2>
       <p role="status">{detail}</p>
     </section>
@@ -63,10 +66,10 @@ export function Shell({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
-  const { pathname } = useLocation();
+  const { pathname, hash: currentHash } = useLocation();
   const [heading, setHeading] = useState<AppHeading>();
   const currentName =
-    heading && pathname === "/apps/" + heading.id + "/connect"
+    heading && pathname.split("/")[2] === heading.id
       ? displayText(heading.name)
       : "";
   const toggle = useRef<HTMLButtonElement>(null);
@@ -112,8 +115,25 @@ export function Shell({
             내 앱
           </Link>
           {currentName && <small>{currentName}</small>}
-          {(pathname.endsWith("/connect")
-            ? ["앱 홈", "기능", "문제", "앱 설정", "알림 설정", "내 계정"]
+          {currentName &&
+            heading &&
+            [
+              ["앱 홈", ""],
+              ["기능", "#features"],
+              ["문제", "#issues"],
+            ].map(([label, hash]) => (
+              <Link
+                key={label}
+                aria-current={(pathname === "/apps/" + heading.id && currentHash === hash) ||
+                  (hash && pathname.startsWith("/apps/" + heading.id + "/" + hash.slice(1) + "/")) ? "page" : undefined}
+                onClick={() => setOpen(false)}
+                to={"/apps/" + heading.id + hash}
+              >
+                {label}{hash === "#issues" && heading.issues != null ? " " + heading.issues : ""}
+              </Link>
+            ))}
+          {(currentName
+            ? ["앱 설정", "알림 설정", "내 계정"]
             : ["알림 설정", "내 계정"]
           ).map((n) => (
             <span key={n}>

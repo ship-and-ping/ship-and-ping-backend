@@ -38,6 +38,9 @@ function fake(user: string | null = "member"): Gateway {
     apps: vi.fn(async () => [app]),
     create: vi.fn(async () => "a"),
     issue: vi.fn(async (_id, kind) => (kind === "pub" ? pub : secret)),
+    monitor: vi.fn(),
+    threshold: vi.fn(),
+    dismiss: vi.fn(),
     snapshot: vi.fn(async () => ({ app, labels: [] })),
     save: vi.fn(async () => []),
   };
