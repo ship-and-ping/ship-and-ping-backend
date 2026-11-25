@@ -20,6 +20,21 @@ fn run(input: Value) -> Result<Value, ApiError> {
     Ok(serde_json::from_slice(&rpc).unwrap())
 }
 #[test]
+fn app_version_preserves_build_times_and_masks_key_prefixes() {
+    for (version, expected) in [
+        ("2026.11.26.1530", "2026.11.26.1530"),
+        ("1764120000", "1764120000"),
+        ("v20261126-1530", "v20261126-1530"),
+        ("1764120000-ＳＰ＿ＰＵＢ＿demo", "1764120000-[가림]"),
+        ("v1-sk_abcdefghijklmnop", "v1-[가림]"),
+        ("v1xsk_abcdefghijklmnop", "v1xsk_abcdefghijklmnop"),
+    ] {
+        let mut input = batch(vec![request()]);
+        input["app_version"] = json!(version);
+        assert_eq!(run(input).unwrap()["payload"]["app_version"], expected);
+    }
+}
+#[test]
 fn masks_identifiers_and_private_text_before_rpc() {
     let mut r = request();
     r["route"] = json!(format!("/a/123/{ID}/a123456789012345/short?email=x"));

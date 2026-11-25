@@ -267,7 +267,9 @@ try {
     400,
   );
   const keyReader = client(a.publicKey);
-  assert.ok((await keyReader.from("apps").select("id")).error);
+  const denied = await keyReader.from("apps").select("id");
+  assert.ok([401, 403].includes(denied.status), `unexpected read status ${denied.status}`);
+  assert.equal(denied.data, null);
   console.log(
     "C3 explicit app_id rejected; collection key cannot read the member API",
   );
@@ -320,6 +322,9 @@ try {
   assert.equal(messages.length, 2);
   for (const [i, member] of owners.entries()) {
     const other = owners[1 - i];
+    assert.equal(messages.filter((m) =>
+      m.path === "/emails" && m.payload.to.length === 1 && m.payload.to[0] === member.email
+    ).length, 1);
     assert.deepEqual(
       (await member.api.apps()).map((app) => app.id),
       [member.id],
@@ -344,9 +349,10 @@ try {
     "C1 reciprocal gateway/PostgREST isolation; C6 two incidents and exactly one email per owner",
   );
   messages.length = 0;
+  const repairVersion = "2026.11.26.1530";
   for (const member of owners) {
     const updated = batch();
-    updated.app_version = "repaired";
+    updated.app_version = repairVersion;
     updated.records = updated.records
       .slice(1, 6)
       .map((r) => ({ ...r, status: 200 }));
@@ -366,7 +372,7 @@ try {
         .eq("app_id", member.id),
     );
     assert.deepEqual(issues, [
-      { status: "resolved", resolved_version: "repaired" },
+      { status: "resolved", resolved_version: repairVersion },
     ]);
     assert.ok(
       messages.some(

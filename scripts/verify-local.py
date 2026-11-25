@@ -87,7 +87,18 @@ def verify(tmp, stack):
             if worker.poll() is not None:
                 raise RuntimeError("workerd exited")
             time.sleep(0.1)
-    run("node", "scenario.mjs", ROOT, chrome, cwd=tmp)
+    scenario = subprocess.Popen(["node", "scenario.mjs", ROOT, chrome], cwd=tmp,
+                                start_new_session=True)
+    try:
+        if scenario.wait():
+            raise subprocess.CalledProcessError(scenario.returncode, scenario.args)
+    finally:
+        # The Node example server inherits the scenario's process group.
+        try:
+            os.killpg(scenario.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        scenario.wait()
     run("bash", "scripts/check-deliverables.sh")
     leaks = os.getenv("GITLEAKS_BIN") or shutil.which("gitleaks")
     if leaks:
