@@ -1,0 +1,20 @@
+name: db
+on:
+  pull_request:
+    paths: ['supabase/**', '.github/workflows/db.yml']
+  push:
+    branches: [main]
+    paths: ['supabase/**', '.github/workflows/db.yml']
+permissions:
+  contents: read
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Start disposable Supabase PostgreSQL and apply migrations
+        run: npx --yes supabase@2.75.0 db start
+      - name: Verify access, ingestion and retention
+        run: npx --yes supabase@2.75.0 test db --local
