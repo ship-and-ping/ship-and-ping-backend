@@ -4,6 +4,10 @@ use std::collections::HashMap;
 pub(crate) struct Limits {
     keys: HashMap<String, (String, u64)>,
     apps: HashMap<String, Usage>,
+    misses: HashMap<String, u64>,
+    miss_minute: u64,
+    failures: u32,
+    pending: u32,
     day: u64,
 }
 #[derive(Default)]
@@ -13,6 +17,34 @@ struct Usage {
     total: u32,
 }
 impl Limits {
+    fn roll_minute(&mut self, now: u64) {
+        if self.miss_minute != now / 60 {
+            self.miss_minute = now / 60;
+            self.failures = 0;
+            self.misses.retain(|_, expiry| now < *expiry);
+        }
+    }
+    // Reserve before awaiting the RPC so concurrent cold keys cannot bypass the budget.
+    pub(crate) fn begin_lookup(&mut self, hash: &str, now: u64) -> Result<bool, ()> {
+        self.roll_minute(now);
+        if self.failures + self.pending >= 100 {
+            return Err(());
+        }
+        if self.misses.get(hash).is_some_and(|expiry| now < *expiry) {
+            self.failures += 1;
+            return Ok(false);
+        }
+        self.pending += 1;
+        Ok(true)
+    }
+    pub(crate) fn finish_lookup(&mut self, hash: &str, missing: bool, now: u64) {
+        self.pending -= 1;
+        self.roll_minute(now);
+        if missing {
+            self.failures += 1;
+            self.misses.insert(hash.into(), now + 60);
+        }
+    }
     pub(crate) fn cached(&self, hash: &str, now: u64) -> Option<String> {
         self.keys
             .get(hash)
@@ -47,6 +79,25 @@ impl Limits {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn miss_cache_expires_and_concurrent_lookups_share_the_budget() {
+        let mut state = Limits::default();
+        assert_eq!(state.begin_lookup("missing", 59), Ok(true));
+        state.finish_lookup("missing", true, 59);
+        for _ in 1..100 {
+            assert_eq!(state.begin_lookup("missing", 59), Ok(false));
+        }
+        assert_eq!(state.begin_lookup("other", 59), Err(()));
+        assert_eq!(state.reserve("app", 59), Ok(()));
+        assert_eq!(state.begin_lookup("missing", 118), Ok(false));
+        assert_eq!(state.begin_lookup("missing", 119), Ok(true));
+        for _ in 0..98 {
+            assert_eq!(state.begin_lookup("pending", 119), Ok(true));
+        }
+        assert_eq!(state.begin_lookup("pending", 119), Err(()));
+        state.finish_lookup("pending", false, 119);
+        assert_eq!(state.begin_lookup("retry", 119), Ok(true));
+    }
     #[test]
     fn lookup_expires_at_five_minutes() {
         let mut state = Limits::default();

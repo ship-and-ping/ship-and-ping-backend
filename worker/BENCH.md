@@ -44,3 +44,7 @@ npx --yes wrangler@4.168.0 dev --local --ip 127.0.0.1 --port 8787 --var INGEST_D
 | Cloudflare 요청당 CPU | 미측정 | 미측정 | 미측정 |
 
 T4 수치는 Ubuntu CI에서 10회 예열 후 100회 측정했다. 이전 macOS 측정과 실행 환경이 다르고 HTTP 연결 재사용 조건도 달라 개선율은 산출하지 않았다. [CI 실행 기록](https://github.com/ship-and-ping/ship-and-ping-backend/actions/runs/45583353357)
+
+## T4 검증 수정 후 macOS arm64 측정
+
+64 KiB·100건을 10회 예열하고 100회 측정했다. 같은 Mac의 수정 전후 네이티브 중앙값은 ASCII 0.382 → 0.371 ms, 한글 0.493 → 0.488 ms였다. 수정 후 최댓값은 각각 0.406 ms와 0.537 ms였다. 로컬 Wasm HTTP 왕복 중앙값 / 최대는 ASCII 1.862 / 3.721 ms, 한글 1.906 / 2.804 ms였다. 배포 환경의 CPU 시간은 미측정이다.

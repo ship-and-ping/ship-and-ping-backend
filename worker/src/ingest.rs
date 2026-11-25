@@ -16,7 +16,6 @@ static PRIVATE: LazyLock<Regex> = LazyLock::new(|| {
         r"(?i)(?-u:\b)(?:set-cookie|cookie)[ \t]*:[^\r\n]*",
         r"|(?-u:\b)bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;]+",
         r"|(?-u:\b)basic[ \t]+(?-iu:[A-Za-z0-9+/]{14,}==|[A-Za-z0-9+/]{15,}=|[A-Za-z0-9+/]{16,})",
-        r"|(?-u:\b)(?:access_token|token|key|password)=[^&\s,;#]+",
         r"|(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|(?-u:\b)eyJ)[a-z0-9_.=\-]+",
         r"|[a-z0-9._%+\-]+(?:@|%40)[a-z0-9.\-]+\.[a-z]{2,}",
     ))
@@ -25,6 +24,10 @@ static PRIVATE: LazyLock<Regex> = LazyLock::new(|| {
 
 static SHORT_KEY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i-u:sk_|pk_|rk_)[A-Za-z0-9_]{16,}").expect("short key pattern")
+});
+static NAMED_SECRET: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i-u:[A-Za-z0-9_-]*(?:token|key|secret|password|passwd|pwd))[ \t]*[=:][ \t]*([^&\s,;#]+)")
+        .expect("credential value")
 });
 
 #[derive(Debug, PartialEq)]
@@ -159,13 +162,49 @@ fn boundary(text: &str, start: usize) -> bool {
     start == 0 || !text.as_bytes()[start - 1].is_ascii_alphanumeric()
 }
 fn phones(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
-    static PHONE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"\+?(?-u:\b)[0-9](?:[ ().\-]*[0-9]){8,14}(?-u:\b)").expect("phone pattern")
-    });
-    PHONE.find_iter(text).map(|hit| hit.range())
+    static PHONE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\+?[0-9](?:[ ().\-]*[0-9]){8,14}").expect("phone pattern"));
+    let bytes = text.as_bytes();
+    let mut cursor = 0;
+    std::iter::from_fn(move || {
+        loop {
+            let hit = PHONE.find_at(text, cursor)?;
+            let (start, mut end) = (hit.start(), hit.end());
+            if start == 0 || !bytes[start - 1].is_ascii_digit() {
+                if bytes.get(end).is_some_and(u8::is_ascii_digit) {
+                    // The last digit group continues beyond the limit. Try the preceding group.
+                    while end > start && bytes[end - 1].is_ascii_digit() {
+                        end -= 1;
+                    }
+                    while end > start && !bytes[end - 1].is_ascii_digit() {
+                        end -= 1;
+                    }
+                    if bytes[start..end]
+                        .iter()
+                        .filter(|b| b.is_ascii_digit())
+                        .count()
+                        < 9
+                    {
+                        end = start;
+                    }
+                }
+                if end > start {
+                    cursor = end;
+                    return Some(start..end);
+                }
+            }
+            // Skip the rejected start, retaining later candidates after punctuation or whitespace.
+            cursor = start + 1;
+            if bytes[start].is_ascii_digit() {
+                while bytes.get(cursor).is_some_and(u8::is_ascii_digit) {
+                    cursor += 1;
+                }
+            }
+        }
+    })
 }
 fn private_segment(part: &str) -> bool {
-    if phones(part).next().is_some() {
+    if phones(part).next().is_some() || (part.contains([':', '=']) && NAMED_SECRET.is_match(part)) {
         return true;
     }
     if !part.is_ascii() || part.contains(['_', '=', '@', '%']) {
@@ -201,7 +240,14 @@ fn mask(text: &str) -> String {
     let normalized = normalize(text);
     let mut short = short_keys(&normalized).peekable();
     let mut phone = phones(&normalized).peekable();
-    if short.peek().is_none() && phone.peek().is_none() {
+    let mut values = normalized
+        .contains([':', '='])
+        .then(|| NAMED_SECRET.captures_iter(&normalized))
+        .into_iter()
+        .flatten()
+        .map(|caps| caps.get(1).unwrap().range())
+        .peekable();
+    if short.peek().is_none() && phone.peek().is_none() && values.peek().is_none() {
         return PRIVATE
             .replace_all(&normalized, regex::NoExpand("[가림]"))
             .chars()
@@ -212,7 +258,7 @@ fn mask(text: &str) -> String {
     let mut end = 0;
     let mut result = String::new();
     loop {
-        let first = [main.peek(), short.peek(), phone.peek()]
+        let first = [main.peek(), short.peek(), phone.peek(), values.peek()]
             .into_iter()
             .flatten()
             .map(|r| r.start)
@@ -222,6 +268,8 @@ fn mask(text: &str) -> String {
             main.next()
         } else if short.peek().is_some_and(|r| r.start == start) {
             short.next()
+        } else if values.peek().is_some_and(|r| r.start == start) {
+            values.next()
         } else {
             phone.next()
         }

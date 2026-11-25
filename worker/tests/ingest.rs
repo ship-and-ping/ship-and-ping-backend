@@ -74,7 +74,11 @@ fn masks_credentials_in_attempt_results() {
         let row = json!({"type":"attempt_result","attempt_id":ID,"feature_key":"join","source":"browser","result":"failure","ts":AT,"error_message":message});
         let out = run(batch(vec![row])).unwrap();
         assert_eq!(
-            out["payload"]["attempts"][0]["error_message"], "[가림]",
+            out["payload"]["attempts"][0]["error_message"],
+            message
+                .split_once('=')
+                .filter(|_| message.ends_with("=demo"))
+                .map_or("[가림]".into(), |(name, _)| format!("{name}=[가림]")),
             "{message}"
         );
     }
@@ -92,7 +96,7 @@ fn validates_path_after_removing_query_and_fragment() {
         ("relative".into(), None),
         (
             "/short/123456789abcdef/123456789abcdefg#fragment".into(),
-            Some("/short/123456789abcdef/:id"),
+            Some("/short/:id/:id"),
         ),
     ];
     for (route, expected) in cases {
@@ -159,7 +163,8 @@ fn deep_events_validate_fields_and_mask_result_details() {
     let attempts = rpc["payload"]["attempts"].as_array().unwrap();
     assert_eq!(attempts.len(), 2);
     assert_eq!(attempts[0]["type"], "attempt_start");
-    for field in ["step", "error_kind", "error_message"] {
+    assert_eq!(attempts[1]["step"], "token=[가림]");
+    for field in ["error_kind", "error_message"] {
         assert_eq!(attempts[1][field], "[가림]");
     }
 }
@@ -284,6 +289,29 @@ fn deep_results_enforce_server_source() {
 }
 
 #[test]
+fn masks_overlaps_nested_prefixes_and_ascii_phone_neighbors() {
+    let nested = format!("x{}_{}", short_key(), short_key());
+    let cases = [
+        (nested, format!("x{}_[가림]", short_key())),
+        (format!("token={}", short_key()), "token=[가림]".into()),
+        ("a01012345678z".into(), "a[가림]z".into()),
+        (
+            "1234567890123456 01012345678".into(),
+            "1234567890123456 [가림]".into(),
+        ),
+    ];
+    for (message, expected) in cases {
+        let mut row = request();
+        row["status"] = json!(500);
+        row["error_message"] = json!(message);
+        row["route"] = json!("/Bearer: abc/X-Key: demo/ordinary");
+        let out = run(batch(vec![row])).unwrap();
+        assert_eq!(out["payload"]["error_samples"][0]["message"], expected);
+        assert_eq!(out["payload"]["stats"][0]["route"], "/:id/:id/ordinary");
+    }
+}
+
+#[test]
 fn shared_sanitize_vectors() {
     #[derive(serde::Deserialize)]
     struct Case {
@@ -297,6 +325,7 @@ fn shared_sanitize_vectors() {
     }
     let cases: Cases =
         serde_json::from_str(include_str!("../../docs/specs/sanitize-vectors.json")).unwrap();
+    assert_eq!((cases.mask.len(), cases.route.len()), (46, 10));
     for case in cases.mask {
         let mut row = request();
         row["status"] = json!(500);
