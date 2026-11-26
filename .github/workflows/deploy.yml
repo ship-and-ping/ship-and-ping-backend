@@ -1,0 +1,58 @@
+name: Deploy to Cloudflare
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 배포 대상
+        required: true
+        type: choice
+        options: [worker, pages]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - if: inputs.target == 'worker'
+        working-directory: worker
+        run: |
+          rustup toolchain install
+          cargo install worker-build --version 0.9.0 --locked --root .tools
+          echo "${{ github.workspace }}/worker/.tools/bin" >> "$GITHUB_PATH"
+      - if: inputs.target == 'worker'
+        working-directory: worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_TOKEN }}
+        run: npx --yes wrangler@4.168.0 deploy --env production
+      - if: inputs.target == 'pages'
+        working-directory: web
+        run: npm ci
+      - if: inputs.target == 'pages'
+        working-directory: web
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_INGEST_URL: ${{ secrets.VITE_INGEST_URL }}
+        run: npm run build -- --mode pages
+      - if: inputs.target == 'pages'
+        working-directory: web
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_TOKEN }}
+          PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+        run: npx --yes wrangler@4.168.0 pages deploy dist --project-name "$PROJECT" --branch main
