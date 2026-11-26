@@ -40,6 +40,8 @@ Authentication → URL Configuration의 **Site URL**에 운영 Pages 원점을 �
 
 이메일 제공자를 활성화하고 Custom SMTP에 인증된 발신자와 SMTP 자격 증명을 설정한다. Email Templates에서 Confirm signup과 Magic link의 버튼을 `<a href="{{ .ConfirmationURL }}">쉽앤핑 로그인</a>`로 설정한다. 확인 링크가 Supabase에서 검증된 후 앱이 요청한 `/login`으로 돌아온다. Reset password 양식도 복구 요청의 리디렉트를 보존하는 `{{ .ConfirmationURL }}`을 쓴다. 이 브랜치의 로그인 화면은 Google과 이메일 링크를 지원한다. 비밀번호 복구는 해당 화면과 복구 세션 처리가 출시된 뒤 시험한다.
 
+T22가 포함된 릴리스에서는 `supabase/templates/`의 `confirmation.html`, `magic-link.html`, `recovery.html` 전문을 각각 Confirm signup, Magic link, Reset password에 붙여 넣는다. 시험 회원으로 가입 확인과 비밀번호 재설정 메일을 각각 열어 올바른 화면으로 돌아오고 새 비밀번호로 로그인되는지 확인한다.
+
 ## 5. 운영 확인 · 사람
 
 - [ ] Pages에서 `/login`과 로그인 후 앱 상세를 직접 새로고침한다. 문서 응답이 200이고 CSP의 `connect-src`에는 실제 Supabase·Worker 원점만 있는지 확인한다. 시험 계정으로 이메일 링크와 Google 로그인을 각각 마친다.
