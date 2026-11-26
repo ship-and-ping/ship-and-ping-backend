@@ -25,6 +25,7 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
   const [invalidField, setInvalidField] = useState("");
   const errorId = useId();
   const hintId = useId();
+  const passwordId = useId();
   const fieldError = (name: string) => invalidField === name && error
     ? <p id={errorId} role="alert">{error}</p> : null;
   const newPassword = ["signup", "reset", "account"].includes(mode);
@@ -57,11 +58,11 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
       setError(text);
       form.querySelector<HTMLInputElement>('[name="' + name + '"]')?.focus();
     }
-    if (emailField.current && !emailField.current.validity.valid) {
+    if (action !== "google" && emailField.current && !emailField.current.validity.valid) {
       invalid("email", "이메일 주소를 확인해 주세요.");
       return;
     }
-    if (action !== "link" && mode === "login" && !password) {
+    if (action !== "link" && action !== "google" && mode === "login" && !password) {
       invalid("password", "비밀번호를 적어 주세요.");
       return;
     }
@@ -87,7 +88,9 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
     locked.current = true;
     setBusy(true);
     try {
-      if (action === "link") {
+      if (action === "google") {
+        await api.login();
+      } else if (action === "link") {
         await api.login(email.trim());
         setMessage("로그인 링크를 보냈어요. 메일이 안 오면 스팸함을 확인해 주세요.");
       } else if (mode === "login") {
@@ -135,6 +138,7 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
       const offline = cause instanceof TypeError || status === 0;
       if (status === 429) setError("요청이 너무 많아요. 잠시 후 다시 시도해 주세요.");
       else if (offline) setError("인터넷 연결을 확인하고 다시 시도해 주세요.");
+      else if (action === "google") setError("Google 로그인을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.");
       else if (mode === "login" && action !== "link") invalid("password", "이메일이나 비밀번호가 맞지 않아요");
       else setError(mode === "reset" ? "비밀번호를 저장하지 못했어요. 새 링크를 받아 다시 시도해 주세요."
         : newPassword ? "저장하지 못했어요. 다른 비밀번호로 다시 시도해 주세요."
@@ -144,24 +148,32 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
       setBusy(false);
     }
   }
-  return <form aria-busy={busy} noValidate onSubmit={submit}>
+  return <form className="auth-form" aria-busy={busy} noValidate onSubmit={submit}>
     {["login","signup","forgot"].includes(mode) && <><label>이메일 주소
       <input name="email" aria-invalid={invalidField === "email"} aria-describedby={invalidField === "email" ? errorId : undefined} ref={emailField} required type="email" autoComplete="email"
         value={displayText(email,"login-email")} onChange={e => setEmail(e.target.value)}/>
     </label>{fieldError("email")}</>}
     {mode !== "forgot" && <>
-      <label>{newPassword ? "새 비밀번호" : "비밀번호"}
-        <input required name="password" aria-invalid={invalidField === "password"}
+      <label htmlFor={passwordId}>{newPassword ? "새 비밀번호" : "비밀번호"}</label>
+      <div className="auth-password">
+        <input id={passwordId} required name="password" aria-invalid={invalidField === "password"}
           aria-describedby={[newPassword && hintId, invalidField === "password" && errorId].filter(Boolean).join(" ") || undefined} type={visible ? "text" : "password"}
           minLength={newPassword ? 8 : undefined} autoComplete={newPassword ? "new-password" : "current-password"}/>
-      </label>
+        <button type="button" className="auth-toggle" aria-label={visible ? "비밀번호 숨기기" : "비밀번호 보기"}
+          aria-pressed={visible} onClick={() => setVisible(!visible)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/>
+            <circle cx="12" cy="12" r="3"/>
+            {visible && <path d="m3 3 18 18"/>}
+          </svg>
+        </button>
+      </div>
       {fieldError("password")}
       {newPassword && <>
         <small id={hintId}>8자 이상으로 적어 주세요. 생일이나 연속된 숫자는 쉽게 짐작할 수 있어요.</small>
         <label>비밀번호 확인<input required name="confirm" aria-invalid={invalidField === "confirm"} aria-describedby={invalidField === "confirm" ? errorId : undefined} type={visible ? "text" : "password"} autoComplete="new-password"/></label>
         {fieldError("confirm")}
       </>}
-      <button type="button" className="secondary" aria-pressed={visible} onClick={() => setVisible(!visible)}>비밀번호 보기</button>
     </>}
     {needsCode && <>
       <label>메일 인증번호<input ref={codeField} name="nonce" autoComplete="one-time-code" inputMode="numeric"
@@ -170,7 +182,12 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
     </>}
     <button disabled={busy}>{busy ? "처리하는 중" : titles[mode]}</button>
     {needsCode && <button value="resend" className="secondary" disabled={busy}>번호 다시 받기</button>}
-    {mode === "login" && <button className="secondary" value="link" formNoValidate disabled={busy}>비밀번호 없이 메일 링크로 받기</button>}
+    {mode === "login" && <>
+      <div className="auth-divider" role="separator" aria-label="또는">또는</div>
+      <button className="secondary" value="link" formNoValidate disabled={busy}>비밀번호 없이 메일 링크로 받기</button>
+      {import.meta.env.VITE_GOOGLE_LOGIN_ENABLED === "true" &&
+        <button className="secondary" value="google" formNoValidate disabled={busy}>Google로 로그인</button>}
+    </>}
     <p role="status">{message}</p>
     {!invalidField && error && <p role="alert">{error}</p>}
   </form>;
@@ -189,7 +206,6 @@ export function AuthPage({ api, mode, recovery = false, expired }: { api: Gatewa
             : <AuthForm key={mode} api={api} mode={mode} expired={expired}/>}
           {mode === "login" && <>
             <div className="actions"><Link to="/signup">회원 가입</Link><Link to="/forgot-password">비밀번호 찾기</Link></div>
-            <p><button type="button" className="secondary" disabled>Google 로그인 예정</button></p>
           </>}
           {mode === "reset" && <p><Link to="/forgot-password">재설정 메일 다시 받기</Link></p>}
           <Link to={mode === "login" ? "/" : "/login"}>{mode === "login" ? "쉽앤핑 소개로 돌아가기" : "로그인으로 돌아가기"}</Link>

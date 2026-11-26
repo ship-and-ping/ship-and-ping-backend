@@ -839,6 +839,35 @@ h1[tabindex="-1"]:focus { outline: none; }
 .cols aside ol { margin: 0; padding-left: 1.5rem; }
 .cols aside li { padding: .5rem .25rem; }
 .public .panel form { border-top: 1px solid var(--sp-line); padding-top: 1.25rem; }
+.auth-form > button { width: 100%; }
+.auth-password { position: relative; }
+.auth-password input {
+  width: 100%;
+  padding-inline-end: calc(var(--sp-touch) + var(--sp-space-2));
+}
+.auth-toggle {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: var(--sp-touch);
+  padding: 0;
+  background: transparent;
+  color: var(--sp-ink-2);
+}
+.auth-toggle:focus-visible { outline-offset: calc(-1 * var(--sp-space-1)); }
+.auth-toggle svg { width: var(--sp-space-5); height: var(--sp-space-5); }
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-space-3);
+  color: var(--sp-ink-2);
+  font-size: var(--sp-text-sm);
+}
+.auth-divider::before, .auth-divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--sp-line);
+}
 .public .panel > a { justify-self: start; }
 .workspace > label:has(select) { max-width: 28rem; }
 .workspace select { min-height: 44px; padding: .5rem .75rem; font: inherit; color: var(--sp-ink); background: var(--sp-surface); border: 1px solid var(--sp-line-strong); border-radius: var(--sp-radius-sm); }
