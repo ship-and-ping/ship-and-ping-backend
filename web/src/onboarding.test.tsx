@@ -826,6 +826,24 @@ it("200개 한도를 넘긴 이름은 저장 성공으로 표시하지 않는다
   expect(screen.queryByDisplayValue("초과")).toBeNull();
 });
 describe("연결 요청문과 등록 입력", () => {
+  it.each(["/apps/new", "/apps/a/settings"])("%s 주소 칸에 선택 사항과 연결 방법을 안내한다", async path => {
+    open(path);
+    const field = await screen.findByLabelText("앱 주소 (선택 · 웹사이트나 스토어 링크)");
+    expect(field.getAttribute("placeholder")).toBe("https://");
+    expect(document.getElementById(field.getAttribute("aria-describedby")!)?.textContent)
+      .toBe("비워 둬도 돼요. 연결은 주소가 아니라 다음 단계의 연결 키로 해요.");
+  });
+  it.each([
+    "https://play.google.com/store/apps/details?id=com.example.app",
+    "https://apps.apple.com/kr/app/example/id123456789",
+  ])("스토어 주소 %s를 허용한다", url => {
+    expect(validateApp("모임모아", url)).toEqual({});
+  });
+  it("휴대폰 앱의 연결 방식을 안내한다", async () => {
+    open("/apps/a/connect");
+    const guide = await screen.findByText(/휴대폰 앱\(플레이스토어·앱스토어\)이라면/);
+    expect(guide.textContent).toBe("휴대폰 앱(플레이스토어·앱스토어)이라면 앱 서버에서 기록을 보내도록 서버 있음을 골라 주세요. 휴대폰 앱 코드는 바꾸지 않아도 돼요.");
+  });
   it("공개 수집 키와 환경변수 이름만 제공한다", () => {
     const prompt = buildConnectPrompt(pub, base);
     expect(prompt).toContain(pub);

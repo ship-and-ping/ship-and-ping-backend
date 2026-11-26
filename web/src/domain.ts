@@ -40,6 +40,9 @@ export function buildConnectPrompt(publicKey: string, endpoint: string) {
 앞에서 지정한 쉽앤핑 수집 주소(INGEST_URL)는 예외야. ${connectRestriction}`;
 }
 
+export const appAddressLabel = "앱 주소 (선택 · 웹사이트나 스토어 링크)";
+export const appAddressHelp = "비워 둬도 돼요. 연결은 주소가 아니라 다음 단계의 연결 키로 해요.";
+
 export function validateApp(name: string, url: string) {
   const errors: { name?: string; url?: string } = {};
   if (!name.trim() || [...name.trim()].length > 40)

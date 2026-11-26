@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { CurrentAppName } from "./Layout";
 import { Copy } from "./Connect";
 import { displayText, sanitizeRoute } from "./normalize";
-import { validateApp } from "./domain";
+import { appAddressHelp, appAddressLabel, validateApp } from "./domain";
 import type { Gateway, KeySummary, Label, Snapshot } from "./data";
 
 export function AppSettings({ api }: { api: Gateway }) {
@@ -119,9 +119,10 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
               <input value={name} onChange={(e) => setName(e.target.value)} />
             </label>
             <label>
-              앱 주소
-              <input value={url} onChange={(e) => setUrl(e.target.value)} />
+              {appAddressLabel}
+              <input type="url" placeholder="https://" aria-describedby="url-help" value={url} onChange={(e) => setUrl(e.target.value)} />
             </label>
+            <small id="url-help">{appAddressHelp}</small>
             <button
               onClick={() =>
                 change(async () => {
