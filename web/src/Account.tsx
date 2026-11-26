@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { AuthForm } from "./AuthPage";
 import type { Gateway } from "./data";
 import { displayText } from "./normalize";
 
@@ -34,7 +35,11 @@ export function Account({
   const [info, setInfo] = useState<Awaited<ReturnType<typeof loadAccount>>>();
   const [stage, setStage] = useState<Stage>("account");
   const [input, setInput] = useState("");
+  const [editingPassword, setEditingPassword] = useState(false);
+  const [passwordSaved, setPasswordSaved] = useState(false);
+  const passwordButton = useRef<HTMLButtonElement>(null);
   const [error, setError] = useState(false);
+  const [logoutError, setLogoutError] = useState(false);
   const [attempt, retry] = useState(0);
   const title = useRef<HTMLHeadingElement>(null);
   const retryButton = useRef<HTMLButtonElement>(null);
@@ -55,7 +60,10 @@ export function Account({
         if (active) setInfo(data);
       })
       .catch(() => {
-        if (active) setError(true);
+        if (active) {
+          setInfo(undefined);
+          setError(true);
+        }
       });
     return () => {
       active = false;
@@ -119,7 +127,7 @@ export function Account({
             </button>
           </p>
         ) : (
-          <p role="status">내 계정을 불러오는 중</p>
+          <p role="status" aria-busy="true">내 계정을 불러오는 중</p>
         )}
       </div>
     );
@@ -145,6 +153,20 @@ export function Account({
             </dl>
             <Link to="/apps">내 앱 목록 보기</Link>{" "}
             {!count && <Link to="/apps/new">앱 등록하기</Link>}
+          </section>
+          <section className="panel">
+            <h2>비밀번호</h2>
+            <button ref={passwordButton} className="secondary" aria-expanded={editingPassword} onClick={() => {
+              setPasswordSaved(false);
+              setEditingPassword(!editingPassword);
+            }}>{editingPassword ? "닫기" : info.hasPassword ? "비밀번호 바꾸기" : "비밀번호 만들기"}</button>
+            {editingPassword && <AuthForm api={api} mode="account" saved={() => {
+              setEditingPassword(false);
+              setPasswordSaved(true);
+              passwordButton.current?.focus();
+              retry(n => n + 1);
+            }}/>}
+            {passwordSaved && <p role="status">비밀번호를 저장했어요.</p>}
           </section>
           <section className="panel">
             <h2>알림 받을 곳</h2>
@@ -174,7 +196,7 @@ export function Account({
           <div className="actions">
             <button
               className="secondary"
-              onClick={() => logout().catch(() => setError(true))}
+              onClick={() => logout().catch(() => setLogoutError(true))}
             >
               로그아웃
             </button>
@@ -185,7 +207,7 @@ export function Account({
               회원 탈퇴
             </button>
           </div>
-          {error && (
+          {logoutError && (
             <p role="alert">로그아웃하지 못했어요. 다시 시도해 주세요.</p>
           )}
         </>
