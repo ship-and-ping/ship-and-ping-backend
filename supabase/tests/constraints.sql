@@ -65,7 +65,7 @@ select ingest_batch(current_setting('test.hash'),jsonb_set(jsonb_set(pg_temp.att
  '{attempts,0,attempt_id}','"22222222-2222-4222-8222-222222222222"'),'{attempts,0,result}','"success"'));
 select is((select status from attempts where attempt_id='22222222-2222-4222-8222-222222222222'),'success','late success replaces unconfirmed');
 select is(private.mask('a%40example.test ?token=aaa&key=bbb&ACCESS_TOKEN=ccc&status=ok'),
-  '[가림] ?token=[가림]&key=[가림]&ACCESS_TOKEN=[가림]&status=ok','encoded email and query credential values masked');
+  '[가림] ?[가림]','encoded email and complete query string masked');
 select ingest_batch(current_setting('test.hash'),jsonb_build_object('batch_id',gen_random_uuid(),'app_version',' v1 ','stats','[]'::jsonb));
 select results_eq('select version from app_versions',$q$select 'v1'::text$q$,'version trimmed before storage');
 select suggest_feature_map(current_setting('test.hash'),'[{"method":"GET","route":"/items/123?query=private","name":"Items"}]');
