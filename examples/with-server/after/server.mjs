@@ -4,8 +4,7 @@ import { monitor } from "../../monitor.mjs";
 const telemetry = monitor(
   {
     endpoint: process.env.INGEST_URL,
-    publicKey: process.env.SHIPPING_PUBLIC_KEY,
-    serverKey: process.env.SHIPPING_SERVER_KEY,
+    serverKey: process.env.SHIP_AND_PING_KEY,
     version: process.env.BUILD_VERSION,
   },
   "server",

@@ -5,6 +5,14 @@ import { buildIssuePrompt, displayVersion } from "./issue-prompt";
 import vectors from "../../docs/specs/sanitize-vectors.json";
 
 const base = { feature: "결제", route: "/buy", versions: ["v1"], errors: [] };
+it.each(["first", "again", "worse"] as const)("S7 %s 두 복사 방식 모두 앱 키를 가린다", mode => {
+  const pub = "sp_pub_" + "a".repeat(64);
+  const srv = "sp_srv_" + "b".repeat(64);
+  const input = { ...base, mode, feature: pub, versions: [srv], errors: [pub, srv] };
+  for (const includeAll of [false, true]) {
+    expect(buildIssuePrompt(input, includeAll).text).not.toMatch(/sp_(?:srv|pub)_/);
+  }
+});
 it("오류 예시가 없으면 화면과 같은 안내를 복사한다", () => {
   expect(buildIssuePrompt(base).text).toContain("오류 예시가 없어요.");
 });

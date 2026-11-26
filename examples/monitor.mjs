@@ -5,9 +5,10 @@ const labels = [
 ];
 
 export function monitor(config, platform) {
+  const key = config?.serverKey ?? config?.publicKey;
   if (
     !config?.endpoint ||
-    !config.publicKey ||
+    !key ||
     !/^[a-zA-Z0-9._-]{1,64}$/.test(config.version ?? "")
   )
     return { record() {}, flush() {} };
@@ -25,7 +26,7 @@ export function monitor(config, platform) {
       body: JSON.stringify(data),
     }).catch(() => {});
   }
-  void post("/v1/feature-map", labels, config.publicKey);
+  void post("/v1/feature-map", labels, key);
   const records = [];
   function flush() {
     if (!records.length) return;
@@ -41,7 +42,7 @@ export function monitor(config, platform) {
         sent_at: new Date().toISOString(),
         records: records.splice(0),
       },
-      config.serverKey ?? config.publicKey,
+      key,
     );
   }
   const timer = setInterval(flush, 30_000);
