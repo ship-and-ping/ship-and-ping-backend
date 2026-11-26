@@ -56,7 +56,7 @@ $$;
 select is(pg_temp.deep('pay','attempt_start'),'{"accepted":1,"dropped":0}'::jsonb,'deep start accepted at global capacity');
 select is(pg_temp.deep('cancel','attempt_result'),'{"accepted":0,"dropped":1}'::jsonb,'other deep key cannot finish this attempt');
 select suggest_feature_map(repeat('b',64),'[{"method":"GET","route":"/extra","name":"Extra"}]');
-select is_empty($$select id from feature_map_suggestions where route='/extra'$$,'full beta skips new suggestions');
+select is((select name from feature_map_suggestions where route='/extra'),'Extra','full beta holds the name until a slot opens');
 select is(confirm_feature_names((select id from apps where name='second'),
  '[{"method":"GET","route":"/later","name":"Later","hidden":true}]'),
  '[{"method":"GET","route":"/later"}]'::jsonb,'confirm skips a previously suggested overflow route');
@@ -73,6 +73,7 @@ select is((select feature_key from attempts join features on feature_id=id where
 select lives_ok($$insert into apps(name) values('third')$$,'registration reopens');
 select throws_ok($$insert into apps(name) values('fourth')$$,'23514','app limit reached','member quota still applies');
 select pg_temp.record('b','/extra');
+select is((select name from features where route='/extra'),'Extra','first admitted record picks up the stored name');
 select pg_temp.record('b','/hundred');
 select is((select total from stats_5m join features on feature_id=id where route='/hundred'),2,'dormant route over cap goes to 기타');
 update features set last_record_at=now()-interval '8 days' where route='/extra';

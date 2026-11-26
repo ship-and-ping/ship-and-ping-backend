@@ -67,7 +67,7 @@ export interface Gateway {
   create(name: string, url: string): Promise<string>;
   issue(id: string, kind: "pub" | "srv"): Promise<string>;
   snapshot(id: string): Promise<Snapshot>;
-  save(id: string, labels: Label[]): Promise<Pick<Label, "method" | "route">[]>;
+  save(id: string, labels: (Omit<Label, "name"> & {name?: string})[]): Promise<Pick<Label, "method" | "route">[]>;
 }
 export interface KeySummary {
   id: string;
@@ -356,7 +356,7 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       return key;
     },
     async snapshot(id) {
-      const [appResult, featuresResult, suggestionsResult] = await Promise.all([
+      const [appResult, featuresResult] = await Promise.all([
         client.from("apps").select(columns).eq("id", id).single(),
         client
           .from("features")
@@ -364,36 +364,11 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
           .eq("app_id", id)
           .eq("kind", "auto")
           .order("created_at"),
-        client
-          .from("feature_map_suggestions")
-          .select("method,route,name")
-          .eq("app_id", id)
-          .eq("applied", false)
-          .order("received_at"),
       ]);
-      const suggestions = new Map(
-        value(suggestionsResult).map((s) => [s.method + " " + s.route, s]),
-      );
-      const labels: Label[] = value(featuresResult).map((f) => {
-        const key = f.method + " " + f.route;
-        const proposed = suggestions.get(key);
-        suggestions.delete(key);
-        const name =
-          f.method === "*"
-            ? "기타"
-            : f.name_source === "confirmed" && f.name !== "이름 없는 기능"
-              ? f.name
-              : (proposed?.name ?? "");
-        return {
-          id: f.id,
-          method: f.method,
-          route: f.route,
-          hidden: f.hidden,
-          name,
-        };
-      });
-      for (const s of suggestions.values())
-        labels.push({ ...s, id: null, hidden: false });
+      const labels: Label[] = value(featuresResult).map((f) => ({
+        id: f.id, method: f.method, route: f.route, hidden: f.hidden,
+        name: f.method === "*" ? "기타" : f.name_source === "route" ? "" : f.name,
+      }));
       return { app: value(appResult), labels };
     },
     async save(id, labels) {

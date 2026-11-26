@@ -15,6 +15,14 @@ import { gateway } from "./data";
 import vectors from "../../docs/specs/sanitize-vectors.json";
 
 afterEach(cleanup);
+it("앱 홈의 기능 목록에 기능 지도의 이름을 바로 표시한다", async () => {
+  setup("/apps/a#features", [], rows => {
+    Object.assign((rows.features as object[])[0], {kind:"auto", name:"참가 신청", name_source:"ai"});
+    rows.incidents = [];
+  });
+  const name = await screen.findByRole("heading", {name:"참가 신청"});
+  expect(name.closest("#features")).toBeTruthy();
+});
 it("오류 코드가 비면 클래스 이름으로 종류를 집계한다", async () => {
   const { requests } = setup("/apps/a/features/f", ["WriteError"], rows => {
     Object.assign((rows.error_samples as object[])[0], { error_kind: null });

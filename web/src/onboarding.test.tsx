@@ -510,10 +510,10 @@ it("등록한 수집 키는 미리 보기에서 가리고 화면을 다시 열�
   ).toBeTruthy();
   expect(api.issue).toHaveBeenCalledTimes(1);
 });
-it("선택한 제안만 저장하고 이름 없는 주소에 늦게 온 제안을 보여 준다", async () => {
+it("지도 이름을 바로 표시하고 나중에 도착한 이름도 확인 없이 표시한다", async () => {
   const api = fake();
   const proposed = {
-    id: null,
+    id: "a",
     method: "GET",
     route: "/a",
     name: "신청",
@@ -534,11 +534,10 @@ it("선택한 제안만 저장하고 이름 없는 주소에 늦게 온 제안�
   open("/apps/a/connect", api);
   await act(async () => {});
   expect(screen.getByText(/기능 1개를 찾았어요/)).toBeTruthy();
-  fireEvent.click(screen.getAllByLabelText("이 이름 확인")[0]);
-  await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "모두 확인" }));
-  });
-  expect(api.save).toHaveBeenCalledWith("a", [proposed]);
+  expect(screen.getByDisplayValue("신청")).toBeTruthy();
+  expect(screen.getByText("AI가 붙인 이름이에요. 고칠 것만 고치세요.")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "모두 확인" })).toBeNull();
+  expect(api.save).not.toHaveBeenCalled();
   await act(async () => {
     await vi.advanceTimersByTimeAsync(5000);
   });
@@ -865,7 +864,7 @@ it("한글 조합과 편집 원문을 유지하고 저장할 때 정규화한다
   const draft = " 한 desk_ Ａ sp_srv_fixture ";
   fireEvent.change(field, { target: { value: draft } });
   expect(field.value).toBe(draft);
-  fireEvent.click(screen.getByRole("button", { name: "모두 확인" }));
+  fireEvent.click(screen.getByRole("button", { name: "변경사항 저장" }));
   await waitFor(() => expect(api.save).toHaveBeenCalledWith("a", [
     { ...label, name: "한 desk_ A [가림]" },
   ]));
@@ -877,8 +876,8 @@ it("200개 한도를 넘긴 이름은 저장 성공으로 표시하지 않는다
   vi.mocked(api.snapshot).mockResolvedValue({ app, labels: [label] });
   vi.mocked(api.save).mockResolvedValue([{ method: "GET", route: "/extra" }]);
   open("/apps/a/connect", api);
-  fireEvent.click(await screen.findByLabelText("이 이름 확인"));
-  fireEvent.click(screen.getByRole("button", { name: "모두 확인" }));
+  fireEvent.change(await screen.findByLabelText("기능 이름 1"), {target:{value:"새 이름"}});
+  fireEvent.click(screen.getByRole("button", { name: "변경사항 저장" }));
   expect(await screen.findByText(/200개를 넘어 저장하지 못했어요/)).toBeTruthy();
   expect(screen.queryByText(/저장했어요/)).toBeNull();
   expect(screen.queryByDisplayValue("초과")).toBeNull();
@@ -969,7 +968,7 @@ it("첫 기록을 확인한 뒤 수정한 이름과 숨김을 저장한다", asy
     target: { value: "참가 신청" },
   });
   fireEvent.click(screen.getByLabelText("이 기능 숨기기"));
-  fireEvent.click(screen.getByRole("button", { name: "모두 확인" }));
+  fireEvent.click(screen.getByRole("button", { name: "변경사항 저장" }));
   await waitFor(() =>
     expect(api.save).toHaveBeenCalledWith("a", [
       expect.objectContaining({ id: "f", name: "참가 신청", hidden: true }),

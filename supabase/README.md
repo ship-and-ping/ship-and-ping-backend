@@ -66,3 +66,27 @@ npx --yes supabase@2.75.0 db push
 ```
 
 브라우저에는 `sb_publishable_` 키와 로그인 세션을 사용한다. `sb_secret_` 키는 Worker 비밀 설정에 둔다. [Supabase API 키 문서](https://supabase.com/docs/guides/getting-started/api-keys)
+## T38 기능 지도 적용
+
+1. `20261126500000_feature_map_names.sql`을 적용한다. 이름 출처 제약과 트리거를 바꾸고, 이전 값을 담을 비공개 표와 건수를 반환하는 RPC를 설치한다.
+2. 별도 트랜잭션에서 `20261126500100_feature_map_backfill.sql`을 적용한다. 제안이 있는 앱에서 일치하는 `route` 자동 기능을 잠그고 이전 이름·출처를 백업한 뒤 이름을 바꾼다. 기존 `suggested`는 이전 스키마가 허용했던 제안 출처다. 기존 RPC는 제안을 별도 표에 저장했으며 기능의 출처를 `suggested`로 설정하지 않았다. 해당 출처가 이미 있는 행은 이름과 출처를 모두 보존한다.
+3. `20261126500200_feature_map_lengths.sql`로 정제된 제안의 길이 제약을 적용한다. 앱별 제안이 최대 300개인지 확인하고 Worker, 웹 순서로 배포한다. 새 Worker는 DB의 건수 응답을 사용한다.
+
+백필 검증에는 다음 두 조회를 사용한다. 두 번째 조회에서 상한을 넘긴 앱은 0개여야 한다.
+
+```sql
+select count(*) as backed_up_features from private.feature_map_name_backup;
+select app_id,count(*) from public.feature_map_suggestions group by app_id having count(*)>300;
+```
+
+백필 이름을 되돌릴 때는 DB 관리자로 아래 갱신을 실행한다. 현재 이름과 출처가 백필 결과와 여전히 같은 행만 복구하므로 이후 회원이 바꾼 이름과 다른 AI 이름을 보존한다. 운영 확인을 마치면 별도의 정리 명령으로 7일이 지난 백업을 삭제할 수 있다.
+
+```sql
+update public.features f set name=b.previous_name,name_source=b.previous_source
+from private.feature_map_name_backup b
+where f.id=b.feature_id and f.name_source='ai' and f.name=b.applied_name;
+```
+
+```sql
+delete from private.feature_map_name_backup where backed_up_at < now()-interval '7 days';
+```

@@ -4,6 +4,8 @@ import type { Gateway, Label, Snapshot } from "./data";
 import { buildConnectPrompt, connectRestriction, keyWarning } from "./domain";
 import { displayText, sanitizeRoute } from "./normalize";
 import { Hero, CurrentAppName } from "./Layout";
+import { cleanFeatureField } from "./deep";
+import { isStrong } from "./issue-prompt";
 
 function copyWithEvent(text: string) {
   let written = false;
@@ -164,7 +166,7 @@ export function Connect({
   const keyTitle = kind === "pub" ? "수집 키" : "서버 키";
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [edits, setEdits] = useState<Record<string, Label>>({});
+  const [edits, setEdits] = useState<Record<string, Partial<Pick<Label, "name" | "hidden">>>>({});
   const [saved, setSaved] = useState(false);
   useEffect(() => {
     let active = true;
@@ -223,32 +225,36 @@ export function Connect({
           : "이름 없는 기능";
     groups[group].push(label);
   }
-  const selected = Object.values(edits);
-  function deselect(l: Label) {
-    setEdits((prev) => {
-      const next = { ...prev };
-      delete next[identity(l)];
-      return next;
-    });
-  }
-  function change(l: Label, patch: Partial<Label>) {
+  const changes = labels.flatMap((original) => {
+    const draft = edits[identity(original)];
+    if (!draft) return [];
+    const name = draft.name === undefined ? undefined : cleanFeatureField(draft.name);
+    const renamed = name !== undefined && name !== original.name;
+    const hidden = draft.hidden ?? original.hidden;
+    if (!renamed && hidden === original.hidden) return [];
+    return [{ ...original, hidden, name: renamed ? name : undefined }];
+  });
+  function change(l: Label, patch: Partial<Pick<Label, "name" | "hidden">>) {
     setSaved(false);
     setEdits((prev) => ({
       ...prev,
-      [identity(l)]: { ...l, ...prev[identity(l)], ...patch },
+      [identity(l)]: { ...prev[identity(l)], ...patch },
     }));
   }
-  async function confirm() {
+  async function saveChanges() {
     setError("");
-    const normalized = selected.map((l) => ({ ...l, name: displayText(l.name).trim() }));
-    if (normalized.some((l) => !l.name || l.name === "이름 없는 기능" || [...l.name].length > 300)) {
-      setError("기능 이름을 1~300자로 입력해 주세요.");
+    if (changes.some(({ name }) => name !== undefined && (!name || name === "이름 없는 기능" || [...name].length > 40))) {
+      setError("기능 이름을 1~40자로 입력해 주세요.");
+      return;
+    }
+    if (changes.some(({ name }) => name !== undefined && isStrong(name))) {
+      setError("지시처럼 보이는 문장은 넣을 수 없어요.");
       return;
     }
     setBusy(true);
     try {
-      const skipped = new Set((await api.save(id, normalized)).map(identity));
-      const confirmed = new Map(normalized.map((l) => [identity(l), l]));
+      const skipped = new Set((await api.save(id, changes)).map(identity));
+      const updated = new Map(changes.map((l) => [identity(l), l]));
       revision.current++;
       setSnapshot(
         (current) =>
@@ -256,7 +262,10 @@ export function Connect({
             ...current,
             labels: current.labels
               .filter((label) => !skipped.has(identity(label)))
-              .map((label) => confirmed.get(identity(label)) ?? label),
+              .map((label) => {
+                const edit = updated.get(identity(label));
+                return edit ? { ...label, hidden: edit.hidden, name: edit.name ?? label.name } : label;
+              }),
           },
       );
       setEdits({});
@@ -299,11 +308,8 @@ export function Connect({
           />
           {(arrived || labels.length > 0) && (
             <section className="panel">
-              <h2>기능 이름표 확인</h2>
-              <p>
-                알림에 쓸 이름을 골라 주세요. 이름을 고치거나 숨기면 확인할
-                항목에 포함돼요.
-              </p>
+              <h2>기능 이름표</h2>
+              <p>AI가 붙인 이름이에요. 고칠 것만 고치세요.</p>
               {!labels.length && <p>기능 이름표를 기다리고 있어요.</p>}
               {Object.entries(groups).map(
                 ([group, rows]) =>
@@ -313,7 +319,7 @@ export function Connect({
                         {group} {rows.length}개
                       </h3>
                       {rows.map((original) => {
-                        const l = edits[identity(original)] ?? original;
+                        const l = { ...original, ...edits[identity(original)] };
                         const index = labels.indexOf(original) + 1;
                         return (
                           <fieldset
@@ -325,7 +331,6 @@ export function Connect({
                               <input
                                 value={l.name}
                                 placeholder="이름 없는 기능"
-                                maxLength={300}
                                 onChange={(e) =>
                                   change(l, { name: e.target.value })
                                 }
@@ -345,17 +350,6 @@ export function Connect({
                               />
                               이 기능 숨기기
                             </label>
-                            <label className="check">
-                              <input
-                                type="checkbox"
-                                checked={!!edits[identity(l)]}
-                                disabled={!l.name.trim() && !edits[identity(l)]}
-                                onChange={(e) =>
-                                  e.target.checked ? change(l, {}) : deselect(l)
-                                }
-                              />
-                              이 이름 확인
-                            </label>
                           </fieldset>
                         );
                       })}
@@ -363,23 +357,17 @@ export function Connect({
                   ),
               )}
               <button
-                disabled={
-                  busy ||
-                  !selected.length ||
-                  selected.some(
-                    (l) => !l.name.trim() || l.name.trim() === "이름 없는 기능",
-                  )
-                }
-                onClick={confirm}
+                disabled={busy || !changes.length}
+                onClick={saveChanges}
               >
-                {busy ? "처리하는 중" : "모두 확인"}
+                {busy ? "처리하는 중" : "변경사항 저장"}
               </button>
               {saved && (
                 <p role="status">
-                  확인한 기능의 이름을 저장했어요.{" "}
-                  <Link to="/apps">내 앱 보기</Link>
+                  변경사항을 저장했어요.
                 </p>
               )}
+              <Link to={`/apps/${id}`}>앱 홈 보기</Link>
             </section>
           )}
           <div className="cols">

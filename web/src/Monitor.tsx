@@ -258,7 +258,7 @@ function Home({ data, base }: { data: Monitor; base: string }) {
           <p>아직 기록된 기능이 없어요.</p>
         )}
       </section>
-      <Link to={base + "/connect"}>연결과 기능 이름 확인</Link>
+      <Link to={base + "/connect"}>연결과 기능 이름 보기</Link>
     </>
   );
 }
