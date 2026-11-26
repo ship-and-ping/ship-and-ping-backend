@@ -1,6 +1,28 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { expect, it, vi } from "vitest";
 import { gateway } from "./data";
+
+it.each([
+  [504, undefined, "unknown"],
+  [502, undefined, "unknown"],
+  [429, undefined, "unknown"],
+  [503, undefined, "failed"],
+  [401, "bad_jwt", "unauthorized"],
+  [401, "user_not_found", "done"],
+] as const)("withdrawal maps HTTP %s and Auth %s to %s", async (status, code, expected) => {
+  const auth = {
+    getSession: async () => ({data:{session:{access_token:"fixture"}}}),
+    getUser: vi.fn(async () => ({error:{code}})),
+  };
+  const api = gateway({auth} as unknown as SupabaseClient);
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(null,{status})));
+  try {
+    expect(await api.withdraw("http://localhost")).toBe(expected);
+    expect(auth.getUser).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 it("gateway merges proposed, confirmed, unnamed and overflow rows and sends one scoped RPC", async () => {
   const requests: { path: string; body: string; query: URLSearchParams }[] = [];

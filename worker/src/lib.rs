@@ -9,4 +9,6 @@ mod notify;
 mod slack;
 
 #[cfg(any(target_arch = "wasm32", test))]
+mod account;
+#[cfg(any(target_arch = "wasm32", test))]
 mod limits;

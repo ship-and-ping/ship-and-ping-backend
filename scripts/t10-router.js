@@ -9,7 +9,7 @@ export default {
           .json()
           .catch(() => ({}));
         console.warn(
-          new URL(request.url).pathname,
+          new URL(request.url).pathname.replace(/\/auth\/v1\/admin\/users\/[^/]+$/, "/auth/v1/admin/users/:id"),
           response.status,
           error.code,
           error.code === "21000" ? error.message : "",

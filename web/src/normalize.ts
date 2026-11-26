@@ -52,8 +52,9 @@ export function sanitizeRoute(value: string): string {
 /** Returns plain text for JSX text nodes and input values. */
 export function displayText(
   value: string,
-  field: "app-data" | "login-email" = "app-data",
+  field: "app-data" | "login-email" | "key-prefix" = "app-data",
 ): string {
   if (field === "login-email") return value;
+  if (field === "key-prefix") return /^sp_(pub|srv)_[a-f0-9]$/.test(value) ? value : "[가림]";
   return maskText(value).replace(/\n+/g, " ");
 }

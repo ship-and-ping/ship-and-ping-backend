@@ -1,6 +1,6 @@
 const at = "2026-11-25T09:00:00Z";
 export const now = "2026-11-25T09:10:00Z";
-const user = { id: "qa-member", user_metadata: { ship_ping_visited: true } };
+const user = { id: "qa-member", email:"member@example.invalid", created_at:at, app_metadata:{provider:"email"}, user_metadata: { ship_ping_visited: true } };
 export async function mockPage(page, state, member, origin) {
   if (member) await page.addInitScript(user => {
     localStorage.setItem("sb-example-auth-token", JSON.stringify({
@@ -35,7 +35,7 @@ export async function mockPage(page, state, member, origin) {
       incidents: problem ? [incident] : [],
       stats_5m: waiting ? [] : [{ feature_id: "apply", version: "1.0", bucket: at, total: 20,
         failures: state === "failure" ? 6 : 0, hist: [0,0,0,0,14] }],
-      feature_map_suggestions: [], error_samples: [], attempts: [],
+      feature_map_suggestions: [], error_samples: [], attempts: [], app_key_list: [],
       notification_settings: { email: true, connected: false, broken: false, channel: null },
       incident_verification: { version: null, consecutive_successes: 0 },
     };

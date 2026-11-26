@@ -37,6 +37,23 @@ pub(crate) struct Supabase {
     key: String,
 }
 impl Supabase {
+    async fn account_request(
+        &self,
+        method: Method,
+        path: &str,
+        bearer: Option<&str>,
+    ) -> Result<Response> {
+        let headers = Headers::new();
+        headers.set("apikey", &self.key)?;
+        if let Some(auth) = bearer {
+            headers.set("Authorization", auth)?;
+        }
+        let mut init = RequestInit::new();
+        init.with_method(method).with_headers(headers);
+        let request =
+            Request::new_with_init(&format!("{}{path}", self.url.trim_end_matches('/')), &init)?;
+        Fetch::Request(request).send().await
+    }
     pub(crate) fn configured(env: &Env) -> std::result::Result<Option<Self>, SinkError> {
         let url = env
             .var("SUPABASE_URL")
@@ -267,7 +284,9 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
 }
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    let result = if req.path().starts_with("/v1/slack/") {
+    let result = if req.path() == "/v1/account/delete" {
+        delete_self(req, &env).await
+    } else if req.path().starts_with("/v1/slack/") {
         crate::slack::route(req, &env).await
     } else {
         ingest(req, env).await
@@ -285,4 +304,75 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         "Authorization, Content-Type",
     )?;
     Ok(response)
+}
+
+async fn delete_self(mut req: Request, env: &Env) -> Result<Response> {
+    if req.method() == Method::Options {
+        return Ok(Response::empty()?.with_status(204));
+    }
+    if req.method() != Method::Post {
+        return error(405, "POST required");
+    }
+    let Some(auth) = req
+        .headers()
+        .get("Authorization")?
+        .filter(|s| s.starts_with("Bearer "))
+    else {
+        return error(401, "login required");
+    };
+    // Stream the small confirmation object and enumerate all JSON fields on Wasm.
+    let Ok(mut stream) = req.stream() else {
+        return error(400, "invalid request");
+    };
+    let mut body = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        if chunk.len() > 1024 - body.len() {
+            return error(413, "request too large");
+        }
+        body.extend_from_slice(&chunk);
+    }
+    if serde_json::from_slice::<crate::account::DeleteSelf>(&body).is_err() {
+        return error(400, "invalid request");
+    }
+    let Ok(Some(db)) = Supabase::configured(env) else {
+        return error(503, "account unavailable");
+    };
+    let mut identity = db
+        .account_request(Method::Get, "/auth/v1/user", Some(&auth))
+        .await?;
+    if matches!(identity.status_code(), 401 | 403) {
+        return error(401, "login required");
+    }
+    if identity.status_code() != 200 {
+        return error(503, "account unavailable");
+    }
+    #[derive(serde::Deserialize)]
+    struct Member {
+        id: uuid::Uuid,
+    }
+    let member = identity.json::<Member>().await?;
+    if !LIMITS.with_borrow_mut(|limits| {
+        limits.allow_withdrawal(member.id, Date::now().as_millis() / 1000)
+    }) {
+        return error(429, "check result before retrying");
+    }
+    let apps = format!("/rest/v1/apps?owner_id=eq.{}", member.id);
+    let removed = db
+        .account_request(Method::Delete, &apps, Some(&auth))
+        .await?;
+    if !(200..300).contains(&removed.status_code()) {
+        return error(503, "account unavailable");
+    }
+    let path = format!("/auth/v1/admin/users/{}", member.id);
+    let Ok(removed) = db.account_request(Method::Delete, &path, None).await else {
+        return error(504, "result unknown");
+    };
+    if matches!(removed.status_code(), 502 | 503 | 504) {
+        return error(504, "result unknown");
+    }
+    if !(200..300).contains(&removed.status_code()) && removed.status_code() != 404 {
+        return error(503, "account unavailable");
+    }
+    Response::from_json(&json!({"deleted":true}))
 }

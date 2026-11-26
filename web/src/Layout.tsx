@@ -103,6 +103,7 @@ export function Shell({
       <header className="compact">
         <Brand />
         {currentName && <span>{currentName}</span>}
+        <Link to="/account" aria-label="내 계정"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></Link>
         <button
           ref={toggle}
           aria-controls="member-menu"
@@ -142,14 +143,8 @@ export function Shell({
               </Link>
             ))}
           <Link onClick={() => setOpen(false)} to={currentName && heading ? "/apps/"+heading.id+"/notifications" : "/apps/notifications"} aria-current={pathname.endsWith("/notifications") ? "page" : undefined}>알림 설정</Link>
-          {(currentName
-            ? ["앱 설정", "내 계정"]
-            : ["내 계정"]
-          ).map((n) => (
-            <span key={n}>
-              {n} <small>준비 중</small>
-            </span>
-          ))}
+          {currentName && heading && <Link to={"/apps/"+heading.id+"/settings"} aria-current={pathname.endsWith("/settings")?"page":undefined} onClick={()=>setOpen(false)}>앱 설정</Link>}
+          <Link to="/account" aria-current={pathname==="/account"?"page":undefined} onClick={()=>setOpen(false)}>내 계정</Link>
           <button
             className="secondary"
             disabled={busy}

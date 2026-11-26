@@ -722,7 +722,7 @@ h1[tabindex="-1"]:focus { outline: none; }
 
 @media (max-width: 639px) {
   .compact { flex-wrap: wrap; gap: var(--sp-space-2); }
-  .compact > button { margin-inline-start: auto; }
+  .compact > a[aria-label="내 계정"] { display: grid; place-items: center; min-width: var(--sp-touch); min-height: var(--sp-touch); margin-inline-start: auto; }
   .compact > span { flex: 1 0 100%; order: 1; }
   .workspace a:not(.app-card):not(.button), .public a {
     display: inline-flex;
@@ -857,4 +857,18 @@ h1[tabindex="-1"]:focus { outline: none; }
   .hero-card h2 { text-wrap: balance; }
   .landing .product-example .hero-card { padding: 18px; }
   .deep-page pre { padding: .5rem; }
+}
+.sp-body.narrow { max-width: 44rem; margin-inline: auto; word-break: keep-all; overflow-wrap: anywhere; }
+.settings-sections { padding: 0; border: 0; min-width: 0; }
+.sp-body.narrow .panel { margin-block-end: var(--sp-space-4); }
+.sp-kv { display: grid; grid-template-columns: auto minmax(0,1fr); gap: var(--sp-space-3); }
+.sp-kv dt { color: var(--sp-ink-2); }
+.sp-kv dd { margin: 0; }
+.sp-body button.danger { color: var(--sp-bad-ink); background: var(--sp-bad-soft); }
+.compact { container-type: inline-size; }
+@container (max-width: 20rem) {
+  .compact > a[aria-label="내 계정"] { display: none; }
+}
+@media (min-width: 640px) {
+  .compact > a[aria-label="내 계정"] { display: none; }
 }

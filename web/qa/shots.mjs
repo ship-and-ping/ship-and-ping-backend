@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { createRequire } from "node:module";
 import { chromium, webkit } from "playwright";
@@ -22,6 +23,7 @@ const cases = [
   ["알림 목록 불러오기","/apps/notifications","loading","main h1"],
   ["알림 목록 오류","/apps/notifications","error","[role=alert]"],
   ["기록 로딩","/apps/demo","loading",".monitor-loading"], ["기록 오류","/apps/demo","error","[role=alert]"],
+  ["앱 설정","/apps/demo/settings","normal",".settings-sections"], ["내 계정","/account","normal",".sp-kv"],
 ];
 const profiles = [
   [1440,"light",1,false], [1280,"dark",1,false], [390,"light",1,false], [390,"dark",2,true],
@@ -35,7 +37,8 @@ const server = await createServer({server:{host:"127.0.0.1",port:4179,strictPort
 let browser;
 try {
   await server.listen();
-  browser = process.platform === "win32" ? await chromium.launch({channel:"msedge"}) : await webkit.launch();
+  browser = process.platform === "win32" ? await chromium.launch({channel:"msedge"})
+    : existsSync(webkit.executablePath()) ? await webkit.launch() : await chromium.launch({channel:"chrome"});
   const origin = "http://127.0.0.1:4179";
   const entries = [];
   for (const [width,colorScheme,scale,reduced] of profiles) {
@@ -45,10 +48,16 @@ try {
         reducedMotion: reduced ? "reduce" : "no-preference", locale:"ko-KR",timezoneId:"Asia/Seoul", serviceWorkers:"block" });
       try {
         await page.clock.setFixedTime(new Date(now));
-        await mockPage(page,state,path.startsWith("/apps"),origin);
+        await mockPage(page,state,path.startsWith("/apps") || path==="/account",origin);
         await page.goto(origin+path,{waitUntil:"domcontentloaded"});
         await page.locator(ready).first().waitFor({timeout:12000});
         if (scale===2) await page.addStyleTag({content:"html { font-size: 200% !important }"});
+        if (phase === "after" && width === 390 && path === "/account") {
+          const header = page.locator(".compact");
+          if (await header.locator('a[aria-label="내 계정"]').isVisible() !== (scale === 1))
+            throw Error("Account icon visibility at " + scale * 100 + "%");
+          await header.getByRole("button",{name:"메뉴"}).waitFor();
+        }
         await page.evaluate(()=>window.scrollTo(0,0));
         if (phase === "after" && path === "/") {
           const example = page.getByRole("region", {name:"예시 화면", exact:true});
@@ -121,7 +130,7 @@ try {
   }
   const resultsPath = resolve(dir,"results.json");
   const results = selected.length
-    ? JSON.parse(await readFile(resultsPath,"utf8")).map(old => entries.find(entry => entry.file === old.file) ?? old)
+    ? [...JSON.parse(await readFile(resultsPath,"utf8")).filter(old => !entries.some(entry => entry.file === old.file)), ...entries]
     : entries;
   await writeFile(resultsPath,JSON.stringify(results,null,2)+"\n");
   console.log(entries.length+" screenshots in "+dir);
