@@ -70,6 +70,43 @@ function fake(user: string | null = "member"): Gateway {
     save: vi.fn(async () => []),
   };
 }
+it("로그인은 기본 제출이고 메일 링크는 구분선 다음 보조 행동이다", async () => {
+  vi.stubEnv("VITE_GOOGLE_LOGIN_ENABLED", "");
+  try {
+    open("/login", fake(null));
+    const primary = await screen.findByRole("button", {name:"로그인"});
+    const divider = screen.getByRole("separator", {name:"또는"});
+    const mail = screen.getByRole("button", {name:/메일 링크로 받기/});
+    expect(primary.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(divider.compareDocumentPosition(mail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(mail.classList.contains("secondary")).toBe(true);
+    expect(screen.queryByRole("button", {name:/Google/})).toBeNull();
+  } finally { vi.unstubAllEnvs(); }
+});
+it("설정된 Google 보조 버튼은 이메일 없이 인증을 시작한다", async () => {
+  vi.stubEnv("VITE_GOOGLE_LOGIN_ENABLED", "true");
+  try {
+    const api = fake(null);
+    open("/login", api);
+    const google = await screen.findByRole("button", {name:"Google로 로그인"});
+    expect(google.classList.contains("secondary")).toBe(true);
+    fireEvent.click(google);
+    await waitFor(() => expect(api.login).toHaveBeenCalledWith());
+  } finally { vi.unstubAllEnvs(); }
+});
+it("비밀번호 토글은 초점과 입력값을 유지하고 표시 상태를 읽어 준다", async () => {
+  open("/login", fake(null));
+  const field = await screen.findByLabelText<HTMLInputElement>("비밀번호");
+  const toggle = screen.getByRole("button", {name:"비밀번호 보기", pressed:false});
+  fireEvent.change(field, {target:{value:"test-only"}});
+  toggle.focus();
+  fireEvent.click(toggle);
+  expect(screen.getByRole("button", {name:"비밀번호 숨기기", pressed:true})).toBe(document.activeElement);
+  expect(field.type).toBe("text");
+  fireEvent.click(toggle);
+  expect(field.type).toBe("password");
+  expect(field.value).toBe("test-only");
+});
 it("잘못된 로그인은 계정 유무를 드러내지 않는다", async () => {
   const api = fake(null);
   vi.mocked(api.passwordLogin).mockRejectedValue(Error());
@@ -784,7 +821,7 @@ describe("연결 요청문과 등록 입력", () => {
 it("로그인하지 않은 내 앱 방문자를 로그인으로 보낸다", async () => {
   const api = fake(null);
   const { container } = open("/apps", api);
-  await screen.findByRole("button", { name: /Google/ });
+  await screen.findByRole("button", { name: "로그인" });
   expect(api.apps).not.toHaveBeenCalled();
   expect(
     (await axe(container, { rules: { "color-contrast": { enabled: false } } }))
