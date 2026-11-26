@@ -30,7 +30,7 @@ export function Account({
   api: Gateway;
   origin: string;
   logout: () => Promise<void>;
-  done: (uncertain?: boolean) => void;
+  done: (result?: "unauthorized" | "login_required") => void;
   pending: (active: boolean) => void;
 }) {
   const [info, setInfo] = useState<Awaited<ReturnType<typeof loadAccount>>>();
@@ -104,7 +104,7 @@ export function Account({
     try {
       const result = await api.withdraw(origin);
       if (result === "done") done();
-      else if (result === "unauthorized") done(true);
+      else if (result === "unauthorized" || result === "login_required") done(result);
       else if (result === "limited") setStage("limited");
       else setStage(result === "unknown" ? "checking" : "failed");
     } catch {

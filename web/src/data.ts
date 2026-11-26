@@ -28,7 +28,7 @@ export interface Snapshot {
 }
 export interface Gateway {
   account(): Promise<{ email: string; joined: string; method: string; hasPassword?: boolean }>;
-  withdraw(origin: string): Promise<"done" | "failed" | "limited" | "unknown" | "unauthorized">;
+  withdraw(origin: string): Promise<"done" | "failed" | "limited" | "unknown" | "unauthorized" | "login_required">;
   checkAccount(): Promise<"exists" | "deleted" | "unknown">;
   appKeys(id: string): Promise<KeySummary[]>;
   editApp(id: string, name: string, url: string): Promise<void>;
@@ -108,8 +108,9 @@ export function gateway(client: SupabaseClient): Gateway {
         ].join(", ") };
     },
     async withdraw(origin) {
+      const missingSessionResult = withdrawalToken ? "unauthorized" : "login_required";
       const { data } = await client.auth.getSession();
-      if (!data.session) return "unauthorized";
+      if (!data.session) return missingSessionResult;
       withdrawalToken = data.session.access_token;
       try {
         const response = await fetch(origin + "/v1/account/delete", {
@@ -123,7 +124,9 @@ export function gateway(client: SupabaseClient): Gateway {
           const {error} = await client.auth.getUser(withdrawalToken);
           if (error?.code === "user_not_found") return "done";
           const invalidSession = ["refresh_token_not_found", "refresh_token_already_used", "session_not_found", "session_expired"];
-          return invalidSession.includes(refreshed.error?.code ?? "") ? "unauthorized" : "unknown";
+          const missingSession = refreshed.error?.name === "AuthSessionMissingError"
+            || invalidSession.includes(refreshed.error?.code ?? "");
+          return missingSession ? missingSessionResult : "unknown";
         }
         if (response.status === 429) return "limited";
         if ([502,504].includes(response.status)) return "unknown";
