@@ -3,6 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { CurrentAppName } from "./Layout";
 import { Copy } from "./Connect";
 import { displayText, sanitizeRoute } from "./normalize";
+import { cleanFeatureField } from "./deep";
+import { isStrong } from "./issue-prompt";
 import { appAddressHelp, appAddressLabel, buildReplacementPrompt, keyWarning, validateApp } from "./domain";
 import type { Gateway, KeySummary, Label, Snapshot } from "./data";
 
@@ -154,6 +156,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
           </section>
           <section className="panel">
             <h2>기능 이름표</h2>
+            <p>AI가 붙인 이름이에요. 고칠 것만 고치세요.</p>
             <p>주소 형태가 200개를 넘으면 새 주소를 ‘기타’로 모아요.</p>
             {!snapshot.labels.some((l) => l.hidden) && (
               <p>숨긴 기능이 없어요.</p>
@@ -166,8 +169,8 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
                   label={l}
                   save={(name, hidden) =>
                     change(async () => {
-                      const updated = { ...l, name, hidden };
-                      const skipped = await api.save(id, [updated]);
+                      const updated = { ...l, name: name ?? l.name, hidden };
+                      const skipped = await api.save(id, [{ ...l, name, hidden }]);
                       if (skipped.length) {
                         setError("주소 형태가 200개를 넘어 기타로 모았어요.");
                         return;
@@ -314,12 +317,13 @@ function LabelEditor({
   save,
 }: {
   label: Label;
-  save: (name: string, hidden: boolean) => Promise<void>;
+  save: (name: string | undefined, hidden: boolean) => Promise<void>;
 }) {
   const shown = displayText(label.name);
   const [name, setName] = useState(shown.includes("[가림]") ? "" : shown);
-  const safeName = displayText(name).trim();
-  const invalid = !safeName || safeName.includes("[가림]");
+  const safeName = cleanFeatureField(name);
+  const invalid = !safeName || safeName.includes("[가림]") || safeName === "이름 없는 기능"
+    || [...safeName].length > 40 || isStrong(safeName);
   return (
     <div>
       <label>
@@ -327,7 +331,7 @@ function LabelEditor({
         기능 이름
         <input
           value={name}
-          maxLength={300}
+          placeholder="이름 없는 기능"
           onChange={(e) => setName(e.target.value)}
         />
       </label>
@@ -335,15 +339,14 @@ function LabelEditor({
       <div className="actions">
         <button
           className="secondary"
-          disabled={invalid}
+          disabled={invalid || safeName === shown}
           onClick={() => save(safeName, label.hidden)}
         >
           이름 저장
         </button>
         <button
           className="secondary"
-          disabled={invalid}
-          onClick={() => save(safeName, !label.hidden)}
+          onClick={() => save(undefined, !label.hidden)}
         >
           {label.hidden ? "숨긴 기능 되살리기" : "기능 숨기기"}
         </button>

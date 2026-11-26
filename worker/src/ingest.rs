@@ -772,11 +772,12 @@ pub fn prepare_map(hash: &str, body: &[u8]) -> Result<(Vec<u8>, Counts), ApiErro
         require(valid_method(&item.method) && bounded(&item.name, 300))?;
         item.route = clean_route(&item.route)?;
         item.name = mask(&item.name);
-        require(bounded(&item.name, 300))?;
     }
+    let received = items.len();
+    items.retain(|item| !item.name.trim().is_empty());
     let counts = Counts {
         accepted: items.len(),
-        dropped: 0,
+        dropped: received - items.len(),
     };
     let rpc = json!({"app_key_hash": hash, "items": items});
     Ok((

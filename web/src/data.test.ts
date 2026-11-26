@@ -120,7 +120,7 @@ it("재인증 메일을 요청하고 저장 시 받은 번호를 전달한다", 
   expect(auth.updateUser).toHaveBeenCalledWith({password:"example phrase",nonce:"123123",data:{ship_ping_password_set:true}});
 });
 
-it("gateway merges proposed, confirmed, unnamed and overflow rows and sends one scoped RPC", async () => {
+it("gateway displays applied AI names, confirmed names and unnamed routes without confirmation", async () => {
   const requests: { path: string; body: string; query: URLSearchParams }[] = [];
   const row = {
     id: "a",
@@ -137,13 +137,13 @@ it("gateway merges proposed, confirmed, unnamed and overflow rows and sends one 
   const rows: Record<string, unknown> = {
     apps: row,
     features: [
-      f("/a", "이름 없는 기능", "route"),
+      f("/a", "Late", "ai"),
       f("/b", "Confirmed", "confirmed"),
       f("/c", "이름 없는 기능", "route"),
       f("*", "기타", "route", "*"),
     ],
     feature_map_suggestions: [
-      { method: "GET", route: "/a", name: "Late" },
+      { method: "GET", route: "/a", name: "Stale proposal" },
       { method: "GET", route: "/d", name: "New" },
     ],
   };
@@ -156,7 +156,7 @@ it("gateway merges proposed, confirmed, unnamed and overflow rows and sends one 
       query: url.searchParams,
     });
     return path === "confirm_feature_names"
-      ? Response.json([{ method: "GET", route: "/d" }])
+      ? Response.json([])
       : Response.json(rows[path]);
   });
   const api = gateway(
@@ -171,22 +171,20 @@ it("gateway merges proposed, confirmed, unnamed and overflow rows and sends one 
     "Confirmed",
     "",
     "기타",
-    "New",
   ]);
   expect(
     requests.every(
       (r) => r.query.get(r.path === "apps" ? "id" : "app_id") === "eq.a",
     ),
   ).toBe(true);
-  expect(await api.save("a", [result.labels[0], result.labels[4]])).toEqual([
-    { method: "GET", route: "/d" },
-  ]);
+  expect(await api.save("a", [{ ...result.labels[0], name: "Edited" },
+    { ...result.labels[1], name: undefined, hidden: true }])).toEqual([]);
   expect(requests.at(-1)?.path).toBe("confirm_feature_names");
   expect(JSON.parse(requests.at(-1)!.body)).toEqual({
     p_app_id: "a",
     p_items: [
-      { method: "GET", route: "/a", name: "Late", hidden: false },
-      { method: "GET", route: "/d", name: "New", hidden: false },
+      { method: "GET", route: "/a", name: "Edited", hidden: false },
+      { method: "GET", route: "/b", hidden: true },
     ],
   });
 });

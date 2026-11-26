@@ -27,6 +27,10 @@ export const deepLabels = {
 };
 export const fieldNames = ["name", "start", "success"] as const;
 
+export function cleanFeatureField(raw: string) {
+  return displayText(displayText(raw).replace(/["\x60~]|={4,}/g, "").replace(/\s+/gu, " ").trim());
+}
+
 export function deepPrompt(
   raw: Definitions,
   key: string | undefined,
@@ -35,12 +39,7 @@ export function deepPrompt(
   const fields = { ...raw };
   const errors: Partial<Definitions> = {};
   for (const field of fieldNames) {
-    const clean = displayText(
-      displayText(raw[field])
-        .replace(/["\x60~]|={4,}/g, "")
-        .replace(/\s+/gu, " ")
-        .trim(),
-    );
+    const clean = cleanFeatureField(raw[field]);
     fields[field] = clean;
     if (!clean || [...clean].length > 40)
       errors[field] = "1~40자로 적어 주세요.";
