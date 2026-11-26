@@ -343,7 +343,7 @@ fn shared_sanitize_vectors() {
     }
     let cases: Cases =
         serde_json::from_str(include_str!("../../docs/specs/sanitize-vectors.json")).unwrap();
-    assert_eq!((cases.mask.len(), cases.route.len()), (89, 12));
+    assert_eq!((cases.mask.len(), cases.route.len()), (92, 12));
     for case in cases.mask {
         let mut row = request();
         row["status"] = json!(500);

@@ -15,7 +15,7 @@ export function normalizePromptInput(value: string): string {
 
 // Header and credential names can follow Korean text.
 const start = "(?<![A-Za-z0-9_])";
-const credentialValue = /((?:\\?["'])?[A-Za-z0-9_-]*(?:token|key|secret|password|passwd|pwd)(?:\\?["'])?\s*(?:=>|:|=)\s*)(?:(\\")(?:\\\\.|\\[^"\\]|[^\\])*(\\"|$)|(")(?:\\.|[^"\\])*("|\\?$)|(')(?:\\.|[^'\\])*('|\\?$)|(?:(?:bearer|basic)(?:[ \t]*:[ \t]*|[ \t]+))?[^"'\\\s,;}\]&#][^\s,;}\]&#]*)/gi;
+const credentialValue = /((?:\\?["'])?[A-Za-z0-9_-]*(?:token|key|secret|password|passwd|pwd)(?:\\?["'])?\s*(?:=>|:|=)\s*)(?:(\\")(?:\\\\.|\\[^"\\]|[^\\])*(\\"|\\?$)|(")(?:\\.|[^"\\])*("|\\?$)|(')(?:\\.|[^'\\])*('|\\?$)|(?:(?:bearer|basic)(?:[ \t]*:[ \t]*|[ \t]+))?(?:\[가림\]|\\[^"\s]|[^"'\\\s,;&#])(?:[^\s,;}\]&#]|[}\]]+[^\s,;}\]&#])*)/gi;
 const numeric = /\+?\(?[0-9](?:[ ().-]*[0-9]){8,}\)?/g;
 const privatePattern = new RegExp([
   start + /(?:set-cookie|cookie)[ \t]*:[^\r\n]*/.source,

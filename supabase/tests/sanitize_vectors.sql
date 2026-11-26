@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(101);
+select plan(104);
 
 select is(private.mask(input), expected, 'mask ' || id)
 from (values
@@ -93,7 +93,10 @@ from (values
   (86, E'{\"sp' || E'_srv_demo_token\":\"Basic YWJjZGVmZ2hpamts\"}', E'{\"[가림]\":\"[가림]\"}'),
   (87, E'token=\"Bearer abc\"', E'token=\"[가림]\"'),
   (88, E'password=\u0027Basic YWJjZGVmZ2hpamts\u0027', E'password=\u0027[가림]\u0027'),
-  (89, E'sp' || E'_srv_demo_token=value', E'[가림][가림]')
+  (89, E'sp' || E'_srv_demo_token=value', E'[가림][가림]'),
+  (90, E'token=abc}def', E'token=[가림]'),
+  (91, E'\"token\": [가림]', E'\"token\": [가림]'),
+  (92, E'token=\\opaque', E'token=[가림]')
 ) as cases(id, input, expected);
 
 select is(private.route(input), expected, 'route ' || id)

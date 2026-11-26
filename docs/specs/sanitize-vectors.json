@@ -355,6 +355,18 @@
     {
       "input": "sp_srv_demo_token=value",
       "expected": "[가림][가림]"
+    },
+    {
+      "input": "token=abc}def",
+      "expected": "token=[가림]"
+    },
+    {
+      "input": "\"token\": [가림]",
+      "expected": "\"token\": [가림]"
+    },
+    {
+      "input": "token=\\opaque",
+      "expected": "token=[가림]"
     }
   ],
   "route": [
