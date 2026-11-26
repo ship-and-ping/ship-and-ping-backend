@@ -106,6 +106,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
   const [settings, setSettings] = useState<AlertSettings>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [feedbackArea, setFeedbackArea] = useState<"slack" | "email">("slack");
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
@@ -121,8 +122,9 @@ function Settings({ app, api, origin }: Props & { app: string }) {
       active = false;
     };
   }, [api, app, attempt]);
-  async function act(fn: () => Promise<void>) {
+  async function act(fn: () => Promise<void>, area: "slack" | "email" = "slack") {
     setBusy(true);
+    setFeedbackArea(area);
     setMessage("");
     try {
       await fn();
@@ -206,6 +208,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                   </button>
                 </>
               )}
+              {feedbackArea === "slack" && message && <p role="status">{message}</p>}
             </section>
             <section className="panel">
               <h2>이메일</h2>
@@ -215,7 +218,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                 aria-checked={settings.email}
                 disabled={busy}
                 onClick={() =>
-                  act(() => api.emailSetting(app, !settings.email))
+                  act(() => api.emailSetting(app, !settings.email), "email")
                 }
               >
                 이메일로도 받기 · {settings.email ? "켜짐" : "꺼짐"}
@@ -226,6 +229,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                   ? "슬랙이 끊긴 동안은 꺼 두어도 이메일로 보내요."
                   : "로그인한 이메일로 보내요."}
               </p>
+              {feedbackArea === "email" && message && <p role="status">{message}</p>}
             </section>
           </div>
           <details>
@@ -242,7 +246,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
       ) : (
         <p role="status">알림 설정을 불러오는 중</p>
       )}
-      {message && <p role="status">{message}</p>}
+      {!settings && message && <p role="status">{message}</p>}
     </>
   );
 }

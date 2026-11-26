@@ -8,7 +8,8 @@ import { exampleEmail, mockPage, now } from "./fixtures.mjs";
 
 const phase = process.argv[2] ?? "screens";
 const require = createRequire(import.meta.url);
-if (!["screens", "before", "after"].includes(phase)) throw Error("Use screens, before or after");
+if (!["screens", "before", "after","qa3-before","qa3-after"].includes(phase)) throw Error("Unknown QA phase");
+const qa3 = phase.startsWith("qa3-");
 const gallery = phase === "screens";
 const dir = gallery ? resolve("../docs/design/screens") : resolve("../docs/design/qa", phase);
 await mkdir(dir, { recursive: true });
@@ -64,15 +65,20 @@ const flow = [
   [21,"탈퇴 실패","failed"],
   [21,"탈퇴 완료","done"],
   [25,"휴대폰에서 PC 로그인 승인"],
+  [1,"PC 요청 만료","expired"], [1,"PC 요청 거절","denied"],
+  [25,"휴대폰 승인 완료","approval-ok"], [25,"휴대폰 거절 완료","approval-deny"],
+  [5,"키가 든 연결 요청문","prompt"], [5,"복사 실패 후 가린 요청문","masked"],
+  [20,"새 키로 교체","replacement"], [15,"슬랙 미설정","unconfigured"],
+  [25,"휴대폰 확인 숫자 불일치","approval-mismatch"],
 ].map(([index,title,variant]) => {
   const [,path,state,ready] = cases[index];
   return [title,path,variant ?? state,ready];
 });
-const profiles = gallery ? [[1440,"light",1,false],[390,"light",1,false]] : [
+const profiles = qa3 ? [[1440,"light",1,false],[1440,"dark",1,false],[390,"light",1,false],[390,"dark",1,true]] : gallery ? [[1440,"light",1,false],[390,"light",1,false]] : [
   [1440,"light",1,false], [1280,"dark",1,false], [390,"light",1,false], [390,"dark",2,true],
 ];
 const selected = process.argv.slice(3);
-const scenes = gallery ? flow : cases;
+const scenes = gallery || qa3 ? flow : cases;
 if (selected.some(id => !scenes[Number(id)] || String(Number(id)) !== id)) throw Error("Unknown screen index");
 const server = await createServer({server:{host:"127.0.0.1",port:4179,strictPort:true,hmr:false},
   define: { "import.meta.env.VITE_SUPABASE_URL": JSON.stringify("https://example.supabase.co"),
@@ -92,10 +98,19 @@ try {
         reducedMotion: reduced ? "reduce" : "no-preference", locale:"ko-KR",timezoneId:"Asia/Seoul", serviceWorkers:"block" });
       try {
         await page.clock.setFixedTime(new Date(now));
-        await mockPage(page,state,path.startsWith("/apps") || path==="/account" || state==="approval",origin);
+        await mockPage(page,state,path.startsWith("/apps") || path==="/account" || state.startsWith("approval"),origin);
         await page.goto(origin+path,{waitUntil:"domcontentloaded"});
         await page.locator(ready).first().waitFor({timeout:12000});
-        if (gallery) await prepareScene(page,state);
+        if (gallery || qa3) await prepareScene(page,state);
+        if (phase === "qa3-after" && state === "approval") {
+          const field = page.getByRole("textbox");
+          await tabTo(page,field);
+          await page.keyboard.type("07");
+          await tabTo(page,page.getByRole("button",{name:"이 PC 로그인 승인"}));
+          await tabTo(page,page.getByRole("button",{name:"거절",exact:true}));
+          await field.fill("");
+          await field.blur();
+        }
         if (scale===2) await page.addStyleTag({content:"html { font-size: 200% !important }"});
         if (phase === "after" && width === 390 && path === "/account") {
           const header = page.locator(".compact");
@@ -120,25 +135,37 @@ try {
             throw Error("Dismiss action hierarchy");
         }
         const overflow = await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth);
-        if ((gallery || phase === "after") && scale === 1 && (gallery || width === 390)) {
+        if ((gallery || phase === "after" || qa3) && scale === 1 && (gallery || width === 390)) {
           const endings = await page.evaluate(shortKoreanEndings);
           if (endings.length) console.warn("Short last lines", index, endings);
         }
         const issues = [];
-        if (phase === "after") {
+        if (phase === "after" || phase === "qa3-after") {
           await page.addScriptTag({path:require.resolve("axe-core/axe.min.js")});
           const violations = await page.evaluate(async () => (await window.axe.run(document, {
             runOnly:{type:"tag",values:["wcag2a","wcag2aa","wcag21aa"]},
           })).violations.map(v=>({id:v.id,targets:v.nodes.map(n=>n.target)})));
           issues.push(...violations);
         }
-        if (phase === "after" && reduced && await page.evaluate(()=>document.getAnimations().length))
+        if ((phase === "after" || phase === "qa3-after") && reduced && await page.evaluate(()=>document.getAnimations().length))
           throw Error("Reduced-motion animation on "+path);
         const file = gallery ? String(index+1).padStart(2,"0")+"-"+width+".jpg"
           : String(index).padStart(2,"0")+"-"+state+"-"+width+"-"+colorScheme+".jpg";
-        const bytes = await page.screenshot({path:resolve(dir,file),type:"jpeg",quality:80,fullPage:true,animations:"disabled"});
-        if (gallery && bytes.length > 500000) throw Error(file+" exceeds 500 KB");
-        entries.push({title,state,width,colorScheme,scale,reduced,file,overflow,issues});
+        const capture = phase !== "qa3-after" || state === "approval-mismatch" || existsSync(resolve(dir,"../qa3-before",file));
+        if (capture) {
+          const bytes = await page.screenshot({path:resolve(dir,file),type:"jpeg",quality:80,fullPage:true,animations:"disabled"});
+          if (gallery && bytes.length > 500000) throw Error(file+" exceeds 500 KB");
+        }
+        const smallTargets = qa3 && width === 390 ? await page.locator("main :is(button,summary,input:not([type=checkbox]),select,a)").evaluateAll(nodes =>
+          nodes.filter(el=>el.checkVisibility()).filter(el=>{
+            const rect = el.getBoundingClientRect();
+            return rect.height < 44 || rect.width < 44;
+          }).map(el=>el.getAttribute("aria-label") || el.textContent.trim() || el.name)) : [];
+        entries.push({title,state,width,colorScheme,scale,reduced,file,overflow,issues,...(qa3 ? {capture,smallTargets} : {})});
+        if (state === "approval-mismatch") {
+          await page.reload();
+          await page.getByRole("status").filter({hasText:"이미 처리한 요청이에요."}).waitFor();
+        }
         if (overflow>1) console.warn("Overflow",file,overflow);
         if (phase === "after" && state === "failure" && path === "/apps/demo") {
           const link = page.locator("#issues a").first();
@@ -177,22 +204,46 @@ try {
   }
   if (!gallery) {
     const resultsPath = resolve(dir,"results.json");
-    const results = selected.length
+    const results = selected.length && existsSync(resultsPath)
       ? [...JSON.parse(await readFile(resultsPath,"utf8")).filter(old => !entries.some(entry => entry.file === old.file)), ...entries]
       : entries;
     await writeFile(resultsPath,JSON.stringify(results,null,2)+"\n");
   }
-  console.log(entries.length+" screenshots in "+dir);
-  if (phase === "after" && entries.some(entry=>entry.issues.length || entry.overflow > 1))
+  console.log(entries.length+" views checked, "+entries.filter(entry=>entry.capture !== false).length+" screenshots in "+dir);
+  if (phase === "qa3-after" && entries.some(entry=>entry.smallTargets.length))
+    throw Error("Review targets smaller than 44px in results.json");
+  if ((phase === "after" || phase === "qa3-after") && entries.some(entry=>entry.issues.length || entry.overflow > 1))
     throw Error("Review overflow or axe findings in results.json");
 } finally { await browser?.close(); await server.close(); }
 
 async function prepareScene(page,state) {
   const button = name => page.getByRole("button",{name,exact:true});
-  if (state === "mail") {
+  if (["mail","expired","denied"].includes(state)) {
     await page.locator("[name=email]").fill(exampleEmail);
     await button("비밀번호 없이 메일 링크로 받기").click();
     await page.getByText("메일을 확인해 주세요",{exact:true}).waitFor();
+    if (state !== "mail") await page.getByText(state === "expired" ? /요청 시간이 지났어요/ : /휴대폰에서 거절했어요/).waitFor();
+  } else if (["approval-ok","approval-deny","approval-mismatch"].includes(state)) {
+    if (state !== "approval-deny") await page.getByRole("textbox").fill(state === "approval-ok" ? "07" : "70");
+    await button(state === "approval-deny" ? "거절" : "이 PC 로그인 승인").click();
+    const expected = {"approval-ok":"승인했어요", "approval-deny":"거절했어요", "approval-mismatch":"숫자가 맞지 않아 요청을 취소했어요"};
+    await page.getByRole("status").filter({hasText:expected[state]}).waitFor();
+  } else if (["prompt","masked","replacement"].includes(state)) {
+    page.once("dialog", dialog => dialog.accept());
+    await button("수집 키 재발급").click();
+    const copy = page.getByRole("button",{name:/요청문 복사\(/}).first();
+    await copy.waitFor();
+    if (state === "masked") {
+      await page.evaluate(() => {
+        Object.defineProperty(navigator,"clipboard",{value:{writeText:async()=>{throw Error("QA denied");}}});
+        document.execCommand = () => false;
+      });
+      await copy.click();
+      await button("키 포함해서 보기").waitFor();
+    }
+  } else if (state === "unconfigured") {
+    await button("Slack에 추가").click();
+    await page.getByText(/슬랙 연결이 아직 준비되지 않았어요/).waitFor();
   } else if (state === "reauth") {
     await button("비밀번호 바꾸기").click();
     for (const field of ["password","confirm"]) await page.locator('[name="'+field+'"]').fill("example-only-password");

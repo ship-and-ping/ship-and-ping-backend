@@ -85,6 +85,7 @@ export function Copy({
     <div className="sp-copy">
       <button
         ref={copyButton}
+        className={secret ? "secondary" : undefined}
         data-state={state}
         aria-busy={state === "busy"}
         aria-disabled={state === "busy" || state === "done"}
@@ -108,13 +109,15 @@ export function Copy({
       {fallbackOpen && previewKey && (
         <>
           <p>화면을 공유 중이라면 먼저 공유를 멈춰 주세요. 이 글에는 앱 키가 들어 있어요.</p>
-          {state === "fail" && (
-            <button type="button" onClick={() => setState("revealed")}>키 포함해서 보기</button>
-          )}
-          <button type="button" onClick={() => {
-            setState("ready");
-            copyButton.current?.focus();
-          }}>닫기</button>
+          <div className="actions">
+            {state === "fail" && (
+              <button type="button" className="secondary" onClick={() => setState("revealed")}>키 포함해서 보기</button>
+            )}
+            <button type="button" className="secondary" onClick={() => {
+              setState("ready");
+              copyButton.current?.focus();
+            }}>닫기</button>
+          </div>
         </>
       )}
       {!secret && (!compact || fallbackOpen) && (
@@ -371,7 +374,7 @@ export function Connect({
             <section className="panel">
               <h2>연결 요청문</h2>
               <p>휴대폰 앱(플레이스토어·앱스토어)이라면 앱 서버에서 기록을 보내도록 <a href="#server-key"><strong>서버 있음</strong></a>을 골라 주세요. 휴대폰 앱 코드는 바꾸지 않아도 돼요.</p>
-              <div id="server-key" className="actions" aria-label="기록을 보내는 곳">
+              <div id="server-key" className="actions" role="group" aria-label="기록을 보내는 곳">
                 {(["pub", "srv"] as const).map(option => (
                   <button key={option} className="secondary" disabled={busy} aria-pressed={kind === option}
                     onClick={() => { setKind(option); setCopied(false); }}>
@@ -380,10 +383,10 @@ export function Connect({
                 ))}
               </div>
               {appKey ? (
-                <div key={kind}>
+                <div className="key-instructions" key={kind}>
+                  <p className="key-notice">{keyWarning}</p>
                   <Copy text={buildConnectPrompt(appKey, ingest)} title="연결 요청문 복사(키 포함)"
                     previewKey={appKey} onCopy={() => setCopied(true)} />
-                  <p>{keyWarning}</p>
                   <Copy text={appKey} title={keyTitle + " 복사"} secret />
                 </div>
               ) : (
