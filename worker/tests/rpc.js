@@ -35,6 +35,13 @@ export default {
     }
     if (request.headers.get("apikey") !== "fixture") return new Response(null, {status: 500});
     const path = new URL(request.url).pathname;
+    const member = request.headers.get("Authorization")?.slice(7);
+    if (path === "/auth/v1/user") return member === "6" ? new Response(null,{status:401}) : Response.json({id:id(member)});
+    if (path === "/rest/v1/apps") return new Response(null,{status:member === "5" ? 503 : 204});
+    if (path.startsWith("/auth/v1/admin/users/")) {
+      const statuses = {[id(1)]:500,[id(2)]:502,[id(3)]:504,[id(4)]:404};
+      return new Response(null,{status:statuses[path.split("/").pop()]});
+    }
     const body = await request.json();
     switch(path.split("/").pop()){
       case "evaluate_all": return new Response(null,{status:503});

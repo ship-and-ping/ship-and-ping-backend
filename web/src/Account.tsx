@@ -28,7 +28,7 @@ export function Account({
   api: Gateway;
   origin: string;
   logout: () => Promise<void>;
-  done: () => void;
+  done: (uncertain?: boolean) => void;
   pending: (active: boolean) => void;
 }) {
   const [info, setInfo] = useState<Awaited<ReturnType<typeof loadAccount>>>();
@@ -37,9 +37,16 @@ export function Account({
   const [error, setError] = useState(false);
   const [attempt, retry] = useState(0);
   const title = useRef<HTMLHeadingElement>(null);
+  const retryButton = useRef<HTMLButtonElement>(null);
+  const progress = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (stage === "confirm") title.current?.focus();
+    if (stage === "confirm" || stage === "account") title.current?.focus();
+    if (stage === "failed" || stage === "offline") retryButton.current?.focus();
+    if (stage === "checking" || stage === "deleting") progress.current?.focus();
   }, [stage]);
+  useEffect(() => {
+    if (stage === "failed" || stage === "offline") pending(false);
+  }, [stage, pending]);
   useEffect(() => () => pending(false), [pending]);
   useEffect(() => {
     let active = true;
@@ -89,6 +96,7 @@ export function Account({
     try {
       const result = await api.withdraw(origin);
       if (result === "done") done();
+      else if (result === "unauthorized") done(true);
       else setStage(result === "unknown" ? "checking" : "failed");
     } catch {
       setStage("checking");
@@ -145,20 +153,20 @@ export function Account({
                 <Link to={"/apps/" + id + "/notifications"}>
                   {displayText(name)}
                 </Link>
-                {" · "}
+                <br />
                 {settings.connected
                   ? "슬랙 " + displayText(settings.channel ?? "")
                   : settings.broken
                     ? "슬랙 연결 끊김"
                     : "슬랙 미연결"}
-                {" · "}
+                <br />
                 {settings.email || settings.broken
                   ? "이메일 켜짐"
                   : "이메일 꺼짐"}
                 {!settings.connected &&
                   !settings.email &&
                   !settings.broken &&
-                  " · 받을 곳 없음, 설정해 주세요"}
+                  <small> 받을 곳을 설정해 주세요.</small>}
               </p>
             ))}
             {!count && <p>등록한 앱이 없어요.</p>}
@@ -188,10 +196,10 @@ export function Account({
             {count ? (
               <>
                 <li>
-                  앱 {count}개와 그 안의 기록·문제·알림 설정을 모두 지워요.
+                  앱 {count}개를 지워요. 앱의 기록과 문제, 알림 설정도 모두 지워요.
                 </li>
                 <li>탈퇴 후 최대 5분 안에 기록 받기가 멈춰요.</li>
-                <li>슬랙·이메일 알림이 더 오지 않아요.</li>
+                <li>슬랙과 이메일 알림이 더 오지 않아요.</li>
               </>
             ) : (
               <li>등록한 앱이 없어 로그인 계정만 지워요.</li>
@@ -215,6 +223,7 @@ export function Account({
               <button
                 className="danger"
                 disabled={!email || input !== email}
+                aria-disabled={!email || input !== email}
                 onClick={remove}
               >
                 {action}
@@ -231,32 +240,31 @@ export function Account({
             </div>
           )}
           {stage === "deleting" && (
-            <div role="status">
+            <div role="status" ref={progress} tabIndex={-1}>
               <button disabled aria-busy="true">
                 탈퇴하는 중
               </button>
             </div>
           )}
           {stage === "checking" && (
-            <p role="status">
-              탈퇴 결과를 확인하는 중이에요. 10초마다 다시 확인해요.
-            </p>
+            <div role="status" ref={progress} tabIndex={-1}>
+              탈퇴 결과를 확인하는 중이에요. 최대 2분 동안 10초마다 다시 확인해요.
+            </div>
           )}
           {stage === "failed" && (
             <>
               <p role="alert">
                 탈퇴를 마치지 못했어요. 계정은 아직 남아 있고 로그인도 돼요.
               </p>
-              <button onClick={remove}>다시 시도</button>
+              <button ref={retryButton} onClick={remove}>다시 시도</button>
             </>
           )}
           {stage === "offline" && (
             <>
               <p role="alert">
-                결과를 확인하지 못했어요. 인터넷 연결을 확인하고 다시 열어
-                주세요.
+                결과를 확인하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.
               </p>
-              <button onClick={() => setStage("checking")}>다시 확인</button>
+              <button ref={retryButton} onClick={remove}>다시 시도</button>
             </>
           )}
         </section>

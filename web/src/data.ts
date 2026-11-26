@@ -28,7 +28,7 @@ export interface Snapshot {
 }
 export interface Gateway {
   account(): Promise<{ email: string; joined: string; method: string }>;
-  withdraw(origin: string): Promise<"done" | "failed" | "unknown">;
+  withdraw(origin: string): Promise<"done" | "failed" | "unknown" | "unauthorized">;
   checkAccount(): Promise<"exists" | "deleted" | "unknown">;
   appKeys(id: string): Promise<KeySummary[]>;
   editApp(id: string, name: string, url: string): Promise<void>;
@@ -92,14 +92,23 @@ export function gateway(client: SupabaseClient): Gateway {
     },
     async withdraw(origin) {
       const { data } = await client.auth.getSession();
-      if (!data.session) return "failed";
+      if (!data.session) return "unauthorized";
       withdrawalToken = data.session.access_token;
       try {
         const response = await fetch(origin + "/v1/account/delete", {
           method:"POST", headers:{Authorization:"Bearer " + withdrawalToken, "Content-Type":"application/json"},
           body:"{}", signal:AbortSignal.timeout(30000),
         });
-        if (response.status === 504) return "unknown";
+        if (response.status === 401) {
+          try {
+            const {error} = await client.auth.getUser(withdrawalToken);
+            if (error?.code === "user_not_found") return "done";
+          } catch {
+            // The rejected session cannot confirm the account's status.
+          }
+          return "unauthorized";
+        }
+        if ([429,502,504].includes(response.status)) return "unknown";
         if (!response.ok) return "failed";
         return (await response.json()).deleted === true ? "done" : "unknown";
       } catch { return "unknown"; }

@@ -352,6 +352,11 @@ async fn delete_self(mut req: Request, env: &Env) -> Result<Response> {
         id: uuid::Uuid,
     }
     let member = identity.json::<Member>().await?;
+    if !LIMITS.with_borrow_mut(|limits| {
+        limits.allow_withdrawal(member.id, Date::now().as_millis() / 1000)
+    }) {
+        return error(429, "check result before retrying");
+    }
     let apps = format!("/rest/v1/apps?owner_id=eq.{}", member.id);
     let removed = db
         .account_request(Method::Delete, &apps, Some(&auth))
@@ -363,6 +368,9 @@ async fn delete_self(mut req: Request, env: &Env) -> Result<Response> {
     let Ok(removed) = db.account_request(Method::Delete, &path, None).await else {
         return error(504, "result unknown");
     };
+    if matches!(removed.status_code(), 502 | 503 | 504) {
+        return error(504, "result unknown");
+    }
     if !(200..300).contains(&removed.status_code()) && removed.status_code() != 404 {
         return error(503, "account unavailable");
     }

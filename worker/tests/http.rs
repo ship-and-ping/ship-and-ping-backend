@@ -66,6 +66,39 @@ fn ingest_http_statuses() {
         let output = curl.arg(format!("http://{addr}{path}")).output().unwrap();
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
+    let delete = |address, token: &str| {
+        let output = Command::new("curl")
+            .args([
+                "--silent",
+                "--max-time",
+                "5",
+                "--output",
+                "/dev/null",
+                "--write-out",
+                "%{http_code}",
+                "--header",
+                &format!("Authorization: Bearer {token}"),
+                "--data",
+                "{}",
+                &format!("http://{address}/v1/account/delete"),
+            ])
+            .output()
+            .unwrap();
+        String::from_utf8(output.stdout).unwrap()
+    };
+    assert_eq!(delete(missing_addr, "1"), "503");
+    for (token, status) in [
+        ("1", "503"),
+        ("2", "504"),
+        ("3", "504"),
+        ("4", "200"),
+        ("5", "503"),
+        ("6", "401"),
+    ] {
+        assert_eq!(delete(addr, token), status, "account fixture {token}");
+    }
+    assert_eq!(delete(addr, "1"), "503");
+    assert_eq!(delete(addr, "1"), "429");
     let install = || fixture("/v1/slack/install", Some(json!({"app":"fixture"})));
     let callback = |state: Value, code: &str| {
         fixture(

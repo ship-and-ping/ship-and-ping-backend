@@ -82,6 +82,59 @@ it.each([
   fireEvent.click(button);
   expect(api.removeApp).toHaveBeenCalledWith("a");
 });
+it("S10 keeps the failed deletion confirmation locked for retry", async () => {
+  const api = fake();
+  vi.mocked(api.removeApp).mockRejectedValueOnce(Error());
+  open("/apps/a/settings", api);
+  const field = await screen.findByLabelText("앱 이름 다시 입력");
+  const submit = screen.getByRole("button",{name:"앱 삭제"});
+  expect(submit.getAttribute("aria-disabled")).toBe("true");
+  fireEvent.change(field,{target:{value:app.name}});
+  expect(submit.getAttribute("aria-disabled")).toBe("false");
+  fireEvent.click(submit);
+  const retry = await screen.findByRole("button",{name:"다시 시도"});
+  expect(field.hasAttribute("disabled")).toBe(true);
+  expect(document.activeElement).toBe(retry);
+  fireEvent.click(retry);
+  expect(api.removeApp).toHaveBeenCalledTimes(2);
+});
+it("S10 requires a replacement for a masked label before saving", async () => {
+  const api = fake();
+  vi.mocked(api.snapshot).mockResolvedValue({app,labels:[{id:"l",method:"GET",route:"/a",name:secret,hidden:false}]});
+  open("/apps/a/settings", api);
+  const field = await screen.findByLabelText(/기능 이름$/);
+  expect((field as HTMLInputElement).value).toBe("");
+  fireEvent.change(field,{target:{value:"[가림]"}});
+  expect(screen.getByRole("button",{name:"이름 저장"}).hasAttribute("disabled")).toBe(true);
+  fireEvent.change(field,{target:{value:"신청"}});
+  fireEvent.click(screen.getByRole("button",{name:"이름 저장"}));
+  expect(api.save).toHaveBeenCalledWith("a",[expect.objectContaining({name:"신청"})]);
+});
+it("S11 lets the member log out after a failed withdrawal", async () => {
+  const api = fake();
+  vi.mocked(api.withdraw).mockResolvedValueOnce("failed");
+  let emit: (id: string | null) => void = () => {};
+  api.listen = listener => { emit = listener; return () => {}; };
+  open("/account", api);
+  fireEvent.click(await screen.findByRole("button",{name:"회원 탈퇴"}));
+  fireEvent.change(screen.getByLabelText("로그인 이메일 다시 입력"),{target:{value:"<me>@example.invalid"}});
+  fireEvent.click(screen.getByRole("button",{name:"모든 앱과 기록을 지우고 탈퇴"}));
+  await screen.findByRole("button",{name:"다시 시도"});
+  vi.mocked(api.logout).mockImplementationOnce(async () => emit(null));
+  fireEvent.click(screen.getByRole("button",{name:"로그아웃"}));
+  await screen.findByText("로그아웃했어요");
+});
+it("S11 sends an invalid session after retry to the login notice", async () => {
+  const api = fake();
+  vi.mocked(api.withdraw).mockResolvedValueOnce("failed").mockResolvedValueOnce("unauthorized");
+  open("/account", api);
+  fireEvent.click(await screen.findByRole("button",{name:"회원 탈퇴"}));
+  fireEvent.change(screen.getByLabelText("로그인 이메일 다시 입력"),{target:{value:"<me>@example.invalid"}});
+  fireEvent.click(screen.getByRole("button",{name:"모든 앱과 기록을 지우고 탈퇴"}));
+  fireEvent.click(await screen.findByRole("button",{name:"다시 시도"}));
+  await screen.findByText(/탈퇴가 이미 끝났을 수 있어요/);
+  expect(screen.queryByText(/계정은 아직 남아/)).toBeNull();
+});
 it("S11 keeps the exact email through a failed request and retries", async () => {
   const api = fake();
   vi.mocked(api.withdraw).mockResolvedValueOnce("failed");
@@ -116,7 +169,7 @@ it.each(["exists","deleted","unknown"] as const)("S11 checks interrupted respons
   else {
     await act(()=>vi.advanceTimersByTimeAsync(110000));
     expect(api.checkAccount).toHaveBeenCalledTimes(12);
-    expect(screen.getByRole("button",{name:outcome==="exists"?"다시 시도":"다시 확인"})).toBeTruthy();
+    expect(screen.getByRole("button",{name:"다시 시도"})).toBeTruthy();
   }
 });
 it("S10 copies only the newly issued key of the selected app",async()=>{

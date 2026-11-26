@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 #[derive(Default)]
 pub(crate) struct Limits {
+    withdrawals: HashMap<uuid::Uuid, (u64, u8)>,
     keys: HashMap<String, (String, u64)>,
     apps: HashMap<String, Usage>,
     misses: HashMap<String, u64>,
@@ -17,6 +18,15 @@ struct Usage {
     total: u32,
 }
 impl Limits {
+    pub(crate) fn allow_withdrawal(&mut self, member: uuid::Uuid, now: u64) -> bool {
+        self.withdrawals.retain(|_, (until, _)| now < *until);
+        let (_, count) = self.withdrawals.entry(member).or_insert((now + 30, 0));
+        if *count >= 2 {
+            return false;
+        }
+        *count += 1;
+        true
+    }
     fn roll_minute(&mut self, now: u64) {
         if self.miss_minute != now / 60 {
             self.miss_minute = now / 60;
@@ -79,6 +89,16 @@ impl Limits {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn withdrawal_limit_allows_one_immediate_retry_per_member() {
+        let mut limits = Limits::default();
+        let member = uuid::Uuid::from_u128(1);
+        assert!(limits.allow_withdrawal(member, 90));
+        assert!(limits.allow_withdrawal(member, 90));
+        assert!(!limits.allow_withdrawal(member, 119));
+        assert!(limits.allow_withdrawal(uuid::Uuid::from_u128(2), 119));
+        assert!(limits.allow_withdrawal(member, 120));
+    }
     #[test]
     fn miss_cache_expires_and_concurrent_lookups_share_the_budget() {
         let mut state = Limits::default();

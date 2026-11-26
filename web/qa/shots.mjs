@@ -52,6 +52,12 @@ try {
         await page.goto(origin+path,{waitUntil:"domcontentloaded"});
         await page.locator(ready).first().waitFor({timeout:12000});
         if (scale===2) await page.addStyleTag({content:"html { font-size: 200% !important }"});
+        if (phase === "after" && width === 390 && path === "/account") {
+          const header = page.locator(".compact");
+          if (await header.locator('a[aria-label="내 계정"]').isVisible() !== (scale === 1))
+            throw Error("Account icon visibility at " + scale * 100 + "%");
+          await header.getByRole("button",{name:"메뉴"}).waitFor();
+        }
         await page.evaluate(()=>window.scrollTo(0,0));
         if (phase === "after" && path === "/") {
           const example = page.getByRole("region", {name:"예시 화면", exact:true});

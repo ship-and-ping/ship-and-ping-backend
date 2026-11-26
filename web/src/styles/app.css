@@ -865,3 +865,10 @@ h1[tabindex="-1"]:focus { outline: none; }
 .sp-kv dt { color: var(--sp-ink-2); }
 .sp-kv dd { margin: 0; }
 .sp-body button.danger { color: var(--sp-bad-ink); background: var(--sp-bad-soft); }
+.compact { container-type: inline-size; }
+@container (max-width: 20rem) {
+  .compact > a[aria-label="내 계정"] { display: none; }
+}
+@media (min-width: 640px) {
+  .compact > a[aria-label="내 계정"] { display: none; }
+}

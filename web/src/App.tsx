@@ -350,7 +350,7 @@ function Connection({
 export function App({ api, ingest }: { api: Gateway; ingest: string }) {
   const [user, setUser] = useState<string | null>();
   const deleting = useRef(false);
-  const [withdrawn,setWithdrawn] = useState(false);
+  const [notice,setNotice] = useState("");
   const [error, setError] = useState(false);
   const issued = useRef<{ id: string; owner: string; key?: string } | null>(
     null,
@@ -365,7 +365,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
       notified = true;
       if (active) {
         if (id || !deleting.current) setUser(id);
-        if (id) setWithdrawn(false);
+        if (id) setNotice("");
         setError(false);
       }
     });
@@ -383,9 +383,17 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     };
   }, [api]);
   const markPending = useCallback((active: boolean) => { deleting.current = active; }, []);
-  const finishWithdrawal = useCallback(() => {
+  async function logout() {
+    await api.logout();
+    deleting.current = false;
+    issued.current = null;
+    setUser(null);
+    setNotice("로그아웃했어요");
+    navigate("/login",{replace:true});
+  }
+  const finishWithdrawal = useCallback((uncertain = false) => {
     deleting.current=false; issued.current=null;
-    setWithdrawn(true); setUser(null);
+    setNotice(uncertain ? "탈퇴가 이미 끝났을 수 있어요. 다시 로그인해 확인해 주세요." : "탈퇴를 마쳤어요"); setUser(null);
     void api.logout().catch(()=>{});
     navigate("/login",{replace:true});
   },[api,navigate]);
@@ -396,6 +404,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     )
       issued.current = null;
     if (prev.current !== pathname) {
+      if (prev.current === "/login") setNotice("");
       document.querySelector<HTMLElement>("main h1")?.focus();
       prev.current = pathname;
     }
@@ -411,10 +420,8 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     return <main role="status">로그인 상태를 확인하는 중</main>;
   return (
     <Routes>
-      <Route path="/account" element={user ? <Shell key={user} onLogout={async()=>{await api.logout(); navigate("/login",{replace:true});}}>
-        <Account api={api} origin={ingest} pending={markPending} logout={async()=>{
-          await api.logout();setUser(null);navigate("/login",{replace:true});
-        }} done={finishWithdrawal}/>
+      <Route path="/account" element={user ? <Shell key={user} onLogout={logout}>
+        <Account api={api} origin={ingest} pending={markPending} logout={logout} done={finishWithdrawal}/>
       </Shell> : <Navigate to="/login" replace/>}/>
       <Route
         path="/"
@@ -422,7 +429,12 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
       />
       <Route
         path="/login"
-        element={user ? <AfterLogin api={api} /> : <>{withdrawn && <p className="panel" role="status">탈퇴를 마쳤어요</p>}<Login api={api} /></>}
+        element={user ? <AfterLogin api={api} /> : <>
+          {notice && <p className="panel" role="status">
+            <strong>{notice}</strong>{notice === "로그아웃했어요" && " 이 기기에서 로그아웃했어요. 문제가 생기면 알림은 계속 보내 드려요."}
+          </p>}
+          <Login api={api} />
+        </>}
       />
       <Route
         path="/apps/*"
@@ -430,11 +442,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
           user ? (
             <Shell
               key={user}
-              onLogout={async () => {
-                await api.logout();
-                issued.current = null;
-                navigate("/login", { replace: true });
-              }}
+              onLogout={logout}
             >
               <Routes>
                 <Route index element={<Apps api={api} />} />

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CurrentAppName } from "./Layout";
 import { Copy } from "./Connect";
@@ -23,6 +23,13 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [deletion, setDeletion] = useState<"ready" | "pending" | "failed">("ready");
+  const retryDelete = useRef<HTMLButtonElement>(null);
+  const feedback = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (deletion === "failed") retryDelete.current?.focus();
+    else if (status || error) feedback.current?.focus();
+  }, [deletion, status, error]);
   const [issued, setIssued] = useState<Partial<Record<KeySummary["kind"], {
     raw: string;
     copied: boolean;
@@ -81,11 +88,12 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
     }
   }
   const visible = displayText(snapshot?.app.name ?? "");
+  const deleteDisabled = busy || !confirmation || confirmation !== visible;
   return (
     <div className="sp-body narrow">
       <h1 tabIndex={-1}>앱 설정</h1>
       {error && (
-        <p role="alert">
+        <p role="alert" ref={feedback} tabIndex={-1}>
           {error}{" "}
           {!snapshot && (
             <button
@@ -99,7 +107,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
           )}
         </p>
       )}
-      <p role="status">
+      <p role="status" ref={error ? undefined : feedback} tabIndex={-1}>
         {status || (!snapshot && !error ? "앱 설정을 불러오는 중" : "")}
       </p>
       {snapshot && (
@@ -135,6 +143,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
                   setName(displayText(nextName));
                   setUrl(displayText(nextUrl));
                   setConfirmation("");
+                  setDeletion("ready");
                   setStatus("앱 정보를 저장했어요.");
                 })
               }
@@ -196,7 +205,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
                         </small>
                       )}
                       <button
-                        className="secondary"
+                        className="secondary danger"
                         onClick={() => {
                           if (
                             window.confirm(
@@ -231,6 +240,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
                         const raw = await api.issue(id, kind);
                         setIssued(current => ({...current,[kind]:{raw,copied:false}}));
                         setKeys(await api.appKeys(id));
+                        setStatus(title + "를 재발급했어요. 새 키를 복사해 주세요.");
                       });
                   }}
                 >
@@ -269,20 +279,29 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
               <input
                 autoComplete="off"
                 value={confirmation}
+                disabled={deletion !== "ready"}
                 onChange={(e) => setConfirmation(e.target.value)}
               />
             </label>
             <button
               className="secondary danger"
-              disabled={!confirmation || confirmation !== visible}
+              ref={retryDelete}
+              disabled={deleteDisabled}
+              aria-disabled={deleteDisabled}
               onClick={() =>
                 change(async () => {
-                  await api.removeApp(id);
+                  setDeletion("pending");
+                  try {
+                    await api.removeApp(id);
+                  } catch {
+                    setDeletion("failed");
+                    throw Error("delete failed");
+                  }
                   navigate("/apps", { replace: true });
                 })
               }
             >
-              앱 삭제
+              {deletion === "failed" ? "다시 시도" : deletion === "pending" ? "앱 삭제 중" : "앱 삭제"}
             </button>
           </section>
         </fieldset>
@@ -298,7 +317,10 @@ function LabelEditor({
   label: Label;
   save: (name: string, hidden: boolean) => Promise<void>;
 }) {
-  const [name, setName] = useState(displayText(label.name));
+  const shown = displayText(label.name);
+  const [name, setName] = useState(shown.includes("[가림]") ? "" : shown);
+  const safeName = displayText(name).trim();
+  const invalid = !safeName || safeName.includes("[가림]");
   return (
     <div>
       <label>
@@ -310,18 +332,19 @@ function LabelEditor({
           onChange={(e) => setName(e.target.value)}
         />
       </label>
+      {shown.includes("[가림]") && <p>가려진 내용이 있어요. 새 기능 이름을 입력해 주세요.</p>}
       <div className="actions">
         <button
           className="secondary"
-          disabled={!name.trim()}
-          onClick={() => save(displayText(name).trim(), label.hidden)}
+          disabled={invalid}
+          onClick={() => save(safeName, label.hidden)}
         >
           이름 저장
         </button>
         <button
           className="secondary"
-          disabled={!name.trim()}
-          onClick={() => save(displayText(name).trim(), !label.hidden)}
+          disabled={invalid}
+          onClick={() => save(safeName, !label.hidden)}
         >
           {label.hidden ? "숨긴 기능 되살리기" : "기능 숨기기"}
         </button>
