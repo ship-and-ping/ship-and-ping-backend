@@ -70,9 +70,9 @@ button,
   justify-content: center;
   cursor: pointer;
   text-decoration: none;
-  transition: transform 0.16s var(--sp-ease-out);
+  transition: transform var(--sp-dur-press) var(--sp-ease-out);
 }
-button:active:not(:focus-visible):not([aria-pressed]):not([role="switch"]),
+button:enabled:active:not(:focus-visible):not([aria-disabled="true"]):not([aria-pressed]):not([role="switch"]),
 .button:active:not(:focus-visible) {
   transform: scale(0.97);
 }
@@ -903,3 +903,19 @@ h1[tabindex="-1"]:focus { outline: none; }
 }
 .login-number { display:block; font-size:2.5rem; font-variant-numeric:tabular-nums; letter-spacing:.12em; }
 .login-approval { max-width:36rem; margin-inline:auto; }
+.login-waiting, .key-instructions { display: grid; gap: var(--sp-space-3); }
+.key-instructions { min-width: 0; }
+.key-instructions ol { margin: 0; padding-inline-start: 1.5em; }
+.match-code, .request-info, .key-notice {
+  background: var(--sp-surface-2);
+  padding: var(--sp-space-3) var(--sp-space-4);
+  border-radius: var(--sp-radius-md);
+}
+.request-info { color: var(--sp-ink-2); }
+.key-notice { border-inline-start: 3px solid var(--sp-line-strong); }
+#server-key [aria-pressed="true"] {
+  background: var(--sp-btn);
+  color: var(--sp-on-btn);
+  text-decoration: underline;
+  text-underline-offset: .2em;
+}

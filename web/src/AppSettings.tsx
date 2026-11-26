@@ -251,13 +251,18 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
                   {title} 재발급
                 </button>
                 {fresh && (
-                  <div key={fresh.raw}>
-                    <p>
-                      새 키를 만들었어요. 이 화면을 떠나면 다시 볼 수 없어요.
-                    </p>
+                  <div className="key-instructions" key={fresh.raw}>
+                    <h3>새 키로 교체하기</h3>
+                    <p>이 화면을 떠나면 새 키를 다시 볼 수 없어요.</p>
+                    <ol>
+                      <li>아래 요청문을 복사해 내 코딩 AI에 붙여 넣어요.</li>
+                      <li>안내에 따라 로컬과 배포 환경의 키를 바꿔요.</li>
+                      <li>앱을 다시 배포하거나 재시작해요.</li>
+                    </ol>
+                    <p className="key-notice">{keyWarning}</p>
                     <Copy text={buildReplacementPrompt(fresh.raw)} title="키 교체 요청문 복사(새 키 포함)"
                       previewKey={fresh.raw} onCopy={markCopied} />
-                    <p>{keyWarning}</p>
+                    <p>직접 설정하려면 새 키만 복사하세요.</p>
                     <Copy text={fresh.raw} title={title + " 복사"} secret onCopy={markCopied} />
                   </div>
                 )}

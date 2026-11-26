@@ -9,7 +9,7 @@ export async function mockPage(page, state, member, origin) {
       expires_at: 2100000000, token_type: "bearer",
     }));
   }, user);
-  const waiting = state === "waiting";
+  const waiting = ["waiting","prompt","masked"].includes(state);
   const problem = ["failure","slow","unconfirmed","resolved"].includes(state);
   const app = { id: "demo", name: "모임모아", first_record_at: waiting ? null : at, created_at: at };
   const feature = { id: "apply", name: "모임 신청", kind: "auto", method: "POST",
@@ -19,21 +19,39 @@ export async function mockPage(page, state, member, origin) {
     status: state === "resolved" ? "resolved" : "open", opened_at: at, opened_version: "1.0",
     closed_at: state === "resolved" ? now : null, resolved_version: state === "resolved" ? "1.1" : null,
     metric_at_open: metric, metric_worst: metric, notifications: [] };
+  const matchCode = "07";
+  let loginStatus = ["expired","denied"].includes(state) ? state : "pending";
   await page.route("**/*", async route => {
     const url = new URL(route.request().url());
     if (url.origin === origin) return route.continue();
     if (url.origin === "https://ingest.ship-and-ping.invalid" && url.pathname.startsWith("/v1/login-requests")) {
-      const reply = url.pathname === "/v1/login-requests"
-        ? {request_id:"qa-request",poll_secret:"fixture-only",match_code:"07",expires_at:"2026-11-25T09:20:00Z"}
-        : state === "approval" ? {status:"pending",created_at:now,client_info:{browser:"Chrome",place:"KR"}}
-        : {status:"pending"};
-      return route.fulfill({json:reply});
+      if (url.pathname === "/v1/login-requests") {
+        loginStatus = ["expired","denied"].includes(state) ? state : "pending";
+        return route.fulfill({json:{request_id:"qa-request",poll_secret:"fixture-only",match_code:matchCode,expires_at:"2026-11-25T09:20:00Z"}});
+      }
+      if (route.request().headers()["x-poll-secret"] && route.request().method() === "GET")
+        return route.fulfill({json:{status:loginStatus}});
+      if (loginStatus !== "pending")
+        return route.fulfill({json:{status:loginStatus === "expired" ? "expired" : "used"}});
+      if (url.pathname.endsWith("/approve")) {
+        const {action, match_code} = route.request().postDataJSON();
+        switch (action) {
+          case "approve": loginStatus = match_code === matchCode ? "approved" : "mismatch"; break;
+          case "deny": loginStatus = "denied"; break;
+          case "local": loginStatus = "used"; break;
+          default: throw Error("Unknown QA login action: " + action);
+        }
+        return route.fulfill({json:{status:loginStatus}});
+      }
+      return route.fulfill({json:{status:"pending",created_at:now,client_info:{browser:"Edge",place:"KR"}}});
     }
     if (url.href === "https://ingest.ship-and-ping.invalid/v1/account/delete") {
       if (state === "deleting") return;
       if (state === "failed") return route.fulfill({status:500,json:{deleted:false}});
       return route.fulfill({json:{deleted:true}});
     }
+    if (url.href === "https://ingest.ship-and-ping.invalid/v1/slack/install" && state === "unconfigured")
+      return route.fulfill({status:503,json:{error:"슬랙 연결이 아직 준비되지 않았어요."}});
     if (url.origin !== "https://example.supabase.co") return route.abort();
     if (state === "reauth" && url.pathname === "/auth/v1/user" && route.request().method() === "PUT")
       return route.fulfill({status:403,json:{error_code:"reauthentication_needed",message:"Reauthentication needed"}});
@@ -42,6 +60,7 @@ export async function mockPage(page, state, member, origin) {
     if (state === "loading") return;
     if (state === "error") return route.fulfill({ status: 400, json: { message: "QA offline" } });
     const name = url.pathname.split("/").pop();
+    if (name === "issue_key") return route.fulfill({json:"sp_" + route.request().postDataJSON().kind + "_" + "0".repeat(64)});
     const single = route.request().headers().accept?.includes("vnd.pgrst.object");
     const rows = {
       apps: single ? app : state === "empty" ? [] : [app],

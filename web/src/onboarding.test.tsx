@@ -10,6 +10,7 @@ import {
 import { Link, MemoryRouter } from "react-router-dom";
 import { axe } from "vitest-axe";
 import { App } from "./App";
+import { LoginWaiting } from "./LoginApproval";
 import { buildConnectPrompt, validateApp } from "./domain";
 import type { Gateway, Snapshot } from "./data";
 
@@ -71,6 +72,11 @@ function fake(user: string | null = "member"): Gateway {
     save: vi.fn(async () => []),
   };
 }
+it("PC 로그인 요청을 승인할 수 있는 시간을 대기 화면에 안내한다", () => {
+  const request = {request_id:"sample", poll_secret:"fixture", match_code:"07", expires_at:new Date(Date.now()+600000).toISOString()};
+  render(<LoginWaiting api={fake(null)} request={request} restart={vi.fn()}/>);
+  expect(screen.getByText(/PC의 로그인 요청은 10분 동안만 승인할 수 있어요/)).toBeTruthy();
+});
 it("requires a PC number before mobile approval and allows immediate refusal", async () => {
   const api = fake();
   api.requests = {create:vi.fn(),poll:vi.fn(),decide:vi.fn()
@@ -79,14 +85,16 @@ it("requires a PC number before mobile approval and allows immediate refusal", a
   open("/login/approve?req=sample&proof=fixture",api);
   const approve = await screen.findByRole<HTMLButtonElement>("button",{name:"이 PC 로그인 승인"});
   expect(approve.disabled).toBe(true);
-  expect(screen.getByText(/직접 로그인하려는 게 아니라면/)).toBeTruthy();
+  expect(screen.getByText(/요청한 적이 없다면 숫자 없이 거절/)).toBeTruthy();
   const input = screen.getByRole("textbox",{name:"PC 확인 숫자 두 자리"});
+  expect(document.getElementById(input.getAttribute("aria-describedby")!)?.textContent).toContain("내가 쓰는 PC인지");
   fireEvent.change(input,{target:{value:"0"}});
   expect(approve.disabled).toBe(true);
   fireEvent.change(input,{target:{value:"07"}});
   expect(approve.disabled).toBe(false);
   fireEvent.click(screen.getByRole("button",{name:"거절"}));
   expect(await screen.findByText("휴대폰에서 거절했어요.")).toBeTruthy();
+  expect(screen.getByRole("heading",{name:"PC 로그인 요청 결과"})).toBeTruthy();
   expect(api.requests.decide).toHaveBeenLastCalledWith("sample","deny","fixture","07");
 });
 it("기존 세션으로 요청 번호만 열면 메일 링크를 안내한다", async () => {
