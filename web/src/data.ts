@@ -89,7 +89,7 @@ export function gateway(client: SupabaseClient): Gateway {
   let withdrawalToken: string | undefined;
   // A fast Auth redirect can finish before React mounts the route listener.
   let initialRecovery: string | undefined;
-  const earlyListener = location.pathname === "/reset-password"
+  const earlyListener = globalThis.location?.pathname === "/reset-password"
     ? client.auth.onAuthStateChange((event, session) => {
         if (event === "PASSWORD_RECOVERY") initialRecovery = session?.user.id;
         if (!session) initialRecovery = undefined;
