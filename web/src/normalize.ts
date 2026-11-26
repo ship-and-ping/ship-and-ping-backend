@@ -114,10 +114,10 @@ function isTimestamp(number: string) {
   return month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
-function redact(text: string, spans: Span[], routes: [number, number, string][]) {
+function redact(text: string, spans: Span[]) {
   let end = 0, result = "";
-  for (const [start, stop, replacement] of [...spans, ...routes].sort((a, b) => a[0] - b[0])) {
-    if (start >= end) result += text.slice(end, start) + (replacement ?? "[가림]");
+  for (const [start, stop] of spans.sort((a, b) => a[0] - b[0])) {
+    if (start >= end) result += text.slice(end, start) + "[가림]";
     end = Math.max(end, stop);
   }
   return result + text.slice(end);
@@ -143,7 +143,6 @@ export function maskText(value: string): string {
     return prefix + path.split("/").map(part => /^[0-9]+$|^[a-z0-9]{16,}$/i.test(part) || uuidSegment.test(part) ? ":id" : part).join("/");
   });
   const spans: Span[] = [];
-  const routes: [number, number, string][] = [];
   const lineValues = /(?<![A-Za-z0-9_])(?:set-cookie|cookie|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday)[ \t]*=([^>\n][^\n]*)/gi;
   for (const hit of text.matchAll(lineValues)) {
     const end = hit.index + hit[0].length;
@@ -167,7 +166,7 @@ export function maskText(value: string): string {
       if (pattern !== numeric || !isTimestamp(m[0])) spans.push([m.index, m.index + m[0].length]);
     }
   }
-  const result = redact(text, spans, routes).replace(/^\?[^\n]+|\?\S+/gm, "?[가림]");
+  const result = redact(text, spans).replace(/^\?[^\n]+|\?\S+/gm, "?[가림]");
   return [...result].slice(0, clipped ? 295 : 300).join("") + (clipped ? "…[잘림]" : "");
 }
 

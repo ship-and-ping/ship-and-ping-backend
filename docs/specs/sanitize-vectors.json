@@ -398,6 +398,96 @@
       "message": null,
       "kind": null,
       "step": null
+    },
+    {
+      "input": "network",
+      "message": null,
+      "kind": "network",
+      "step": "network"
+    },
+    {
+      "input": "timeout",
+      "message": null,
+      "kind": "timeout",
+      "step": "timeout"
+    },
+    {
+      "input": "ECONNRESET",
+      "message": null,
+      "kind": "ECONNRESET",
+      "step": "ECONNRESET"
+    },
+    {
+      "input": "v1sp_srv_demoError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "eyJdemoFault",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "Bearer:demo",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "mail@example.test",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "010-1234-5678",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "4111111111111111",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "900101-1234567",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "TypeErrorExtra",
+      "message": null,
+      "kind": "TypeErrorExtra",
+      "step": "TypeErrorExtra"
+    },
+    {
+      "input": "TypeError@example.test",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "TypeError/secret",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "TypeError: private@example.test",
+      "message": "TypeError",
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": " SaveFault",
+      "message": null,
+      "kind": null,
+      "step": null
     }
   ],
   "route": [

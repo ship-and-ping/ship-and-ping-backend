@@ -402,6 +402,96 @@ create temporary table vectors as select $vectors${
       "message": null,
       "kind": null,
       "step": null
+    },
+    {
+      "input": "network",
+      "message": null,
+      "kind": "network",
+      "step": "network"
+    },
+    {
+      "input": "timeout",
+      "message": null,
+      "kind": "timeout",
+      "step": "timeout"
+    },
+    {
+      "input": "ECONNRESET",
+      "message": null,
+      "kind": "ECONNRESET",
+      "step": "ECONNRESET"
+    },
+    {
+      "input": "v1sp\u005fsrv_demoError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "eyJdemoFault",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "Bearer:demo",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "mail@example.test",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "010-1234-5678",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "4111111111111111",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "900101-1234567",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "TypeErrorExtra",
+      "message": null,
+      "kind": "TypeErrorExtra",
+      "step": "TypeErrorExtra"
+    },
+    {
+      "input": "TypeError@example.test",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "TypeError/secret",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "TypeError: private@example.test",
+      "message": "TypeError",
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": " SaveFault",
+      "message": null,
+      "kind": null,
+      "step": null
     }
   ],
   "route": [
@@ -490,10 +580,13 @@ select is(private.error_name(input), null, 'omitted message ' || idx) from vecto
 select is(private.error_name(replace(form,'{N}',name)), null, 'omitted ' || name || ' form ' || idx)
 from vectors, jsonb_array_elements_text(v#>'{matrix,names}') names(name),
   jsonb_array_elements_text(v#>'{matrix,forms}') with ordinality forms(form,idx);
-select is(private.error_name(d->>'input'),d->>'message','message '||idx),
-       is(private.error_kind(d->>'input'),d->>'kind','kind '||idx),
-       is(private.step_name(d->>'input'),d->>'step','step '||idx)
-from vectors, jsonb_array_elements(v->'diagnostics') with ordinality cases(d,idx);
+select is(actual, expected, field || ' ' || idx)
+from vectors, jsonb_array_elements(v->'diagnostics') with ordinality cases(d,idx),
+  lateral (values
+    ('message', private.error_name(d->>'input'), d->>'message'),
+    ('kind', private.error_kind(d->>'input'), d->>'kind'),
+    ('step', private.step_name(d->>'input'), d->>'step')
+  ) fields(field,actual,expected);
 select is(private.route(d->>'input'),d->>'expected','route '||idx)
 from vectors, jsonb_array_elements(v->'route') with ordinality cases(d,idx);
 insert into auth.users(id) values ('00000000-0000-0000-0000-000000000024');
