@@ -7,7 +7,7 @@ import {
   waitFor,
   act,
 } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { Link, MemoryRouter } from "react-router-dom";
 import { axe } from "vitest-axe";
 import { App } from "./App";
 import { buildConnectPrompt, validateApp } from "./domain";
@@ -525,6 +525,79 @@ it("메일 링크 회원이 비밀번호를 만들면 방법과 변경 단추가
   await screen.findByRole("button",{name:"비밀번호 바꾸기"});
   expect(screen.queryByDisplayValue("example phrase")).toBeNull();
 });
+it.each(["Ab!12", "password"])("가입에서 취약한 비밀번호 %s 제출을 막는다", async password => {
+  const api = fake(null);
+  open("/signup", api);
+  fireEvent.change(await screen.findByLabelText("이메일 주소"), {target:{value:"member@example.invalid"}});
+  const field = screen.getByLabelText("새 비밀번호");
+  fireEvent.change(field, {target:{value:password}});
+  fireEvent.change(screen.getByLabelText("비밀번호 확인"), {target:{value:password}});
+  fireEvent.click(screen.getByRole("button",{name:"회원 가입"}));
+  expect(field.getAttribute("aria-describedby")?.split(" ")).toContain((await screen.findByRole("alert")).id);
+  expect(document.activeElement).toBe(field);
+  expect(api.signup).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["/login", "로그인", new TypeError("Failed to fetch"), /인터넷 연결/],
+  ["/login", "로그인", {status:429}, /요청이 너무 많/],
+  ["/forgot-password", "비밀번호 찾기", {status:429}, /요청이 너무 많/],
+  ["/forgot-password", "비밀번호 찾기", {status:500}, /메일을 보내지 못/],
+] as const)("인증 실패 원인을 구분한다 %s %s %o", async (path, button, error, message) => {
+  const api = fake(null);
+  vi.mocked(api.passwordLogin).mockRejectedValue(error);
+  vi.mocked(api.requestReset).mockRejectedValue(error);
+  open(path, api);
+  fireEvent.change(await screen.findByLabelText("이메일 주소"), {target:{value:"member@example.invalid"}});
+  if (path === "/login") fireEvent.change(screen.getByLabelText("비밀번호"), {target:{value:"example phrase"}});
+  fireEvent.click(screen.getByRole("button",{name:button}));
+  expect((await screen.findByRole("alert")).textContent).toMatch(message);
+});
+
+it("저장 뒤 계정 재조회가 실패하면 계정 정보를 다시 불러올 수 있다", async () => {
+  const api = fake();
+  const member = await api.account();
+  vi.mocked(api.account).mockResolvedValueOnce(member).mockRejectedValueOnce(Error()).mockResolvedValue({...member,hasPassword:true});
+  open("/account",api);
+  fireEvent.click(await screen.findByRole("button",{name:"비밀번호 만들기"}));
+  fireEvent.change(screen.getByLabelText("새 비밀번호"),{target:{value:"example phrase"}});
+  fireEvent.change(screen.getByLabelText("비밀번호 확인"),{target:{value:"example phrase"}});
+  fireEvent.click(screen.getByRole("button",{name:"비밀번호 저장"}));
+  expect((await screen.findByRole("alert")).textContent).toContain("계정");
+  fireEvent.click(screen.getByRole("button",{name:"다시 불러오기"}));
+  await screen.findByRole("button",{name:"비밀번호 바꾸기"});
+  expect(api.updatePassword).toHaveBeenCalledTimes(1);
+});
+
+it.each(["완료","취소","만료", "저장 중 만료"])("복구 %s 뒤 같은 회원이 다시 열어도 새 링크가 필요하다", async reason => {
+  const api = fake();
+  let notify: Parameters<Gateway["listen"]>[0] = () => {};
+  api.listen = listener => { notify = listener; listener("member", true); return () => {}; };
+  render(<MemoryRouter initialEntries={["/reset-password"]}><Link to="/reset-password">복구 주소 열기</Link><App api={api} ingest={base}/></MemoryRouter>);
+  const field = await screen.findByLabelText("새 비밀번호");
+  if (reason === "완료") {
+    fireEvent.change(field,{target:{value:"example phrase"}});
+    fireEvent.change(screen.getByLabelText("비밀번호 확인"),{target:{value:"example phrase"}});
+    fireEvent.click(screen.getByRole("button",{name:"새 비밀번호 정하기"}));
+    await screen.findByRole("heading",{name:"내 앱"});
+  } else if (reason === "취소") {
+    fireEvent.click(screen.getByRole("link",{name:"재설정 메일 다시 받기"}));
+    await screen.findByRole("heading",{name:"비밀번호 찾기"});
+  } else if (reason === "저장 중 만료") {
+    vi.mocked(api.updatePassword).mockRejectedValue({code:"session_expired"});
+    fireEvent.change(field,{target:{value:"example phrase"}});
+    fireEvent.change(screen.getByLabelText("비밀번호 확인"),{target:{value:"example phrase"}});
+    fireEvent.click(screen.getByRole("button",{name:"새 비밀번호 정하기"}));
+    await screen.findByRole("alert");
+  } else {
+    act(() => notify(null));
+    act(() => notify("member"));
+  }
+  fireEvent.click(screen.getByRole("link",{name:"복구 주소 열기"}));
+  expect((await screen.findByRole("alert")).textContent).toContain("만료");
+  expect(screen.queryByLabelText("새 비밀번호")).toBeNull();
+});
+
 function open(path: string, api = fake()) {
   return render(
     <MemoryRouter initialEntries={[path]}>

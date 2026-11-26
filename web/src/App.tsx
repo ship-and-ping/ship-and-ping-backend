@@ -352,7 +352,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     <Routes>
       <Route path="/signup" element={user ? <AfterLogin api={api}/> : <AuthPage api={api} mode="signup"/>}/>
       <Route path="/forgot-password" element={<AuthPage api={api} mode="forgot"/>}/>
-      <Route path="/reset-password" element={<AuthPage api={api} mode="reset" recovery={!!user && recoveryUser === user}/>}/>
+      <Route path="/reset-password" element={<AuthPage api={api} mode="reset" expired={() => setRecoveryUser(null)} recovery={!!user && recoveryUser === user}/>}/>
       <Route path="/account" element={user ? <Shell key={user} onLogout={logout}>
         <Account api={api} origin={ingest} pending={markPending} logout={logout} done={finishWithdrawal}/>
       </Shell> : <Navigate to="/login" replace/>}/>

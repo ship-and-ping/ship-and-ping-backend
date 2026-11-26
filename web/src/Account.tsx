@@ -39,6 +39,7 @@ export function Account({
   const [passwordSaved, setPasswordSaved] = useState(false);
   const passwordButton = useRef<HTMLButtonElement>(null);
   const [error, setError] = useState(false);
+  const [logoutError, setLogoutError] = useState(false);
   const [attempt, retry] = useState(0);
   const title = useRef<HTMLHeadingElement>(null);
   const retryButton = useRef<HTMLButtonElement>(null);
@@ -59,7 +60,10 @@ export function Account({
         if (active) setInfo(data);
       })
       .catch(() => {
-        if (active) setError(true);
+        if (active) {
+          setInfo(undefined);
+          setError(true);
+        }
       });
     return () => {
       active = false;
@@ -123,7 +127,7 @@ export function Account({
             </button>
           </p>
         ) : (
-          <p role="status">내 계정을 불러오는 중</p>
+          <p role="status" aria-busy="true">내 계정을 불러오는 중</p>
         )}
       </div>
     );
@@ -192,7 +196,7 @@ export function Account({
           <div className="actions">
             <button
               className="secondary"
-              onClick={() => logout().catch(() => setError(true))}
+              onClick={() => logout().catch(() => setLogoutError(true))}
             >
               로그아웃
             </button>
@@ -203,7 +207,7 @@ export function Account({
               회원 탈퇴
             </button>
           </div>
-          {error && (
+          {logoutError && (
             <p role="alert">로그아웃하지 못했어요. 다시 시도해 주세요.</p>
           )}
         </>
