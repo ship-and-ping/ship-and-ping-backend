@@ -1,12 +1,21 @@
+#[cfg(target_arch = "wasm32")]
 use crate::endpoint::Supabase;
+#[cfg(target_arch = "wasm32")]
 use worker::*;
 
+fn scheduled_rpc(cron: &str) -> Option<&'static str> {
+    match cron {
+        "* * * * *" => Some("evaluate_all"),
+        "15 0 * * *" => Some("cleanup_daily"),
+        _ => None,
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
 #[event(scheduled)]
 pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
-    let rpc = match event.cron().as_str() {
-        "* * * * *" => "evaluate_all",
-        "15 0 * * *" => "cleanup_daily",
-        _ => return,
+    let Some(rpc) = scheduled_rpc(&event.cron()) else {
+        return;
     };
     let Ok(Some(db)) = Supabase::configured(&env) else {
         console_error!(
@@ -31,5 +40,38 @@ pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     }
     if rpc == "evaluate_all" && crate::notify::deliver(&db, &env).await.is_err() {
         console_error!("Notification delivery interrupted");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn configured_schedules_dispatch_the_expected_rpcs() {
+        let config: toml::Table = toml::from_str(include_str!("../wrangler.toml")).unwrap();
+        for triggers in [
+            &config["triggers"],
+            &config["env"]["production"]["triggers"],
+        ] {
+            let crons = triggers["crons"].as_array().unwrap();
+            assert_eq!(crons.len(), 2);
+            let routes: BTreeMap<_, _> = crons
+                .iter()
+                .map(|value| {
+                    let cron = value.as_str().unwrap();
+                    (cron, scheduled_rpc(cron).unwrap())
+                })
+                .collect();
+            assert_eq!(
+                routes,
+                BTreeMap::from([
+                    ("* * * * *", "evaluate_all"),
+                    ("15 0 * * *", "cleanup_daily")
+                ])
+            );
+        }
+        assert_eq!(scheduled_rpc("0 * * * *"), None);
     }
 }
