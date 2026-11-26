@@ -320,9 +320,14 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     setNotice("로그아웃했어요");
     navigate("/login",{replace:true});
   }
-  const finishWithdrawal = useCallback((uncertain = false) => {
+  const finishWithdrawal = useCallback((result: "done" | "unauthorized" | "login_required" = "done") => {
     deleting.current=false; issued.current=null;
-    setNotice(uncertain ? "탈퇴가 이미 끝났을 수 있어요. 다시 로그인해 확인해 주세요." : "탈퇴를 마쳤어요"); setUser(null);
+    setNotice({
+      done: "탈퇴를 마쳤어요",
+      unauthorized: "탈퇴가 이미 끝났을 수 있어요. 다시 로그인해 확인해 주세요.",
+      login_required: "다시 로그인해 주세요.",
+    }[result]);
+    setUser(null);
     void api.logout().catch(()=>{});
     navigate("/login",{replace:true});
   },[api,navigate]);
