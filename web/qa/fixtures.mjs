@@ -1,6 +1,7 @@
 const at = "2026-11-25T09:00:00Z";
 export const now = "2026-11-25T09:10:00Z";
-const user = { id: "qa-member", email:"member@example.invalid", created_at:at, app_metadata:{provider:"email"}, user_metadata: { ship_ping_visited: true } };
+export const exampleEmail = "demo@example.invalid";
+const user = { id: "qa-member", email:exampleEmail, created_at:at, app_metadata:{provider:"email"}, user_metadata: { ship_ping_visited: true, ship_ping_password_set: true } };
 export async function mockPage(page, state, member, origin) {
   if (member) await page.addInitScript(user => {
     localStorage.setItem("sb-example-auth-token", JSON.stringify({
@@ -21,7 +22,14 @@ export async function mockPage(page, state, member, origin) {
   await page.route("**/*", async route => {
     const url = new URL(route.request().url());
     if (url.origin === origin) return route.continue();
+    if (url.href === "https://ingest.ship-and-ping.invalid/v1/account/delete") {
+      if (state === "deleting") return;
+      if (state === "failed") return route.fulfill({status:500,json:{deleted:false}});
+      return route.fulfill({json:{deleted:true}});
+    }
     if (url.origin !== "https://example.supabase.co") return route.abort();
+    if (state === "reauth" && url.pathname === "/auth/v1/user" && route.request().method() === "PUT")
+      return route.fulfill({status:403,json:{error_code:"reauthentication_needed",message:"Reauthentication needed"}});
     if (url.pathname.startsWith("/auth/v1/")) return route.fulfill({ json: user });
     if (!url.pathname.startsWith("/rest/v1/")) return route.abort();
     if (state === "loading") return;
