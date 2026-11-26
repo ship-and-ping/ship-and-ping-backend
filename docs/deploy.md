@@ -1,5 +1,11 @@
 # 쉽앤핑 운영 배포
 
+## T32 기기 간 승인 적용 순서
+
+1. Supabase에 `20261126400000_login_requests.sql`을 적용한다. Auth Redirect URLs에 운영 Pages 원점의 `/login/approve?req=*`를 추가하고 로그인·가입 확인 메일 양식을 갱신한다.
+2. Worker를 배포한다. `WEB_ORIGIN`을 운영 Pages 원점으로 설정하고 기존 `SUPABASE_SECRET_KEY`를 사용한다. 키 교체 시 진행 중인 승인 요청은 새로 시작한다.
+3. Pages를 배포한다. PC에서 메일 링크를 요청하고 휴대폰으로 확인해 두 기기에 각각 로그인되는지 확인한다. 새 요청을 거절해 PC 거절 화면도 확인한다.
+
 ## 1. 계정과 배포 권한 준비 · 사람
 
 Cloudflare Workers Free 계정에서 workers.dev 하위 도메인을 선택한다. 운영 Worker 이름은 `ship-and-ping-ingest`다. Workers & Pages에서 **Direct Upload** 방식의 Pages 프로젝트를 만들고 운영 브랜치를 `main`으로 지정한다. 할당받은 Pages HTTPS 주소와 Worker HTTPS 주소를 기록한다.
@@ -47,7 +53,7 @@ Authentication → URL Configuration의 **Site URL**에 운영 Pages 원점을 �
 
 ## 5. 운영 확인 · 사람
 
-- [ ] 테스트 발신 주소를 쓰는 동안 가입 확인·비밀번호 재설정 메일은 **Resend 계정 소유자 메일로만** 확인할 수 있다. 그 주소로 시험 가입한 뒤 확인 링크가 `/login`으로, 재설정 링크가 `/reset-password`로 돌아오는지 확인하고 새 비밀번호로 로그인한다.
+- [ ] 테스트 발신 주소를 쓰는 동안 가입 확인·비밀번호 재설정 메일은 **Resend 계정 소유자 메일로만** 확인할 수 있다. 그 주소로 시험 가입한 뒤 확인 링크가 요청 번호를 포함한 `/login/approve`로, 재설정 링크가 `/reset-password`로 돌아오는지 확인하고 새 비밀번호로 로그인한다.
 - [ ] Pages에서 `/login`과 로그인 후 앱 상세를 직접 새로고침한다. 문서 응답이 200이고 CSP의 `connect-src`에는 실제 Supabase·Worker 원점만 있는지 확인한다. 시험 계정으로 이메일 링크와 Google 로그인을 각각 마친다.
 - [ ] 시험 앱을 연결해 요청을 한 번 보낸 뒤 첫 기록 도착 시각과 기능 이름이 표시되는지 확인한다.
 - [ ] 알림 설정에서 시험 Slack 채널을 연결하고 시험 알림 수신을 확인한다. 메일 알림은 Resend 계정 소유자 수신함에서 확인한다.

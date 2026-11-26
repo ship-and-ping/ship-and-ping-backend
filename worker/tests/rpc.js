@@ -4,6 +4,7 @@ const hook = ["https:/","hooks.slack.com","services","fixture"].join("/");
 const sensitive = ["sp","srv","example"].join("_");
 const report = { slack:0, mail:0, broken:0, completed:0, connected:0, safe:true };
 const withdrawals = new Map([[id(7), id(9)]]);
+let pcGrant;
 report.claims = [];
 report.releases = [];
 report.retry = [];
@@ -44,6 +45,12 @@ export default {
     if (request.headers.get("apikey") !== "fixture") return new Response(null, {status: 500});
     const path = new URL(request.url).pathname;
     const member = request.headers.get("Authorization")?.slice(7);
+    if (path === "/auth/v1/user" && member === "phone") return Response.json({id:id(42),email:"phone@example.invalid",email_confirmed_at:"2026-11-26"});
+    if (path === "/auth/v1/admin/generate_link") {
+      const input=await request.json();
+      if(input.type!=="magiclink" || input.email!=="phone@example.invalid") return new Response(null,{status:400});
+      return Response.json({id:id(42),hashed_token:"fixture-pc-grant"});
+    }
     if (path === "/auth/v1/user") return member === "6" ? new Response(null,{status:401}) : Response.json({id:id(member)});
     if (path === "/rest/v1/apps") return new Response(null,{status:member === "5" ? 503 : 204});
     if (path.startsWith("/auth/v1/admin/users/")) {
@@ -52,6 +59,12 @@ export default {
     }
     const body = await request.json();
     switch(path.split("/").pop()){
+      case "login_auth_budget": return Response.json(true);
+      case "login_step":
+        if(body.p_action==="claim" && body.p_email==="phone@example.invalid" && body.p_code==="427") return Response.json({status:"issuing"});
+        if(body.p_action==="seal" && body.p_token==="fixture-pc-grant"){ pcGrant=body.p_token; return Response.json({status:"approved"}); }
+        if(body.p_action==="poll" && body.p_secret==="pc-only" && pcGrant){ const grant=pcGrant; pcGrant=null; return Response.json({status:"approved",token_hash:grant}); }
+        return Response.json({status:"missing"});
       case "evaluate_all": return new Response(null,{status:503});
       case "claim_notifications": return Response.json(rows());
       case "slack_failed": report.broken++;return Response.json(null);

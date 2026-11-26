@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import type { Gateway } from "./data";
 import { Hero, PublicBar } from "./Layout";
 import { displayText } from "./normalize";
+import { LoginWaiting } from "./LoginApproval";
+import { remember, remembered } from "./login-requests";
 
 type Mode = "login" | "signup" | "forgot" | "reset" | "account";
 const titles = {
@@ -13,6 +15,7 @@ const titles = {
 export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mode; saved?: () => void; expired?: () => void }) {
   const navigate = useNavigate();
   const locked = useRef(false);
+  const [request,setRequest] = useState(() => (mode==="signup" || mode==="login") && api.requests ? remembered() : undefined);
   const emailField = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState("");
   const [visible, setVisible] = useState(false);
@@ -91,12 +94,14 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
       if (action === "google") {
         await api.login();
       } else if (action === "link") {
-        await api.login(email.trim());
+        const pending = await api.login(email.trim());
+        if (pending) { remember(pending); setRequest(pending); }
         setMessage("로그인 링크를 보냈어요. 메일이 안 오면 스팸함을 확인해 주세요.");
       } else if (mode === "login") {
         await api.passwordLogin(email.trim(), password);
       } else if (mode === "signup") {
-        await api.signup(email.trim(), password);
+        const pending = await api.signup(email.trim(), password);
+        if (pending) { remember(pending); setRequest(pending); }
         setMessage("확인 메일을 보냈어요. 메일이 안 오면 스팸함을 확인해 주세요.");
       } else if (mode === "forgot") {
         await api.requestReset(email.trim());
@@ -148,6 +153,7 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
       setBusy(false);
     }
   }
+  if (request) return <LoginWaiting api={api} request={request} restart={()=>setRequest(undefined)}/>;
   return <form className="auth-form" aria-busy={busy} noValidate onSubmit={submit}>
     {["login","signup","forgot"].includes(mode) && <><label>이메일 주소
       <input name="email" aria-invalid={invalidField === "email"} aria-describedby={invalidField === "email" ? errorId : undefined} ref={emailField} required type="email" autoComplete="email"

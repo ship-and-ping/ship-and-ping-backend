@@ -901,3 +901,9 @@ h1[tabindex="-1"]:focus { outline: none; }
 @media (min-width: 640px) {
   .compact > a[aria-label="내 계정"] { display: none; }
 }
+.login-number { display:block; font-size:2.5rem; font-variant-numeric:tabular-nums; letter-spacing:.12em; }
+.login-approval { max-width:36rem; margin-inline:auto; }
+.login-approval fieldset { margin:0; padding:0; border:0; min-width:0; }
+.login-choices { display:flex; flex-wrap:wrap; gap:.5rem; margin-block:.75rem; }
+.login-choices label { flex:1; display:flex; align-items:center; justify-content:center; gap:.4rem; border:1px solid currentColor; border-radius:.5rem; min-height:2.75rem; cursor:pointer; }
+.login-choices input[type=radio] { width:1rem; height:1rem; min-height:0; margin:0; }

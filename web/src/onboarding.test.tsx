@@ -70,6 +70,21 @@ function fake(user: string | null = "member"): Gateway {
     save: vi.fn(async () => []),
   };
 }
+it("requires a PC number before mobile approval and allows immediate refusal", async () => {
+  const api = fake();
+  api.requests = {create:vi.fn(),poll:vi.fn(),decide:vi.fn()
+    .mockResolvedValueOnce({status:"pending",choices:["314","521","670"],client_info:{browser:"Firefox",place:"KR"},created_at:app.created_at})
+    .mockResolvedValueOnce({status:"denied"})};
+  open("/login/approve?req=sample",api);
+  const approve = await screen.findByRole<HTMLButtonElement>("button",{name:"이 PC 로그인 승인"});
+  expect(approve.disabled).toBe(true);
+  expect(screen.getByText(/직접 요청하지 않았다면/)).toBeTruthy();
+  fireEvent.click(screen.getByLabelText("521"));
+  expect(approve.disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button",{name:"거절"}));
+  expect(await screen.findByText("휴대폰에서 거절했어요.")).toBeTruthy();
+  expect(api.requests.decide).toHaveBeenLastCalledWith("sample","deny","521");
+});
 it("로그인은 기본 제출이고 메일 링크는 구분선 다음 보조 행동이다", async () => {
   vi.stubEnv("VITE_GOOGLE_LOGIN_ENABLED", "");
   try {

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loginRequests, type LoginRequest } from "./login-requests";
 
 import { loadMonitor, type Monitor } from "./monitor-data";
 import type { DeepFeature, Definitions, FirstResult } from "./deep";
@@ -53,9 +54,10 @@ export interface Gateway {
   dismiss(issue: string): Promise<void>;
   session(): Promise<string | null>;
   listen(fn: (id: string | null, recovery?: boolean) => void): () => void;
-  login(email?: string): Promise<void>;
+  login(email?: string): Promise<void | LoginRequest>;
+  requests?: ReturnType<typeof loginRequests>;
   passwordLogin(email: string, password: string): Promise<void>;
-  signup(email: string, password: string): Promise<void>;
+  signup(email: string, password: string): Promise<void | LoginRequest>;
   requestReset(email: string): Promise<void>;
   reauthenticate(): Promise<void>;
   updatePassword(password: string, nonce?: string): Promise<void>;
@@ -85,7 +87,11 @@ function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
     throw result.error ?? new Error("데이터가 없어요");
   return result.data;
 }
-export function gateway(client: SupabaseClient): Gateway {
+export function gateway(client: SupabaseClient, origin?: string): Gateway {
+  const requests = origin ? loginRequests(client,origin) : undefined;
+  function redirect(request?: LoginRequest) {
+    return location.origin + (request ? "/login/approve?req="+encodeURIComponent(request.request_id) : "/login");
+  }
   const columns = "id,name,url,created_at,first_record_at";
   let withdrawalToken: string | undefined;
   // A fast Auth redirect can finish before React mounts the route listener.
@@ -96,6 +102,7 @@ export function gateway(client: SupabaseClient): Gateway {
         if (!session) initialRecovery = undefined;
       }).data.subscription : undefined;
   return {
+    requests,
     async account() {
       const { data: { user } } = await client.auth.getUser();
       if (!user?.email) throw Error("로그인이 필요해요");
@@ -253,10 +260,12 @@ export function gateway(client: SupabaseClient): Gateway {
       if (error) throw error;
     },
     async signup(email, password) {
+      const request = await requests?.create(email);
       const { error } = await client.auth.signUp({ email, password, options: {
-        emailRedirectTo: location.origin + "/login", data: { ship_ping_password_set: true },
+        emailRedirectTo: redirect(request), data: { ship_ping_password_set: true },
       } });
       if (error && error.code !== "user_already_exists" && error.code !== "email_exists") throw error;
+      return request;
     },
     async requestReset(email) {
       const { error } = await client.auth.resetPasswordForEmail(email, {
@@ -273,7 +282,8 @@ export function gateway(client: SupabaseClient): Gateway {
       if (error) throw error;
     },
     async login(email) {
-      const redirectTo = location.origin + "/login";
+      const request = email ? await requests?.create(email) : undefined;
+      const redirectTo = redirect(request);
       const result = email
         ? await client.auth.signInWithOtp({
             email,
@@ -284,6 +294,7 @@ export function gateway(client: SupabaseClient): Gateway {
             options: { redirectTo },
           });
       if (result.error) throw result.error;
+      return request;
     },
     async logout() {
       const { error } = await client.auth.signOut({ scope: "local" });
