@@ -26,14 +26,14 @@ static SHORT_KEY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i-u:sk_|pk_|rk_)[A-Za-z0-9_]{16,}").expect("short key pattern")
 });
 static CREDENTIAL_NAME: LazyLock<Regex> = LazyLock::new(|| {
-    let name = r"(?:[A-Za-z0-9_-]*(?:(?i:token|secret|password|passwd|pwd|apikey|credential)|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)";
+    let name = r"(?:[A-Za-z0-9_-]*(?:(?i:token|secret|password|passwd|pwd|credential|authorization|cookie|privatekey|accesskey|secretkey|apikey|clientkey|authkey|sessionkey|signingkey|encryptionkey|masterkey)|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)";
     Regex::new(&format!(
-        r#"(?:\\*["']{name}\\*["']|{name})\s*(?:=>|:|=|%3[dD])\s*"#
+        r#"(?:\\*["']{name}\\*["']|{name})\s*(?:=>|->|,|:|=|%3[aAdD])\s*"#
     ))
     .unwrap()
 });
 static BARE_VALUE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)^(?:(?:bearer|basic)(?:[ \t]*:[ \t]*|[ \t]+))?(?:\[가림\]|\\[^"\s]|[^"'\\\s,;&#])(?:[^\s,;}\]&#]|[}\]]+[^\s,;}\]&#])*"#).unwrap()
+    Regex::new(r#"(?i)^(?:(?:bearer|basic|token|apikey|digest)(?:[ \t]*:[ \t]*|[ \t]+)[^\s;&]+|(?:\[가림\]|\\[^"\s]|[^"'\\\s,;&#])(?:[^\s,;}\]&#]|[}\]]+[^\s,;}\]&#])*)"#).unwrap()
 });
 
 #[derive(Debug, PartialEq)]
@@ -259,7 +259,7 @@ fn mask_version(version: String) -> String {
     result.push_str(&normalized[end..]);
     result.chars().take(64).collect()
 }
-fn value_span(text: &str, start: usize) -> Option<std::ops::Range<usize>> {
+fn value_span(text: &str, start: usize, key_escapes: usize) -> Option<std::ops::Range<usize>> {
     let bytes = text.as_bytes();
     let escapes = bytes[start..].iter().take_while(|&&c| c == b'\\').count();
     if let Some(&quote @ (b'"' | b'\'')) = bytes.get(start + escapes) {
@@ -276,29 +276,65 @@ fn value_span(text: &str, start: usize) -> Option<std::ops::Range<usize>> {
     if let Some(&open @ (b'[' | b'{')) = bytes.get(start) {
         let close = if open == b'[' { b']' } else { b'}' };
         let mut depth = 0;
-        let mut quoted = false;
-        let mut iter = bytes.iter().enumerate().skip(start);
-        while let Some((index, &c)) = iter.next() {
-            match c {
-                b'\\' if quoted => {
-                    iter.next();
+        let mut quote = None;
+        let mut slashes = 0;
+        for (index, &c) in bytes.iter().enumerate().skip(start) {
+            let delimiter =
+                matches!(c, b'"' | b'\'') && slashes % (2 * (key_escapes + 1)) == key_escapes;
+            if delimiter && quote == Some(c) {
+                quote = None;
+            } else if delimiter && quote.is_none() {
+                quote = Some(c);
+            } else if quote.is_none() && c == open {
+                depth += 1;
+            } else if quote.is_none() && c == close {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(start..index + 1);
                 }
-                b'"' => quoted = !quoted,
-                c if !quoted && c == open => depth += 1,
-                c if !quoted && c == close => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some(start..index + 1);
-                    }
-                }
-                _ => {}
             }
+            slashes = if c == b'\\' { slashes + 1 } else { 0 };
         }
         return Some(start..bytes.len());
     }
     BARE_VALUE
         .find(&text[start..])
         .map(|m| start..start + m.end())
+}
+
+fn credential_span(text: &str, hit: regex::Match<'_>) -> Option<std::ops::Range<usize>> {
+    let prefix = hit.as_str().trim_end();
+    let start = hit.end();
+    let key_escapes = prefix.bytes().take_while(|&c| c == b'\\').count();
+    let span = value_span(text, start, key_escapes);
+    let header = !prefix.starts_with(['\\', '"', '\'']) && prefix.ends_with(':');
+    let tail = &text[start..];
+    if prefix.ends_with("%3A") || prefix.ends_with("%3a") {
+        let end = start + tail.find(['&', '\n']).unwrap_or(tail.len());
+        return Some(start..end.max(span.map_or(start, |r| r.end)));
+    }
+    let digest = tail
+        .get(..6)
+        .is_some_and(|s| s.eq_ignore_ascii_case("digest"))
+        && tail.as_bytes().get(6).is_some_and(u8::is_ascii_whitespace);
+    if header
+        || digest
+        || (!prefix.starts_with(['\\', '"', '\''])
+            && (prefix.ends_with("=>") || prefix.ends_with("->") || prefix.ends_with(',')))
+    {
+        let line_end = start + tail.find('\n').unwrap_or(tail.len());
+        return Some(
+            (if header { hit.start() } else { start })..line_end.max(span.map_or(start, |r| r.end)),
+        );
+    }
+    if !prefix.starts_with(['\\', '"', '\'']) && !tail.starts_with(['\\', '"', '\'', '[', '{']) {
+        let end = start
+            + tail
+                .find(|c: char| c.is_whitespace() || matches!(c, '&' | ';'))
+                .unwrap_or(tail.len());
+        return Some(start..end.max(span.map_or(start, |r| r.end)));
+    }
+    span
 }
 
 pub(crate) fn mask(text: &str) -> String {
@@ -308,7 +344,7 @@ pub(crate) fn mask(text: &str) -> String {
         .flat_map(|p| p.find_iter(&text).map(|m| m.range()))
         .chain(short_keys(&text))
         .chain(phones(&text))
-        .chain(credential_names(&text).filter_map(|m| value_span(&text, m.end())))
+        .chain(credential_names(&text).filter_map(|m| credential_span(&text, m)))
         .collect();
     spans.sort_by_key(|r| r.start);
     let mut result = String::new();

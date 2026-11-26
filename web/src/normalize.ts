@@ -16,11 +16,11 @@ export function normalizePromptInput(value: string): string {
 // Header and credential names can follow Korean text.
 const start = "(?<![A-Za-z0-9_])";
 // Fold the credential words independently so lowercase "key" can retain its word boundaries.
-const words = "token|secret|password|passwd|pwd|apikey|credential"
+const words = "token|secret|password|passwd|pwd|credential|authorization|cookie|privatekey|accesskey|secretkey|apikey|clientkey|authkey|sessionkey|signingkey|encryptionkey|masterkey"
   .replace(/[a-z]/g, letter => `[${letter}${letter.toUpperCase()}]`);
 const name = `(?:[A-Za-z0-9_-]*(?:${words}|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)`;
-const credentialName = new RegExp(String.raw`(?:\\*["']${name}\\*["']|${start}${name})\s*(?:=>|:|=|%3[dD])\s*`, "g");
-const bareValue = /^(?:(?:bearer|basic)(?:[ \t]*:[ \t]*|[ \t]+))?(?:\[가림\]|\\[^"\s]|[^"'\\\s,;&#])(?:[^\s,;}\]&#]|[}\]]+[^\s,;}\]&#])*/i;
+const credentialName = new RegExp(String.raw`(?:\\*["']${name}\\*["']|${start}${name})\s*(?:=>|->|,|:|=|%3[aAdD])\s*`, "g");
+const bareValue = /^(?:(?:bearer|basic|token|apikey|digest)(?:[ \t]*:[ \t]*|[ \t]+)[^\s;&]+|(?:\[가림\]|\\[^"\s]|[^"'\\\s,;&#])(?:[^\s,;}\]&#]|[}\]]+[^\s,;}\]&#])*)/i;
 const numeric = /\+?\(?[0-9](?:[ ().\/_\t֊־᐀᠆‐‑‒–—―⸗⸚⸺⸻⹀⹝〜〰゠︱︲﹘﹣－𐵮𐺭−-]*[0-9]){8,}\)?/g;
 const privatePatterns = [
   start + /(?:set-cookie|cookie|authorization)[ \t]*:[^\r\n]*/.source,
@@ -33,7 +33,7 @@ const privatePatterns = [
 
 type Span = [number, number];
 
-function valueSpan(text: string, start: number): Span | undefined {
+function valueSpan(text: string, start: number, keyEscapes: number): Span | undefined {
   let pos = start;
   while (text[pos] === "\\") pos++;
   const quote = text[pos];
@@ -50,17 +50,42 @@ function valueSpan(text: string, start: number): Span | undefined {
   }
   if (text[start] === "[" || text[start] === "{") {
     const close = text[start] === "[" ? "]" : "}";
-    let depth = 0, quoted = false;
+    let depth = 0, slashes = 0, quote = "";
     for (pos = start; pos < text.length; pos++) {
-      if (quoted && text[pos] === "\\") pos++;
-      else if (text[pos] === '"') quoted = !quoted;
-      else if (!quoted && text[pos] === text[start]) depth++;
-      else if (!quoted && text[pos] === close && --depth === 0) return [start, pos + 1];
+      const c = text[pos];
+      const delimiter = (c === '"' || c === "'") && slashes % (2 * (keyEscapes + 1)) === keyEscapes;
+      if (delimiter && c === quote) quote = "";
+      else if (delimiter && !quote) quote = c;
+      else if (!quote && c === text[start]) depth++;
+      else if (!quote && c === close && --depth === 0) return [start, pos + 1];
+      slashes = c === "\\" ? slashes + 1 : 0;
     }
     return [start, text.length];
   }
   const bare = bareValue.exec(text.slice(start));
   if (bare) return [start, start + bare[0].length];
+}
+
+function credentialSpan(text: string, hit: RegExpMatchArray & { index: number }): Span | undefined {
+  const prefix = hit[0].trimEnd();
+  const start = hit.index + hit[0].length;
+  const span = valueSpan(text, start, /^\\*/.exec(prefix)![0].length);
+  const tail = text.slice(start);
+  if (/%3a$/i.test(prefix)) {
+    const size = /^[^&\n]*/.exec(tail)![0].length;
+    return [start, Math.max(start + size, span?.[1] ?? start)];
+  }
+  const plainName = !/^[\\"']/.test(prefix);
+  const header = plainName && prefix.endsWith(":");
+  if (header || /^digest\s/i.test(tail) || (plainName && /(?:=>|->|,)$/.test(prefix))) {
+    const newline = text.indexOf("\n", start);
+    return [header ? hit.index : start, Math.max(newline < 0 ? text.length : newline, span?.[1] ?? start)];
+  }
+  if (plainName && !/^[\\"'\[{]/.test(tail)) {
+    const size = /^[^\s&;]*/.exec(tail)![0].length;
+    return [start, Math.max(start + size, span?.[1] ?? start)];
+  }
+  return span;
 }
 
 function isTimestamp(number: string) {
@@ -99,7 +124,7 @@ export function maskText(value: string): string {
   const text = normalizeText(value);
   const spans: Span[] = [];
   for (const match of text.matchAll(credentialName)) {
-    const span = valueSpan(text, match.index + match[0].length);
+    const span = credentialSpan(text, match);
     if (span && span[1] > span[0]) spans.push(span);
   }
   for (const pattern of [...privatePatterns, numeric]) {

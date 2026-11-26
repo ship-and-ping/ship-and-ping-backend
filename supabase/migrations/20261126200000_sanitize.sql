@@ -1,7 +1,14 @@
 create or replace function private.credential_value_pattern() returns text
 language sql immutable set search_path = '' as $$
-  select format($pat$(?:\\*["']%1$s\\*["']|(?<![A-Za-z0-9_])%1$s)\s*(?:=>|:|=|%%3[dD])\s*$pat$,
-    '(?:[A-Za-z0-9_-]*(?:[tT][oO][kK][eE][nN]|[sS][eE][cC][rR][eE][tT]|[pP][aA][sS][sS][wW][oO][rR][dD]|[pP][aA][sS][sS][wW][dD]|[pP][wW][dD]|[aA][pP][iI][kK][eE][yY]|[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL]|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)')
+  select format($pat$(?:\\*["']%1$s\\*["']|(?<![A-Za-z0-9_])%1$s)\s*(?:=>|->|,|:|=|%%3[aAdD])\s*$pat$,
+    '(?:[A-Za-z0-9_-]*(?:' || words || '|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)')
+  from (
+    select string_agg(case when c = '|' then c else '[' || c || upper(c collate "C") || ']' end,
+                      '' order by pos) as words
+    from regexp_split_to_table(
+      'token|secret|password|passwd|pwd|credential|authorization|cookie|privatekey|accesskey|secretkey|apikey|clientkey|authkey|sessionkey|signingkey|encryptionkey|masterkey', ''
+    ) with ordinality as letters(c,pos)
+  ) folded
 $$;
 
 create or replace function private.numeric_pattern() returns text
@@ -49,11 +56,11 @@ begin
 end $$;
 
 -- One-based character offsets, with an exclusive upper end.
-create or replace function private.value_span(t text, pos int) returns int4range
+create or replace function private.value_span(t text, pos int, key_escapes int) returns int4range
 language plpgsql immutable strict set search_path = '' as $$
 declare
   i int := pos; n int := length(t); escapes int; slashes int := 0;
-  q text; c text; body int; depth int := 0; quoted boolean := false;
+  q text; c text; body int; depth int := 0; quoted text := '';
 begin
   while substr(t,i,1) = '\' loop i := i + 1; end loop;
   q := substr(t,i,1);
@@ -72,18 +79,19 @@ begin
     i := pos;
     while i <= n loop
       c := substr(t,i,1);
-      if quoted and c = '\' then i := i+1;
-      elsif c = '"' then quoted := not quoted;
-      elsif not quoted and c = q then depth := depth+1;
-      elsif not quoted and c = (case q when '[' then ']' else '}' end) then
+      if c in ('"', '''') and slashes % (2*(key_escapes+1)) = key_escapes and (quoted = '' or quoted = c) then
+        quoted := case when quoted = '' then c else '' end;
+      elsif quoted = '' and c = q then depth := depth+1;
+      elsif quoted = '' and c = (case q when '[' then ']' else '}' end) then
         depth := depth-1;
         if depth = 0 then return int4range(pos,i+1); end if;
       end if;
+      slashes := case when c = '\' then slashes+1 else 0 end;
       i := i+1;
     end loop;
     return int4range(pos,n+1);
   end if;
-  i := regexp_instr(substr(t,pos) collate "C", $pat$(?i)^(?:(?:bearer|basic)(?:[ \t]*:[ \t]*|[ \t]+))?(?:\[가림\]|\\[^"\s]|[^"'\\\s,;&#])(?:[^\s,;}\]&#]|[}\]]+[^\s,;}\]&#])*$pat$,1,1,1);
+  i := regexp_instr(substr(t,pos) collate "C", $pat$(?i)^(?:(?:bearer|basic|token|apikey|digest)(?:[ \t]*:[ \t]*|[ \t]+)[^\s;&]+|(?:\[가림\]|\\[^"\s]|[^"'\\\s,;&#])(?:[^\s,;}\]&#]|[}\]]+[^\s,;}\]&#])*)$pat$,1,1,1);
   if i > 0 then return int4range(pos,pos+i-1); end if;
   return null;
 end $$;
@@ -92,6 +100,7 @@ create or replace function private.mask_spans(t text, pattern text, kind text) r
 language plpgsql immutable strict set search_path = '' as $$
 declare
   cursor_pos int := 1; first_pos int; after_pos int; span int4range;
+  prefix text; tail text; plain_name boolean; header boolean; stop int;
 begin
   loop
     first_pos := regexp_instr(t collate "C", pattern, cursor_pos);
@@ -99,7 +108,21 @@ begin
     after_pos := regexp_instr(t collate "C", pattern, cursor_pos,1,1);
     cursor_pos := after_pos;
     if kind = 'credential' then
-      span := private.value_span(t,after_pos);
+      prefix := rtrim(substr(t,first_pos,after_pos-first_pos), E' \t\n\r\f\v');
+      span := private.value_span(t,after_pos,length(prefix)-length(ltrim(prefix,'\')));
+      tail := substr(t,after_pos);
+      plain_name := left(prefix,1) not in ('\', '"', '''');
+      header := plain_name and right(prefix,1) = ':';
+      if lower(right(prefix,3)) = '%3a' then
+        stop := after_pos + length(substring(tail from '^[^&\n]*'));
+        span := int4range(after_pos,greatest(stop,upper(span)));
+      elsif header or tail collate "C" ~* '^digest\s' or (plain_name and (right(prefix,2) in ('=>','->') or right(prefix,1) = ',')) then
+        stop := after_pos + length(split_part(tail,E'\n',1));
+        span := int4range(case when header then first_pos else after_pos end, greatest(stop,upper(span)));
+      elsif plain_name and left(tail,1) not in ('\', '"', '''', '[', '{') then
+        stop := after_pos + length(substring(tail collate "C" from '^[^\s&;]*'));
+        span := int4range(after_pos,greatest(stop,upper(span)));
+      end if;
       if span is not null then return next span; end if;
     elsif kind <> 'number' or not private.safe_timestamp(substr(t,first_pos,after_pos-first_pos)) then
       return next int4range(first_pos,after_pos);
@@ -126,7 +149,7 @@ begin
   return left(result || substr(t,cursor_pos),300);
 end $$;
 
-revoke all on function private.safe_timestamp(text), private.value_span(text,int),
+revoke all on function private.safe_timestamp(text), private.value_span(text,int,int),
   private.mask_spans(text,text,text) from public, anon, authenticated, service_role;
 
 -- Route identifiers still include mixed segments containing a long numeric run.

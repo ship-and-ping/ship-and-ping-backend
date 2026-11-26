@@ -337,13 +337,27 @@ fn shared_sanitize_vectors() {
         expected: String,
     }
     #[derive(serde::Deserialize)]
+    struct Matrix {
+        names: Vec<String>,
+        forms: Vec<Case>,
+    }
+    #[derive(serde::Deserialize)]
     struct Cases {
+        matrix: Matrix,
         mask: Vec<Case>,
         route: Vec<Case>,
         version: Vec<Case>,
     }
-    let cases: Cases =
+    let mut cases: Cases =
         serde_json::from_str(include_str!("../../docs/specs/sanitize-vectors.json")).unwrap();
+    for name in &cases.matrix.names {
+        for form in &cases.matrix.forms {
+            cases.mask.push(Case {
+                input: form.input.replace("{N}", name),
+                expected: form.expected.replace("{N}", name),
+            });
+        }
+    }
     for case in cases.version {
         let mut row = batch(vec![request()]);
         row["app_version"] = json!(case.input);

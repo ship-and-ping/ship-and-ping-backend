@@ -27,3 +27,16 @@ it.each(["mask", "route", "version"] as const)("pgTAP mirrors every %s row", (ki
     id: Number(id), input: readText(input), expected: readText(expected),
   }))).toEqual(vectors[kind].map((row, i) => ({ id: i + 1, ...row })));
 });
+
+it("pgTAP uses the shared name and form matrix", () => {
+  expect(JSON.parse(sql.split("$matrix$")[1])).toEqual(vectors.matrix);
+});
+
+for (const name of vectors.matrix.names) {
+  it.each(vectors.matrix.forms)(`mask ${name} form %#`, ({ input, expected }) => {
+    const raw = input.replaceAll("{N}", name);
+    const masked = expected.replaceAll("{N}", name);
+    expect(maskText(raw)).toBe(masked);
+    expect(displayText(raw)).toBe(masked.replace(/\n+/g, " "));
+  });
+}

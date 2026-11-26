@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(190);
+select plan(1313);
 
 select is(private.mask(input), expected, 'mask ' || id)
 from (values
@@ -47,11 +47,11 @@ from (values
   (40, E'id_token=one&api_key=two', E'id_token=[가림]&api_key=[가림]'),
   (41, E'my_api_key=one; apikey=two', E'my_api_key=[가림]; apikey=[가림]'),
   (42, E'client_secret=one', E'client_secret=[가림]'),
-  (43, E'X-Api-Key: two', E'X-Api-Key: [가림]'),
-  (44, E'db-PASSWD : one Pwd=two password=three', E'db-PASSWD : [가림] Pwd=[가림] password=[가림]'),
+  (43, E'X-Api-Key: two', E'[가림]'),
+  (44, E'db-PASSWD : one Pwd=two password=three', E'[가림]'),
   (45, E'monkey=banana', E'monkey=banana'),
-  (46, E'tokenizer=one secret_hint: two', E'tokenizer=[가림] secret_hint: [가림]'),
-  (47, E'token: Bearer abc; next', E'token: [가림]; next'),
+  (46, E'tokenizer=one secret_hint: two', E'tokenizer=[가림] [가림]'),
+  (47, E'token: Bearer abc; next', E'[가림]'),
   (48, E'{\"api_key\":\"abc\",\"id\":1}', E'{\"api_key\":\"[가림]\",\"id\":1}'),
   (49, E'\"password\": \"x\"', E'\"password\": \"[가림]\"'),
   (50, E'\u0027secret\u0027:\u0027y\u0027', E'\u0027secret\u0027:\u0027[가림]\u0027'),
@@ -89,7 +89,7 @@ from (values
   (82, E'\"token\":\"abc', E'\"token\":\"[가림]'),
   (83, E'\"Bearer test\"&next#end', E'\"[가림]\"&next#end'),
   (84, E'\u0027Basic YWJjZGVmZ2hpamts\u0027#next', E'\u0027[가림]\u0027#next'),
-  (85, E'token: Bearer demo&next#end', E'token: [가림]&next#end'),
+  (85, E'token: Bearer demo&next#end', E'[가림]'),
   (86, E'{\"sp' || E'_srv_demo_token\":\"Basic YWJjZGVmZ2hpamts\"}', E'{\"[가림]\":\"[가림]\"}'),
   (87, E'token=\"Bearer abc\"', E'token=\"[가림]\"'),
   (88, E'password=\u0027Basic YWJjZGVmZ2hpamts\u0027', E'password=\u0027[가림]\u0027'),
@@ -175,7 +175,10 @@ from (values
   (168, E'1801018234567', E'[가림]'),
   (169, E'2025550100', E'[가림]'),
   (170, E'2085550100', E'[가림]'),
-  (171, E'-keyring=x', E'-keyring=[가림]')
+  (171, E'-keyring=x', E'-keyring=[가림]'),
+  (172, E'Cookie: a=1; sid=abc; token=x', E'[가림]'),
+  (173, E'Set-Cookie: sid=abc; Path=/; HttpOnly', E'[가림]'),
+  (174, E'whiskey=x donkey=y', E'whiskey=x donkey=y')
 ) as cases(id, input, expected);
 
 select is(private.route(input), expected, 'route ' || id)
@@ -221,6 +224,205 @@ from (values
   (3, E'2026.02.1530.0001', E'2026.02.1530.0001'),
   (4, E'2025550100', E'2025550100')
 ) as cases(id, input, expected);
+
+with matrix as (select $matrix${
+  "names": [
+    "Authorization",
+    "Proxy-Authorization",
+    "Cookie",
+    "Set-Cookie",
+    "X-Api-Key",
+    "Api-Key",
+    "X-Auth-Token",
+    "X-Access-Token",
+    "X-CSRF-Token",
+    "pRoXy-AuThOrIzAtIoN",
+    "sEt-CoOkIe",
+    "privatekey",
+    "accesskey",
+    "secretkey",
+    "apikey",
+    "clientkey",
+    "authkey",
+    "sessionkey",
+    "signingkey",
+    "encryptionkey",
+    "masterkey",
+    "token",
+    "dbPassword",
+    "secret_hint",
+    "DB-PASSWD",
+    "userPwd",
+    "PrivateKey",
+    "api_key"
+  ],
+  "forms": [
+    {
+      "input": "log {N} : Bearer demo extra\nok",
+      "expected": "log [가림]\nok"
+    },
+    {
+      "input": "{N}=Bearer demo",
+      "expected": "{N}=[가림]"
+    },
+    {
+      "input": "log {N} : Basic demo extra\nok",
+      "expected": "log [가림]\nok"
+    },
+    {
+      "input": "{N}=Basic demo",
+      "expected": "{N}=[가림]"
+    },
+    {
+      "input": "log {N} : Token demo extra\nok",
+      "expected": "log [가림]\nok"
+    },
+    {
+      "input": "{N}=Token demo",
+      "expected": "{N}=[가림]"
+    },
+    {
+      "input": "log {N} : ApiKey demo extra\nok",
+      "expected": "log [가림]\nok"
+    },
+    {
+      "input": "{N}=ApiKey demo",
+      "expected": "{N}=[가림]"
+    },
+    {
+      "input": "log {N} : Digest username=\"value\", nonce=\"other\" extra\nok",
+      "expected": "log [가림]\nok"
+    },
+    {
+      "input": "{N}=Digest username=\"value\", nonce=\"other\"",
+      "expected": "{N}=[가림]"
+    },
+    {
+      "input": "log {N} : demo extra\nok",
+      "expected": "log [가림]\nok"
+    },
+    {
+      "input": "{N}=demo",
+      "expected": "{N}=[가림]"
+    },
+    {
+      "input": "{N}: one two",
+      "expected": "[가림]"
+    },
+    {
+      "input": "?{N}=opaque,tail&next=y",
+      "expected": "?{N}=[가림]&next=y"
+    },
+    {
+      "input": "?{N}=opaque,tail; next=y",
+      "expected": "?{N}=[가림]; next=y"
+    },
+    {
+      "input": "?{N}=opaque,tail next=y",
+      "expected": "?{N}=[가림] next=y"
+    },
+    {
+      "input": "?{N}=opaque,tail",
+      "expected": "?{N}=[가림]"
+    },
+    {
+      "input": "{\"{N}\":\"one, two\"}",
+      "expected": "{\"{N}\":\"[가림]\"}"
+    },
+    {
+      "input": "{\"{N}\" : \"one, two\"}",
+      "expected": "{\"{N}\" : \"[가림]\"}"
+    },
+    {
+      "input": "{'{N}':'one, two'}",
+      "expected": "{'{N}':'[가림]'}"
+    },
+    {
+      "input": "{'{N}' : 'one, two'}",
+      "expected": "{'{N}' : '[가림]'}"
+    },
+    {
+      "input": "{\\\"{N}\\\":\\\"one, two\\\"}",
+      "expected": "{\\\"{N}\\\":\\\"[가림]\\\"}"
+    },
+    {
+      "input": "{\\\"{N}\\\" : \\\"one, two\\\"}",
+      "expected": "{\\\"{N}\\\" : \\\"[가림]\\\"}"
+    },
+    {
+      "input": "{\\\\\\\"{N}\\\\\\\":\\\\\\\"one, two\\\\\\\"}",
+      "expected": "{\\\\\\\"{N}\\\\\\\":\\\\\\\"[가림]\\\\\\\"}"
+    },
+    {
+      "input": "{\\\\\\\"{N}\\\\\\\" : \\\\\\\"one, two\\\\\\\"}",
+      "expected": "{\\\\\\\"{N}\\\\\\\" : \\\\\\\"[가림]\\\\\\\"}"
+    },
+    {
+      "input": "{\"{N}\":[\"one\",{\"x\":\"]\"}],\"ok\":1}",
+      "expected": "{\"{N}\":[가림],\"ok\":1}"
+    },
+    {
+      "input": "{\"{N}\":{\"x\":[\"a}\",\"b\"]},\"ok\":1}",
+      "expected": "{\"{N}\":[가림],\"ok\":1}"
+    },
+    {
+      "input": "{\"{N}\":123,\"ok\":1}",
+      "expected": "{\"{N}\":[가림],\"ok\":1}"
+    },
+    {
+      "input": "log {N} => one, two\nok",
+      "expected": "log {N} => [가림]\nok"
+    },
+    {
+      "input": "log {N} -> one, two\nok",
+      "expected": "log {N} -> [가림]\nok"
+    },
+    {
+      "input": "log {N}, one, two\nok",
+      "expected": "log {N}, [가림]\nok"
+    },
+    {
+      "input": "{N}%3Dopaque%20value&next=y",
+      "expected": "{N}%3D[가림]&next=y"
+    },
+    {
+      "input": "{N}%3dopaque%20value&next=y",
+      "expected": "{N}%3d[가림]&next=y"
+    },
+    {
+      "input": "{N}%3Aopaque%20value&next=y",
+      "expected": "{N}%3A[가림]&next=y"
+    },
+    {
+      "input": "{N}%3aopaque%20value&next=y",
+      "expected": "{N}%3a[가림]&next=y"
+    },
+    {
+      "input": "{N}%3Aa=1; sid=abc; token=x&ok=y",
+      "expected": "{N}%3A[가림]&ok=y"
+    },
+    {
+      "input": "{N}=Token demo,tail; ok=y",
+      "expected": "{N}=[가림]; ok=y"
+    },
+    {
+      "input": "{\\\"{N}\\\":[\\\"a]b\\\",\\\"hidden\\\"],\\\"ok\\\":1}",
+      "expected": "{\\\"{N}\\\":[가림],\\\"ok\\\":1}"
+    },
+    {
+      "input": "{\\\\\\\"{N}\\\\\\\":[\\\\\\\"a]b\\\\\\\",\\\\\\\"hidden\\\\\\\"],\\\\\\\"ok\\\\\\\":1}",
+      "expected": "{\\\\\\\"{N}\\\\\\\":[가림],\\\\\\\"ok\\\\\\\":1}"
+    },
+    {
+      "input": "{'{N}':['a]b','hidden'],'ok':1}",
+      "expected": "{'{N}':[가림],'ok':1}"
+    }
+  ]
+}$matrix$::jsonb as spec)
+select is(private.mask(replace(form->>'input','{N}',name)),
+          replace(form->>'expected','{N}',name), name || ' form ' || idx)
+from matrix, jsonb_array_elements_text(spec->'names') names(name),
+  jsonb_array_elements(spec->'forms') with ordinality forms(form,idx);
 
 select * from finish();
 rollback;

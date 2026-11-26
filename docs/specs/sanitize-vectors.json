@@ -170,11 +170,11 @@
     },
     {
       "input": "X-Api-Key: two",
-      "expected": "X-Api-Key: [가림]"
+      "expected": "[가림]"
     },
     {
       "input": "db-PASSWD : one Pwd=two password=three",
-      "expected": "db-PASSWD : [가림] Pwd=[가림] password=[가림]"
+      "expected": "[가림]"
     },
     {
       "input": "monkey=banana",
@@ -182,11 +182,11 @@
     },
     {
       "input": "tokenizer=one secret_hint: two",
-      "expected": "tokenizer=[가림] secret_hint: [가림]"
+      "expected": "tokenizer=[가림] [가림]"
     },
     {
       "input": "token: Bearer abc; next",
-      "expected": "token: [가림]; next"
+      "expected": "[가림]"
     },
     {
       "input": "{\"api_key\":\"abc\",\"id\":1}",
@@ -338,7 +338,7 @@
     },
     {
       "input": "token: Bearer demo&next#end",
-      "expected": "token: [가림]&next#end"
+      "expected": "[가림]"
     },
     {
       "input": "{\"sp_srv_demo_token\":\"Basic YWJjZGVmZ2hpamts\"}",
@@ -683,6 +683,18 @@
     {
       "input": "-keyring=x",
       "expected": "-keyring=[가림]"
+    },
+    {
+      "input": "Cookie: a=1; sid=abc; token=x",
+      "expected": "[가림]"
+    },
+    {
+      "input": "Set-Cookie: sid=abc; Path=/; HttpOnly",
+      "expected": "[가림]"
+    },
+    {
+      "input": "whiskey=x donkey=y",
+      "expected": "whiskey=x donkey=y"
     }
   ],
   "route": [
@@ -764,5 +776,199 @@
       "input": "2025550100",
       "expected": "2025550100"
     }
-  ]
+  ],
+  "matrix": {
+    "names": [
+      "Authorization",
+      "Proxy-Authorization",
+      "Cookie",
+      "Set-Cookie",
+      "X-Api-Key",
+      "Api-Key",
+      "X-Auth-Token",
+      "X-Access-Token",
+      "X-CSRF-Token",
+      "pRoXy-AuThOrIzAtIoN",
+      "sEt-CoOkIe",
+      "privatekey",
+      "accesskey",
+      "secretkey",
+      "apikey",
+      "clientkey",
+      "authkey",
+      "sessionkey",
+      "signingkey",
+      "encryptionkey",
+      "masterkey",
+      "token",
+      "dbPassword",
+      "secret_hint",
+      "DB-PASSWD",
+      "userPwd",
+      "PrivateKey",
+      "api_key"
+    ],
+    "forms": [
+      {
+        "input": "log {N} : Bearer demo extra\nok",
+        "expected": "log [가림]\nok"
+      },
+      {
+        "input": "{N}=Bearer demo",
+        "expected": "{N}=[가림]"
+      },
+      {
+        "input": "log {N} : Basic demo extra\nok",
+        "expected": "log [가림]\nok"
+      },
+      {
+        "input": "{N}=Basic demo",
+        "expected": "{N}=[가림]"
+      },
+      {
+        "input": "log {N} : Token demo extra\nok",
+        "expected": "log [가림]\nok"
+      },
+      {
+        "input": "{N}=Token demo",
+        "expected": "{N}=[가림]"
+      },
+      {
+        "input": "log {N} : ApiKey demo extra\nok",
+        "expected": "log [가림]\nok"
+      },
+      {
+        "input": "{N}=ApiKey demo",
+        "expected": "{N}=[가림]"
+      },
+      {
+        "input": "log {N} : Digest username=\"value\", nonce=\"other\" extra\nok",
+        "expected": "log [가림]\nok"
+      },
+      {
+        "input": "{N}=Digest username=\"value\", nonce=\"other\"",
+        "expected": "{N}=[가림]"
+      },
+      {
+        "input": "log {N} : demo extra\nok",
+        "expected": "log [가림]\nok"
+      },
+      {
+        "input": "{N}=demo",
+        "expected": "{N}=[가림]"
+      },
+      {
+        "input": "{N}: one two",
+        "expected": "[가림]"
+      },
+      {
+        "input": "?{N}=opaque,tail&next=y",
+        "expected": "?{N}=[가림]&next=y"
+      },
+      {
+        "input": "?{N}=opaque,tail; next=y",
+        "expected": "?{N}=[가림]; next=y"
+      },
+      {
+        "input": "?{N}=opaque,tail next=y",
+        "expected": "?{N}=[가림] next=y"
+      },
+      {
+        "input": "?{N}=opaque,tail",
+        "expected": "?{N}=[가림]"
+      },
+      {
+        "input": "{\"{N}\":\"one, two\"}",
+        "expected": "{\"{N}\":\"[가림]\"}"
+      },
+      {
+        "input": "{\"{N}\" : \"one, two\"}",
+        "expected": "{\"{N}\" : \"[가림]\"}"
+      },
+      {
+        "input": "{'{N}':'one, two'}",
+        "expected": "{'{N}':'[가림]'}"
+      },
+      {
+        "input": "{'{N}' : 'one, two'}",
+        "expected": "{'{N}' : '[가림]'}"
+      },
+      {
+        "input": "{\\\"{N}\\\":\\\"one, two\\\"}",
+        "expected": "{\\\"{N}\\\":\\\"[가림]\\\"}"
+      },
+      {
+        "input": "{\\\"{N}\\\" : \\\"one, two\\\"}",
+        "expected": "{\\\"{N}\\\" : \\\"[가림]\\\"}"
+      },
+      {
+        "input": "{\\\\\\\"{N}\\\\\\\":\\\\\\\"one, two\\\\\\\"}",
+        "expected": "{\\\\\\\"{N}\\\\\\\":\\\\\\\"[가림]\\\\\\\"}"
+      },
+      {
+        "input": "{\\\\\\\"{N}\\\\\\\" : \\\\\\\"one, two\\\\\\\"}",
+        "expected": "{\\\\\\\"{N}\\\\\\\" : \\\\\\\"[가림]\\\\\\\"}"
+      },
+      {
+        "input": "{\"{N}\":[\"one\",{\"x\":\"]\"}],\"ok\":1}",
+        "expected": "{\"{N}\":[가림],\"ok\":1}"
+      },
+      {
+        "input": "{\"{N}\":{\"x\":[\"a}\",\"b\"]},\"ok\":1}",
+        "expected": "{\"{N}\":[가림],\"ok\":1}"
+      },
+      {
+        "input": "{\"{N}\":123,\"ok\":1}",
+        "expected": "{\"{N}\":[가림],\"ok\":1}"
+      },
+      {
+        "input": "log {N} => one, two\nok",
+        "expected": "log {N} => [가림]\nok"
+      },
+      {
+        "input": "log {N} -> one, two\nok",
+        "expected": "log {N} -> [가림]\nok"
+      },
+      {
+        "input": "log {N}, one, two\nok",
+        "expected": "log {N}, [가림]\nok"
+      },
+      {
+        "input": "{N}%3Dopaque%20value&next=y",
+        "expected": "{N}%3D[가림]&next=y"
+      },
+      {
+        "input": "{N}%3dopaque%20value&next=y",
+        "expected": "{N}%3d[가림]&next=y"
+      },
+      {
+        "input": "{N}%3Aopaque%20value&next=y",
+        "expected": "{N}%3A[가림]&next=y"
+      },
+      {
+        "input": "{N}%3aopaque%20value&next=y",
+        "expected": "{N}%3a[가림]&next=y"
+      },
+      {
+        "input": "{N}%3Aa=1; sid=abc; token=x&ok=y",
+        "expected": "{N}%3A[가림]&ok=y"
+      },
+      {
+        "input": "{N}=Token demo,tail; ok=y",
+        "expected": "{N}=[가림]; ok=y"
+      },
+      {
+        "input": "{\\\"{N}\\\":[\\\"a]b\\\",\\\"hidden\\\"],\\\"ok\\\":1}",
+        "expected": "{\\\"{N}\\\":[가림],\\\"ok\\\":1}"
+      },
+      {
+        "input": "{\\\\\\\"{N}\\\\\\\":[\\\\\\\"a]b\\\\\\\",\\\\\\\"hidden\\\\\\\"],\\\\\\\"ok\\\\\\\":1}",
+        "expected": "{\\\\\\\"{N}\\\\\\\":[가림],\\\\\\\"ok\\\\\\\":1}"
+      },
+      {
+        "input": "{'{N}':['a]b','hidden'],'ok':1}",
+        "expected": "{'{N}':[가림],'ok':1}"
+      }
+    ]
+  }
 }
