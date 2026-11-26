@@ -5,6 +5,7 @@ import type { DeepFeature, Definitions, FirstResult } from "./deep";
 import { resultKinds } from "./deep";
 
 interface AppRow {
+  url?: string | null;
   id: string;
   name: string;
   created_at: string;
@@ -26,6 +27,13 @@ export interface Snapshot {
   labels: Label[];
 }
 export interface Gateway {
+  account(): Promise<{ email: string; joined: string; method: string }>;
+  withdraw(origin: string): Promise<"done" | "failed" | "unknown">;
+  checkAccount(): Promise<"exists" | "deleted" | "unknown">;
+  appKeys(id: string): Promise<KeySummary[]>;
+  editApp(id: string, name: string, url: string): Promise<void>;
+  removeApp(id: string): Promise<void>;
+  revokeKey(app: string, key: string): Promise<void>;
   deepFeatures(app: string): Promise<DeepFeature[]>;
   saveDeep(app: string, fields: Definitions, request: string): Promise<DeepFeature>;
   deleteDeep(app: string, feature: string): Promise<void>;
@@ -54,6 +62,12 @@ export interface Gateway {
   snapshot(id: string): Promise<Snapshot>;
   save(id: string, labels: Label[]): Promise<Pick<Label, "method" | "route">[]>;
 }
+export interface KeySummary {
+  id: string;
+  kind: "pub" | "srv";
+  prefix: string;
+  expires_at: string | null;
+}
 export interface AlertSettings {
   email: boolean;
   channel: string | null;
@@ -67,8 +81,50 @@ function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
   return result.data;
 }
 export function gateway(client: SupabaseClient): Gateway {
-  const columns = "id,name,created_at,first_record_at";
+  const columns = "id,name,url,created_at,first_record_at";
+  let withdrawalToken: string | undefined;
   return {
+    async account() {
+      const { data: { user } } = await client.auth.getUser();
+      if (!user?.email) throw Error("로그인이 필요해요");
+      return { email: user.email, joined: user.created_at,
+        method: user.app_metadata.provider === "google" ? "Google" : "이메일 링크" };
+    },
+    async withdraw(origin) {
+      const { data } = await client.auth.getSession();
+      if (!data.session) return "failed";
+      withdrawalToken = data.session.access_token;
+      try {
+        const response = await fetch(origin + "/v1/account/delete", {
+          method:"POST", headers:{Authorization:"Bearer " + withdrawalToken, "Content-Type":"application/json"},
+          body:"{}", signal:AbortSignal.timeout(30000),
+        });
+        if (response.status === 504) return "unknown";
+        if (!response.ok) return "failed";
+        return (await response.json()).deleted === true ? "done" : "unknown";
+      } catch { return "unknown"; }
+    },
+    async checkAccount() {
+      const session = await client.auth.refreshSession();
+      if (session.data.user) return "exists";
+      if (!withdrawalToken) return "unknown";
+      const {error} = await client.auth.getUser(withdrawalToken);
+      return error?.code === "user_not_found" ? "deleted" : "unknown";
+    },
+    async appKeys(id) {
+      return value(await client.from("app_key_list").select("id,kind,prefix,expires_at")
+        .eq("app_id",id).is("revoked_at",null).or("expires_at.is.null,expires_at.gt." + new Date().toISOString()));
+    },
+    async editApp(id,name,url) {
+      value(await client.from("apps").update({name,url:url || null}).eq("id",id).select("id").single());
+    },
+    async removeApp(id) {
+      value(await client.from("apps").delete().eq("id",id).select("id").single());
+    },
+    async revokeKey(app,key) {
+      const result = await client.rpc("revoke_app_key",{p_app:app,p_key:key});
+      if (result.error) throw result.error;
+    },
     async deepFeatures(app) {
       return value(await client.from("features").select("id,feature_key,create_request_id,name,start:start_definition,success:success_definition")
         .eq("app_id", app).eq("kind","deep").order("created_at"));

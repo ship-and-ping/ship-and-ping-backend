@@ -878,5 +878,93 @@
     "file": "19-error-390-dark.jpg",
     "overflow": 0,
     "issues": []
+  },
+  {
+    "title": "앱 설정",
+    "state": "normal",
+    "width": 1440,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "20-normal-1440-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "내 계정",
+    "state": "normal",
+    "width": 1440,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "21-normal-1440-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "앱 설정",
+    "state": "normal",
+    "width": 1280,
+    "colorScheme": "dark",
+    "scale": 1,
+    "reduced": false,
+    "file": "20-normal-1280-dark.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "내 계정",
+    "state": "normal",
+    "width": 1280,
+    "colorScheme": "dark",
+    "scale": 1,
+    "reduced": false,
+    "file": "21-normal-1280-dark.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "앱 설정",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "20-normal-390-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "내 계정",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "21-normal-390-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "앱 설정",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "dark",
+    "scale": 2,
+    "reduced": true,
+    "file": "20-normal-390-dark.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "내 계정",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "dark",
+    "scale": 2,
+    "reduced": true,
+    "file": "21-normal-390-dark.jpg",
+    "overflow": 0,
+    "issues": []
   }
 ]

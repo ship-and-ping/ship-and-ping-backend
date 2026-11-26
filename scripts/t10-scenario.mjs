@@ -385,8 +385,38 @@ try {
   console.log(
     "C7 five successes in new version: resolved and one recovery email per owner",
   );
+  const extra = await a.api.create("설정 시험", "");
+  await a.api.editApp(extra, "바뀐 이름", "https://example.invalid");
+  assert.equal((await a.api.snapshot(extra)).app.name, "바뀐 이름");
+  const disposable = await a.api.issue(extra, "pub");
+  const [key] = await a.api.appKeys(extra);
+  await assert.rejects(b.api.revokeKey(extra, key.id));
+  await a.api.revokeKey(extra, key.id);
+  assert.equal((await post("/v1/ingest", disposable, batch())).status, 401);
+  await a.api.removeApp(extra);
+  await assert.rejects(a.api.snapshot(extra));
+  assert.equal((await post("/v1/account/delete", a.token, {id:b.user.id})).status, 400);
+  assert.equal((await post("/v1/account/delete", "invalid", {})).status, 401);
   for (const member of owners) {
-    data(await admin.auth.admin.deleteUser(member.user.id));
+    const secretId = sql("select slack_webhook_secret_id from public.alert_channels where app_id='" + member.id + "'");
+    assert.ok(secretId);
+    if (member === a) {
+      // Only the disposable local Auth table is used. Fail the second deletion stage once.
+      sql("create function private.t21_fail_auth() returns trigger language plpgsql as $$ begin raise exception 'local test'; end $$");
+      sql("create trigger t21_fail before delete on auth.users for each row execute function private.t21_fail_auth()");
+      try {
+        assert.equal(await member.api.withdraw(endpoint), "failed");
+        assert.equal(await member.api.checkAccount(), "exists");
+        assert.deepEqual(await member.api.apps(), []);
+        assert.equal((await post("/v1/ingest", member.publicKey, batch())).status, 401);
+      } finally {
+        sql("drop trigger t21_fail on auth.users");
+      }
+    }
+    assert.equal(await member.api.withdraw(endpoint), "done");
+    assert.equal(await member.api.checkAccount(), "deleted");
+    assert.equal(sql("select count(*) from auth.users where id='" + member.user.id + "'"), "0");
+    assert.equal(sql("select count(*) from vault.secrets where id='" + secretId + "'"), "0");
     assert.equal(
       (await post("/v1/ingest", member.publicKey, batch())).status,
       401,
@@ -412,7 +442,7 @@ try {
       );
   }
   console.log(
-    "C13 local auth deletion cascades and warmed keys immediately return 401",
+    "C13 member deletion resumes after Auth failure, removes Vault secrets and immediately rejects warmed keys with 401",
   );
 } finally {
   await browser?.close();

@@ -30,6 +30,11 @@ const app = {
 };
 function fake(user: string | null = "member"): Gateway {
   return {
+    account: vi.fn(async () => ({email:"<me>@example.invalid", joined:app.created_at, method:"이메일 링크"})),
+    withdraw: vi.fn(async () => "done" as const),
+    checkAccount: vi.fn(async () => "exists" as const),
+    appKeys: vi.fn(async () => []),
+    editApp: vi.fn(), removeApp: vi.fn(), revokeKey: vi.fn(),
     settings: vi.fn(async () => ({
       email: false,
       channel: null,
@@ -48,7 +53,7 @@ function fake(user: string | null = "member"): Gateway {
     session: vi.fn(async () => user),
     listen: () => () => {},
     login: vi.fn(),
-    logout: vi.fn(),
+    logout: vi.fn(async () => {}),
     firstVisit: vi.fn(async () => true),
     apps: vi.fn(async () => [app]),
     create: vi.fn(async () => "a"),
@@ -60,6 +65,86 @@ function fake(user: string | null = "member"): Gateway {
     save: vi.fn(async () => []),
   };
 }
+it.each([
+  ["Ａ마트", "A마트"],
+  ["<b>" + secret, "<b>[가림]"],
+])("S10 compares the exact displayed name for %s", async (raw, shown) => {
+  const api = fake();
+  vi.mocked(api.snapshot).mockResolvedValue({app:{...app,name:raw}, labels:[]});
+  open("/apps/a/settings", api);
+  const field = await screen.findByLabelText("앱 이름 다시 입력");
+  expect(document.body.textContent).not.toContain(secret);
+  expect(screen.getByText(/화면에 보이는 그대로/).textContent?.includes("[가림] 포함")).toBe(shown.includes("[가림]"));
+  const button = screen.getByRole("button", {name:"앱 삭제"});
+  fireEvent.change(field,{target:{value:raw}});
+  expect(button.hasAttribute("disabled")).toBe(true);
+  fireEvent.change(field,{target:{value:shown}});
+  fireEvent.click(button);
+  expect(api.removeApp).toHaveBeenCalledWith("a");
+});
+it("S11 keeps the exact email through a failed request and retries", async () => {
+  const api = fake();
+  vi.mocked(api.withdraw).mockResolvedValueOnce("failed");
+  open("/account",api);
+  fireEvent.click(await screen.findByRole("button",{name:"회원 탈퇴"}));
+  const input = screen.getByLabelText("로그인 이메일 다시 입력");
+  const submit = screen.getByRole("button",{name:"모든 앱과 기록을 지우고 탈퇴"});
+  fireEvent.change(input,{target:{value:"<ME>@example.invalid"}});
+  expect(submit.hasAttribute("disabled")).toBe(true);
+  fireEvent.change(input,{target:{value:"<me>@example.invalid"}});
+  fireEvent.click(submit);
+  fireEvent.click(await screen.findByRole("button",{name:"다시 시도"}));
+  await screen.findByText("탈퇴를 마쳤어요");
+  expect(api.withdraw).toHaveBeenCalledTimes(2);
+});
+it.each(["exists","deleted","unknown"] as const)("S11 checks interrupted responses every ten seconds (%s)",async outcome=>{
+  const api=fake();
+  vi.mocked(api.withdraw).mockResolvedValue("unknown");
+  vi.mocked(api.checkAccount).mockResolvedValue(outcome);
+  open("/account",api);
+  fireEvent.click(await screen.findByRole("button",{name:"회원 탈퇴"}));
+  fireEvent.change(screen.getByLabelText("로그인 이메일 다시 입력"),{target:{value:"<me>@example.invalid"}});
+  fireEvent.click(screen.getByRole("button",{name:"모든 앱과 기록을 지우고 탈퇴"}));
+  // Install the test clock before the checking effect schedules its interval.
+  vi.useFakeTimers();
+  await act(async()=>{});
+  await act(()=>vi.advanceTimersByTimeAsync(9999));
+  expect(api.checkAccount).not.toHaveBeenCalled();
+  await act(()=>vi.advanceTimersByTimeAsync(1));
+  expect(api.checkAccount).toHaveBeenCalledTimes(1);
+  if(outcome==="deleted") expect(screen.getByText("탈퇴를 마쳤어요")).toBeTruthy();
+  else {
+    await act(()=>vi.advanceTimersByTimeAsync(110000));
+    expect(api.checkAccount).toHaveBeenCalledTimes(12);
+    expect(screen.getByRole("button",{name:outcome==="exists"?"다시 시도":"다시 확인"})).toBeTruthy();
+  }
+});
+it("S10 copies only the newly issued key of the selected app",async()=>{
+  const copy=vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:copy}});
+  const confirm=vi.spyOn(window,"confirm").mockReturnValue(true);
+  try {
+    for(const id of ["a","b"]){
+      const api=fake();
+      const raw=["sp","srv",id.repeat(64)].join("_");
+      vi.mocked(api.issue).mockResolvedValue(raw);
+      open("/apps/"+id+"/settings",api);
+      fireEvent.click(await screen.findByRole("button",{name:"서버 키 재발급"}));
+      fireEvent.click(await screen.findByRole("button",{name:"서버 키 복사"}));
+      expect(api.issue).toHaveBeenCalledWith(id,"srv");
+      expect(copy).toHaveBeenLastCalledWith(raw);
+      expect(document.body.textContent).not.toContain(raw);
+      cleanup();
+    }
+  } finally {confirm.mockRestore();}
+});
+it("S11 summary masks app names and keeps literal markup in text nodes",async()=>{
+  const api=fake();
+  vi.mocked(api.apps).mockResolvedValue([{...app,name:"<i>&lt;b&gt;"+secret}]);
+  open("/account",api);
+  expect(await screen.findByRole("link",{name:"<i>&lt;b&gt;[가림]"})).toBeTruthy();
+  expect(document.body.textContent).not.toContain(secret);
+});
 it("알림 앱 목록은 실패한 뒤에만 재시도를 제공한다", async () => {
   const api = fake();
   vi.mocked(api.apps).mockRejectedValueOnce(Error("offline"));

@@ -147,7 +147,7 @@ stats_1h와 같은 집계 열·기본 키·조회 인덱스를 쓴다. 30일이 
 |---|---|
 | id, app_id, method, route, name, received_at, applied bool | |
 
-## 깊게 보기 회원 RPC
+## 깊게 보기·앱 설정 회원 RPC
 
 로그인한 소유자만 자기 앱의 기능을 관리한다.
 
@@ -155,6 +155,9 @@ stats_1h와 같은 집계 열·기본 키·조회 인덱스를 쓴다. 30일이 
 |---|---|
 | `save_deep_feature(p_app,p_feature,p_name,p_start,p_success,p_request_id)` | 추가할 때 p_feature는 null이며 같은 앱·요청 ID로 재시도하면 기존 기능과 feature_key를 반환한다. 수정할 때는 기능 ID를 지정하며 feature_key는 유지한다. |
 | `delete_deep_feature(p_app,p_feature)` | 지정한 깊게 보기 기능과 종속 기록을 삭제한다. |
+| `revoke_app_key(p_app,p_key)` | 로그인한 소유자의 앱 행을 잠그고 지정한 키의 폐기 시각을 기록한다. 이미 폐기한 키는 첫 폐기 시각을 유지한다. |
+
+S11은 Worker의 `POST /v1/account/delete`를 호출한다. Worker는 Supabase Auth에서 세션 사용자를 확인하고 그 회원의 JWT와 RLS로 앱을 지운다. 앱 삭제의 외래 키와 알림 연결 삭제 트리거가 기록·키·알림 설정·Vault 비밀값을 함께 지운다. 이어서 Worker 비밀 설정의 관리자 키로 해당 Auth 사용자를 지운다. 마지막 단계가 실패해도 같은 회원이 다시 요청하면 남은 계정을 지울 수 있다.
 
 ## 수집·판정·알림 RPC
 | 함수 | 하는 일 |

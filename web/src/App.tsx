@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Link,
   Navigate,
@@ -16,6 +16,8 @@ import { MonitorRoute } from "./Monitor";
 import { DeepPage } from "./DeepPage";
 import { Notifications } from "./Notifications";
 import { Connect } from "./Connect";
+import { Account } from "./Account";
+import { AppSettings } from "./AppSettings";
 
 function useApps(api: Gateway) {
   const [apps, setApps] = useState<AppSummary[]>();
@@ -347,6 +349,8 @@ function Connection({
 }
 export function App({ api, ingest }: { api: Gateway; ingest: string }) {
   const [user, setUser] = useState<string | null>();
+  const deleting = useRef(false);
+  const [withdrawn,setWithdrawn] = useState(false);
   const [error, setError] = useState(false);
   const issued = useRef<{ id: string; owner: string; key?: string } | null>(
     null,
@@ -360,7 +364,8 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     const unsubscribe = api.listen((id) => {
       notified = true;
       if (active) {
-        setUser(id);
+        if (id || !deleting.current) setUser(id);
+        if (id) setWithdrawn(false);
         setError(false);
       }
     });
@@ -377,6 +382,13 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
       unsubscribe();
     };
   }, [api]);
+  const markPending = useCallback((active: boolean) => { deleting.current = active; }, []);
+  const finishWithdrawal = useCallback(() => {
+    deleting.current=false; issued.current=null;
+    setWithdrawn(true); setUser(null);
+    void api.logout().catch(()=>{});
+    navigate("/login",{replace:true});
+  },[api,navigate]);
   useEffect(() => {
     if (
       issued.current &&
@@ -399,13 +411,18 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     return <main role="status">로그인 상태를 확인하는 중</main>;
   return (
     <Routes>
+      <Route path="/account" element={user ? <Shell key={user} onLogout={async()=>{await api.logout(); navigate("/login",{replace:true});}}>
+        <Account api={api} origin={ingest} pending={markPending} logout={async()=>{
+          await api.logout();setUser(null);navigate("/login",{replace:true});
+        }} done={finishWithdrawal}/>
+      </Shell> : <Navigate to="/login" replace/>}/>
       <Route
         path="/"
         element={user ? <Navigate replace to="/apps" /> : <Landing />}
       />
       <Route
         path="/login"
-        element={user ? <AfterLogin api={api} /> : <Login api={api} />}
+        element={user ? <AfterLogin api={api} /> : <>{withdrawn && <p className="panel" role="status">탈퇴를 마쳤어요</p>}<Login api={api} /></>}
       />
       <Route
         path="/apps/*"
@@ -421,6 +438,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
             >
               <Routes>
                 <Route index element={<Apps api={api} />} />
+                <Route path=":id/settings" element={<AppSettings api={api}/>}/>
                 <Route path="notifications" element={<Notifications api={api} origin={ingest} />} />
                 <Route path=":id/notifications" element={<Notifications api={api} origin={ingest} />} />
                 <Route
