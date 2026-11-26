@@ -207,6 +207,24 @@ fn require(ok: bool) -> Result<(), ApiError> {
 fn bounded(value: &str, max: usize) -> bool {
     !value.trim().is_empty() && value.chars().count() <= max
 }
+fn opaque_diagnostic(value: &str) -> bool {
+    static PREFIXED_TOKEN: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?:^|[._ -])(?:(?:gh[pos]_|AKIA|ASIA|AIza)[A-Za-z0-9_-]{12}|github_pat_[A-Za-z0-9_-]{5}|xox[abpr]-[A-Za-z0-9_-]{11}|sk-[A-Za-z0-9_-]{13}|glpat-[A-Za-z0-9_-]{10})").unwrap()
+    });
+    static CAMEL: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^[a-z]*([A-Z]+[a-z]+)+[A-Z]*$").unwrap());
+    static ALTERNATING: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?:[A-Z][a-z]){3}").unwrap());
+    PREFIXED_TOKEN.is_match(value)
+        || value.split(['.', '_', '-', ' ']).any(|part| {
+            part.chars().count() >= 16
+                && (part.bytes().any(|b| b.is_ascii_digit())
+                    || (part.bytes().any(|b| b.is_ascii_uppercase())
+                        && part.bytes().any(|b| b.is_ascii_lowercase())
+                        && (!CAMEL.is_match(part) || ALTERNATING.is_match(part))))
+        })
+}
+
 fn error_name(raw: &str) -> Option<String> {
     static NAME: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)*[A-Za-z_$][A-Za-z0-9_$]*$").unwrap()
@@ -217,7 +235,7 @@ fn error_name(raw: &str) -> Option<String> {
             .iter()
             .any(|s| name.ends_with(s))
         && NAME.is_match(name)
-        && !opaque_segment(name)
+        && !opaque_diagnostic(name)
         && !private_segment(name))
     .then(|| name.to_owned())
 }
@@ -230,7 +248,7 @@ fn error_kind(raw: &str) -> Option<String> {
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || b"_.-".contains(&c))
         && !DIGITS.is_match(raw)
-        && !opaque_segment(raw)
+        && !opaque_diagnostic(raw)
         && !private_segment(raw))
     .then(|| raw.to_owned())
 }
@@ -243,7 +261,7 @@ fn step_name(raw: &str) -> Option<String> {
         && (!raw.contains(' ') || raw.chars().any(|c| ('가'..='힣').contains(&c)))
         && STEP.is_match(raw)
         && !DIGITS.is_match(raw)
-        && !opaque_segment(raw)
+        && !opaque_diagnostic(raw)
         && !private_segment(raw))
     .then(|| raw.to_owned())
 }

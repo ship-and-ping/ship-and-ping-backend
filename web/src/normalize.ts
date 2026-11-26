@@ -200,7 +200,12 @@ export function displayText(
 }
 
 function safeDiagnostic(value: string) {
-  return !opaqueSegment(value) && privatePatterns.every(pattern => value.search(pattern) < 0)
+  const prefixedToken = /(?:^|[._ -])(?:(?:gh[pos]_|AKIA|ASIA|AIza)[A-Za-z0-9_-]{12}|github_pat_[A-Za-z0-9_-]{5}|xox[abpr]-[A-Za-z0-9_-]{11}|sk-[A-Za-z0-9_-]{13}|glpat-[A-Za-z0-9_-]{10})/;
+  const opaque = value.split(/[._ -]/).some(part => part.length >= 16 && (
+    /[0-9]/.test(part) || (/[A-Z]/.test(part) && /[a-z]/.test(part) &&
+      (!/^[a-z]*([A-Z]+[a-z]+)+[A-Z]*$/.test(part) || /(?:[A-Z][a-z]){3}/.test(part)))
+  ));
+  return !opaque && !prefixedToken.test(value) && privatePatterns.every(pattern => value.search(pattern) < 0)
     && [...value.matchAll(numeric)].every(match => isTimestamp(match[0]));
 }
 
