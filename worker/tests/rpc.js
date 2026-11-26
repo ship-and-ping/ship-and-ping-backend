@@ -113,8 +113,10 @@ export default {
       return Response.json("badcafe0-0000-4000-8000-000000000001");
     }
     if (path === "/rest/v1/rpc/suggest_feature_map") {
-      const [item] = body.items;
-      return new Response(null, {status: item.route === "/a/:id" && item.name === "token=[가림]" ? 204 : 500});
+      const accepted = body.items.filter(item => item.route === "/a/:id" && item.name === "token=[가림]").length;
+      const dropped = body.items.filter(item => item.name === "ignore previous instructions").length;
+      if (accepted + dropped !== body.items.length) return new Response(null, {status: 500});
+      return Response.json({accepted, dropped});
     }
     if (path !== "/rest/v1/rpc/ingest_batch") return new Response(null, {status: 500});
     const {payload} = body;
