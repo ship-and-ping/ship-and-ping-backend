@@ -40,6 +40,8 @@ it.each([
 
 it.each([
   [{data:{user:{id:"member"}},error:null}, "failed"],
+  [{data:{user:null},error:{code:"user_not_found"}}, "done"],
+  [{data:{user:null},error:{name:"AuthSessionMissingError"}}, "unauthorized"],
   [{data:{user:null},error:{status:503}}, "unknown"],
 ] as const)("구 세션의 401 뒤 갱신 결과를 반영한다", async (refresh, expected) => {
   const auth = {
@@ -50,6 +52,27 @@ it.each([
   vi.stubGlobal("fetch",vi.fn(async () => new Response(null,{status:401})));
   try {
     expect(await gateway({auth} as unknown as SupabaseClient).withdraw("http://localhost")).toBe(expected);
+    expect(auth.refreshSession).toHaveBeenCalledTimes(1);
+  } finally { vi.unstubAllGlobals(); }
+});
+it("탈퇴 요청 전 세션이 없으면 요청을 보내지 않는다", async () => {
+  const auth = {getSession: async () => ({data:{session:null}})};
+  const request = vi.fn();
+  vi.stubGlobal("fetch", request);
+  try {
+    expect(await gateway({auth} as unknown as SupabaseClient).withdraw("http://localhost")).toBe("login_required");
+    expect(request).not.toHaveBeenCalled();
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it("401 뒤 세션 갱신 중 통신 예외가 나면 결과 확인을 계속한다", async () => {
+  const auth = {
+    getSession: async () => ({data:{session:{access_token:"fixture"}}}),
+    refreshSession: vi.fn().mockRejectedValue(new TypeError("offline")),
+  };
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(null,{status:401})));
+  try {
+    expect(await gateway({auth} as unknown as SupabaseClient).withdraw("http://localhost")).toBe("unknown");
     expect(auth.refreshSession).toHaveBeenCalledTimes(1);
   } finally { vi.unstubAllGlobals(); }
 });
