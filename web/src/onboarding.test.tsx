@@ -295,6 +295,14 @@ it("시작한 탭의 state만 슬랙 코드 교환에 사용한다", async () =>
   await waitFor(() => expect(api.slack).toHaveBeenCalledWith("callback", base, {state:"original",code:"fixture"}));
   expect(sessionStorage.getItem("ship-ping-slack-state")).toBeNull();
 });
+it("슬랙 연결을 시작할 수 없으면 알림 설정에 서버 안내를 표시한다", async () => {
+  const api = fake();
+  const message = "슬랙 연결이 아직 준비되지 않았어요.";
+  vi.mocked(api.slack).mockRejectedValueOnce(new Error(message));
+  open("/apps/a/notifications", api);
+  fireEvent.click(await screen.findByRole("button", { name: "Slack에 추가" }));
+  expect(await screen.findByText(message)).toBeTruthy();
+});
 it("받을 곳 없음, 연결 끊김, 연결됨 상태와 시험 알림을 표시한다", async () => {
   const api = fake();
   open("/apps/a/notifications", api);

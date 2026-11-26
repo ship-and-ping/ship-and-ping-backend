@@ -17,14 +17,15 @@ GitHub 저장소 Settings → Environments에서 `production`을 만들고 배�
 | GitHub 환경 Secrets | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` | 동일 Supabase 프로젝트의 HTTPS 원점과 브라우저 공개 키 |
 | GitHub 환경 Secrets | `VITE_INGEST_URL` | 3단계에서 확인한 Worker HTTPS 원점. 경로 제외 |
 
-승인된 운영 Supabase에 해당 릴리스의 마이그레이션이 순서대로 적용됐는지 확인한다. Cloudflare에서 운영 이름으로 빈 Worker를 먼저 만든 뒤 Settings → Variables and Secrets에서 아래 일곱 항목을 **Secret**으로 등록하고 적용한다. 이 방식은 첫 Cron 실행 전에 바인딩을 준비한다. 운영에서 `INGEST_DRY_RUN`은 설정하지 않는다.
+승인된 운영 Supabase에 해당 릴리스의 마이그레이션이 순서대로 적용됐는지 확인한다. Cloudflare에서 운영 이름으로 빈 Worker를 먼저 만든 뒤 Settings → Variables and Secrets에서 아래 표의 필수 항목 다섯 개를 **Secret**으로 등록하고 적용한다. 이 방식은 첫 Cron 실행 전에 바인딩을 준비한다. 운영에서 `INGEST_DRY_RUN`은 설정하지 않는다.
 
 | Worker 비밀 이름 | 가져올 곳 |
 |---|---|
 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | 운영 프로젝트 URL과 서버 전용 Secret API key |
 | `RESEND_API_KEY`, `MAIL_FROM` | Resend 발송 키와 테스트 발신 주소 `onboarding@resend.dev`. 수신자는 Resend 계정 소유자 메일로 제한된다 |
-| `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` | Slack 앱 OAuth 자격 증명. Incoming Webhooks를 켜고 콜백에 Worker 원점의 `/v1/slack/callback`을 정확히 등록 |
 | `WEB_ORIGIN` | 회원 화면의 운영 Pages HTTPS 원점 |
+
+슬랙 연결은 선택 사항이다. 나중에 Slack 앱의 Incoming Webhooks를 켜고 Worker 원점의 `/v1/slack/callback`을 등록한 뒤 `SLACK_CLIENT_ID`와 `SLACK_CLIENT_SECRET`을 운영 Worker Secret으로 추가하면 연결을 시작할 수 있다.
 
 워크스페이스별 Slack webhook은 OAuth 설치 시 Supabase Vault에 저장된다. 웹 빌드의 세 `VITE_` 항목은 브라우저에 공개되므로 서버 키는 Worker에만 둔다.
 

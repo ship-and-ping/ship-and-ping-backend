@@ -100,6 +100,28 @@ fn ingest_http_statuses() {
     }
     assert_eq!(delete(addr, "1"), "503");
     assert_eq!(delete(addr, "1"), "429");
+    let unavailable = Command::new("curl")
+        .args([
+            "--silent",
+            "--max-time",
+            "5",
+            "--write-out",
+            "\n%{http_code}",
+            "--header",
+            "Authorization: Bearer fixture",
+            "--json",
+            r#"{"app":"fixture"}"#,
+            &format!("http://{missing_addr}/v1/slack/install"),
+        ])
+        .output()
+        .unwrap();
+    let reply = String::from_utf8(unavailable.stdout).unwrap();
+    let (body, status) = reply.rsplit_once('\n').unwrap();
+    assert_eq!(status, "503");
+    assert_eq!(
+        serde_json::from_str::<Value>(body).unwrap(),
+        json!({"error":"슬랙 연결이 아직 준비되지 않았어요."})
+    );
     let install = || fixture("/v1/slack/install", Some(json!({"app":"fixture"})));
     let callback = |state: Value, code: &str| {
         fixture(
