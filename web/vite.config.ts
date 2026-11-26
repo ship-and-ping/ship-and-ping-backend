@@ -1,3 +1,4 @@
+import diagnosticKeys from "./diagnostic-keys.mjs";
 import react from "@vitejs/plugin-react";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -21,10 +22,17 @@ function pagesHeaders(): Plugin {
 }
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), ...(mode === "pages" ? [pagesHeaders()] : [])],
-  define: {
-    __DIAGNOSTIC_KEYS__: readFileSync(resolve(import.meta.dirname, "../supabase/migrations/20261126210000_diagnostic_keys.sql"), "utf8").split("$keys$")[1],
-  },
+  plugins: [
+    react(),
+    {
+      name: "bundle-diagnostic-keys",
+      load(id) {
+        if (id === resolve(import.meta.dirname, "diagnostic-keys.mjs"))
+          return `export default ${JSON.stringify(diagnosticKeys)};`;
+      },
+    },
+    ...(mode === "pages" ? [pagesHeaders()] : []),
+  ],
   build: { rollupOptions: { output: { manualChunks: { supabase: ["@supabase/supabase-js"] } } } },
   test: { environment: "jsdom" },
 }));

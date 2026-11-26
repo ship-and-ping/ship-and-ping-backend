@@ -1,4 +1,4 @@
-declare const __DIAGNOSTIC_KEYS__: string[];
+import diagnosticKeys from "../diagnostic-keys.mjs";
 
 /** 요청문에 들어갈 외부 문자열의 검사와 표시가 같은 문자를 보도록 한다. */
 function normalizeText(value: string): string {
@@ -17,7 +17,7 @@ export function normalizePromptInput(value: string): string {
 
 // Header and credential names can follow Korean text.
 const start = "(?<![A-Za-z0-9_])";
-const allowed = new Set(__DIAGNOSTIC_KEYS__.map(key => key.replaceAll("_", "")));
+const allowed = new Set(diagnosticKeys.map(key => key.replaceAll("_", "")));
 // Quoted keys may contain spaces or punctuation. Bare keys end at structural delimiters.
 const credentialName = /[/%]+\s*=>?\s*|(?:\\*"[^"\n]*?\\*"|\\*'[^'\n]*?\\*'|[^\s/\\%"'=:,;<>{}\[\]&?#]+?)\s*(?:=>|->|,+(?=[ \t])|:|=|%3[aAdD])\s*/gu;
 function pairKey(prefix: string) {
