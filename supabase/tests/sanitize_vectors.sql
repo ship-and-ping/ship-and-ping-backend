@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(56);
+select plan(70);
 
 select is(private.mask(input), expected, 'mask ' || id)
 from (values
@@ -50,7 +50,19 @@ from (values
   (43, E'X-Api-Key: two', E'X-Api-Key: [가림]'),
   (44, E'db-PASSWD : one Pwd=two password=three', E'db-PASSWD : [가림] Pwd=[가림] password=[가림]'),
   (45, E'monkey=banana', E'monkey=[가림]'),
-  (46, E'tokenizer=one secret_hint: two', E'tokenizer=one secret_hint: two')
+  (46, E'tokenizer=one secret_hint: two', E'tokenizer=one secret_hint: two'),
+  (47, E'token: Bearer abc; next', E'token: [가림]; next'),
+  (48, E'{\"api_key\":\"abc\",\"id\":1}', E'{\"api_key\":\"[가림]\",\"id\":1}'),
+  (49, E'\"password\": \"x\"', E'\"password\": \"[가림]\"'),
+  (50, E'\u0027secret\u0027:\u0027y\u0027', E'\u0027secret\u0027:\u0027[가림]\u0027'),
+  (51, E'{\"MY-ACCESS_TOKEN\":\"Bearer abc def\",\"db_passwd\":\"a\\\"b\",\"pwd\":\"x,y\"}', E'{\"MY-ACCESS_TOKEN\":\"[가림]\",\"db_passwd\":\"[가림]\",\"pwd\":\"[가림]\"}'),
+  (52, E'\"secret_hint\":\"ok\"', E'\"secret_hint\":\"ok\"'),
+  (53, E'1764120000 1764120000123', E'1764120000 1764120000123'),
+  (54, E'0111234567 010-123-4567', E'[가림] [가림]'),
+  (55, E'02-1234-5678 0311234567', E'[가림] [가림]'),
+  (56, E'+82 10 1234 5678', E'[가림]'),
+  (57, E'(02) 123-4567,\u0020070.1234.5678', E'[가림],\u0020[가림]'),
+  (58, E'1764120000123 01012345678', E'1764120000123 [가림]')
 ) as cases(id, input, expected);
 
 select is(private.route(input), expected, 'route ' || id)
@@ -64,7 +76,9 @@ from (values
   (7, E'/a/42;jsessionid=secret?q=x#frag', E'/a/:id'),
   (8, E'/a/v1sp' || E'_srv_demo', E'/a/:id'),
   (9, E'/a/１２３', E'/a/:id'),
-  (10, E'/a/my_api_key=one', E'/a/:id')
+  (10, E'/a/my_api_key=one', E'/a/:id'),
+  (11, E'/short/123456789abcdef', E'/short/:id'),
+  (12, E'/a/\u0027secret\u0027:\u0027y\u0027', E'/a/:id')
 ) as cases(id, input, expected);
 
 select * from finish();

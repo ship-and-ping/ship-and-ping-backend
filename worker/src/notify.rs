@@ -218,14 +218,21 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
             if first.channel == "email" {
                 if let Some(to) = &first.email {
                     if first.digest {
-                        let extra = rpc(
-                            db,
-                            "expand_mail_digest",
-                            json!({"id":first.id,"token":first.claim_token}),
-                        )
-                        .await?
-                        .json::<u32>()
-                        .await?;
+                        let extra = async {
+                            rpc(
+                                db,
+                                "expand_mail_digest",
+                                json!({"id":first.id,"token":first.claim_token}),
+                            )
+                            .await?
+                            .json::<u32>()
+                            .await
+                        }
+                        .await;
+                        let Ok(extra) = extra else {
+                            console_error!("Mail digest expansion unavailable");
+                            continue;
+                        };
                         if extra > 0 {
                             body.push_str(&format!("\n\n미뤄 둔 알림이 {extra}건 더 있어요."));
                             if let Some(origin) = &origin {
@@ -236,7 +243,13 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
                             }
                         }
                     }
-                    email(db, env, first.app, to, body, first.digest).await?
+                    let Ok(outcome) = email(db, env, first.app, to, body, first.digest).await
+                    else {
+                        // Leave this group's claim for retry when the lease expires.
+                        console_error!("Mail reservation unavailable");
+                        continue;
+                    };
+                    outcome
                 } else {
                     Outcome::Failed("받을 곳 없음")
                 }

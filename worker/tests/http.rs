@@ -94,6 +94,7 @@ fn ingest_http_statuses() {
         ("4", "200"),
         ("5", "503"),
         ("6", "401"),
+        ("7", "429"),
     ] {
         assert_eq!(delete(addr, token), status, "account fixture {token}");
     }

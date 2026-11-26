@@ -30,6 +30,10 @@ static NAMED_SECRET: LazyLock<Regex> = LazyLock::new(|| {
         .expect("credential value")
 });
 
+static QUOTED_SECRET: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)(["'][A-Za-z0-9_-]*(?:token|key|secret|password|passwd|pwd)["']\s*:\s*)(?:(")(?:\\.|[^"\\])*"|(')(?:\\.|[^'\\])*')"#).expect("quoted credential")
+});
+
 #[derive(Debug, PartialEq)]
 pub enum ApiError {
     Invalid,
@@ -124,6 +128,10 @@ fn normalize(text: &str) -> Cow<'_, str> {
 }
 
 fn opaque_segment(part: &str) -> bool {
+    static NUMERIC_ID: LazyLock<Regex> = LazyLock::new(|| Regex::new("[0-9]{9}").unwrap());
+    if NUMERIC_ID.is_match(part) {
+        return true;
+    }
     let token = part.trim_end_matches('=');
     if part.len() < 16
         || token.is_empty()
@@ -163,49 +171,29 @@ fn boundary(text: &str, start: usize) -> bool {
     start == 0 || !text.as_bytes()[start - 1].is_ascii_alphanumeric()
 }
 fn phones(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
-    static PHONE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"\+?[0-9](?:[ ().\-]*[0-9]){8,14}").expect("phone pattern"));
+    static PHONE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?:\+82[ .-]?(?:\(0\)[ .-]?|0)?|\(?0)(?:2|1[016789]|[3-6][1-5]|70|80|50[2-8]?)\)?[ .-]?[0-9]{3,4}[ .-]?[0-9]{4}").expect("phone pattern")
+    });
     let bytes = text.as_bytes();
     let mut cursor = 0;
     std::iter::from_fn(move || {
         loop {
             let hit = PHONE.find_at(text, cursor)?;
-            let (start, mut end) = (hit.start(), hit.end());
-            if start == 0 || !bytes[start - 1].is_ascii_digit() {
-                if bytes.get(end).is_some_and(u8::is_ascii_digit) {
-                    // The last digit group continues beyond the limit. Try the preceding group.
-                    while end > start && bytes[end - 1].is_ascii_digit() {
-                        end -= 1;
-                    }
-                    while end > start && !bytes[end - 1].is_ascii_digit() {
-                        end -= 1;
-                    }
-                    if bytes[start..end]
-                        .iter()
-                        .filter(|b| b.is_ascii_digit())
-                        .count()
-                        < 9
-                    {
-                        end = start;
-                    }
-                }
-                if end > start {
-                    cursor = end;
-                    return Some(start..end);
-                }
+            if (hit.start() == 0 || !bytes[hit.start() - 1].is_ascii_digit())
+                && !bytes.get(hit.end()).is_some_and(u8::is_ascii_digit)
+            {
+                cursor = hit.end();
+                return Some(hit.range());
             }
-            // Skip the rejected start, retaining later candidates after punctuation or whitespace.
-            cursor = start + 1;
-            if bytes[start].is_ascii_digit() {
-                while bytes.get(cursor).is_some_and(u8::is_ascii_digit) {
-                    cursor += 1;
-                }
-            }
+            cursor = hit.start() + 1;
         }
     })
 }
 fn private_segment(part: &str) -> bool {
-    if phones(part).next().is_some() || (part.contains([':', '=']) && NAMED_SECRET.is_match(part)) {
+    if phones(part).next().is_some()
+        || (part.contains([':', '='])
+            && (NAMED_SECRET.is_match(part) || QUOTED_SECRET.is_match(part)))
+    {
         return true;
     }
     if !part.is_ascii() || part.contains(['_', '=', '@', '%']) {
@@ -237,35 +225,13 @@ fn short_keys(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
             .map(|start| start..hit.end())
     })
 }
-fn mask_version(version: String) -> String {
-    static KEY: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_)[a-z0-9_.=\-]+")
-            .expect("version key prefixes")
-    });
-    let normalized = normalize(&version);
-    let mut spans: Vec<_> = KEY
-        .find_iter(&normalized)
-        .map(|m| m.range())
-        .chain(short_keys(&normalized))
-        .collect();
-    if spans.is_empty() {
-        return version;
-    }
-    spans.sort_by_key(|span| span.start);
-    let mut result = String::new();
-    let mut end = 0;
-    for span in spans {
-        if end <= span.start {
-            result.push_str(&normalized[end..span.start]);
-            result.push_str("[가림]");
-        }
-        end = end.max(span.end);
-    }
-    result.push_str(&normalized[end..]);
-    result.chars().take(64).collect()
-}
 pub(crate) fn mask(text: &str) -> String {
     let normalized = normalize(text);
+    let normalized = if normalized.contains(['"', '\'']) {
+        QUOTED_SECRET.replace_all(&normalized, "$1$2$3[가림]$2$3")
+    } else {
+        normalized
+    };
     let mut short = short_keys(&normalized).peekable();
     let mut phone = phones(&normalized).peekable();
     let mut values = normalized
@@ -507,7 +473,7 @@ pub fn prepare_ingest(
         })
         .collect();
     // Retain the release label for display validation unless it contains private data.
-    let version = mask_version(batch.app_version);
+    let version: String = mask(&batch.app_version).chars().take(64).collect();
     let rpc = json!({"app_key_hash":hash,"payload":{
         "batch_id":batch.batch_id,"app_version":version,"platform":batch.platform,"sent_at":batch.sent_at,
         "stats":stats,"attempts":attempts,"error_samples":samples

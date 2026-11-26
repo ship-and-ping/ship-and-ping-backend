@@ -183,6 +183,54 @@
     {
       "input": "tokenizer=one secret_hint: two",
       "expected": "tokenizer=one secret_hint: two"
+    },
+    {
+      "input": "token: Bearer abc; next",
+      "expected": "token: [가림]; next"
+    },
+    {
+      "input": "{\"api_key\":\"abc\",\"id\":1}",
+      "expected": "{\"api_key\":\"[가림]\",\"id\":1}"
+    },
+    {
+      "input": "\"password\": \"x\"",
+      "expected": "\"password\": \"[가림]\""
+    },
+    {
+      "input": "'secret':'y'",
+      "expected": "'secret':'[가림]'"
+    },
+    {
+      "input": "{\"MY-ACCESS_TOKEN\":\"Bearer abc def\",\"db_passwd\":\"a\\\"b\",\"pwd\":\"x,y\"}",
+      "expected": "{\"MY-ACCESS_TOKEN\":\"[가림]\",\"db_passwd\":\"[가림]\",\"pwd\":\"[가림]\"}"
+    },
+    {
+      "input": "\"secret_hint\":\"ok\"",
+      "expected": "\"secret_hint\":\"ok\""
+    },
+    {
+      "input": "1764120000 1764120000123",
+      "expected": "1764120000 1764120000123"
+    },
+    {
+      "input": "0111234567 010-123-4567",
+      "expected": "[가림] [가림]"
+    },
+    {
+      "input": "02-1234-5678 0311234567",
+      "expected": "[가림] [가림]"
+    },
+    {
+      "input": "+82 10 1234 5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "(02) 123-4567, 070.1234.5678",
+      "expected": "[가림], [가림]"
+    },
+    {
+      "input": "1764120000123 01012345678",
+      "expected": "1764120000123 [가림]"
     }
   ],
   "route": [
@@ -224,6 +272,14 @@
     },
     {
       "input": "/a/my_api_key=one",
+      "expected": "/a/:id"
+    },
+    {
+      "input": "/short/123456789abcdef",
+      "expected": "/short/:id"
+    },
+    {
+      "input": "/a/'secret':'y'",
       "expected": "/a/:id"
     }
   ]

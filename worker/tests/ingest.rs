@@ -24,6 +24,9 @@ fn app_version_preserves_build_times_and_masks_key_prefixes() {
     for (version, expected) in [
         ("2026.11.26.1530", "2026.11.26.1530"),
         ("1764120000", "1764120000"),
+        ("1764120000123", "1764120000123"),
+        ("token: Bearer abc", "token: [가림]"),
+        (r#"{"api_key":"abc"}"#, r#"{"api_key":"[가림]"}"#),
         ("v20261126-1530", "v20261126-1530"),
         ("1764120000-ＳＰ＿ＰＵＢ＿demo", "1764120000-[가림]"),
         ("v1-sk_abcdefghijklmnop", "v1-[가림]"),
@@ -344,7 +347,7 @@ fn shared_sanitize_vectors() {
     }
     let cases: Cases =
         serde_json::from_str(include_str!("../../docs/specs/sanitize-vectors.json")).unwrap();
-    assert_eq!((cases.mask.len(), cases.route.len()), (46, 10));
+    assert_eq!((cases.mask.len(), cases.route.len()), (58, 12));
     for case in cases.mask {
         let mut row = request();
         row["status"] = json!(500);
