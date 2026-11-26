@@ -290,7 +290,7 @@
     },
     {
       "input": "1764120000",
-      "expected": "1764120000"
+      "expected": "[가림]"
     },
     {
       "input": "1764120000123",
@@ -462,15 +462,15 @@
     },
     {
       "input": "1801015234567",
-      "expected": "1801015234567"
+      "expected": "[가림]"
     },
     {
       "input": "1577836800",
-      "expected": "1577836800"
+      "expected": "[가림]"
     },
     {
       "input": "2082758399",
-      "expected": "2082758399"
+      "expected": "[가림]"
     },
     {
       "input": "1577836800000",
@@ -555,6 +555,134 @@
     {
       "input": "\"tokens\": [\"a\",\n[\"b\"",
       "expected": "\"tokens\": [가림]"
+    },
+    {
+      "input": "privateKey=x",
+      "expected": "privateKey=[가림]"
+    },
+    {
+      "input": "accessKey=x",
+      "expected": "accessKey=[가림]"
+    },
+    {
+      "input": "clientKey=x",
+      "expected": "clientKey=[가림]"
+    },
+    {
+      "input": "apiKey=x",
+      "expected": "apiKey=[가림]"
+    },
+    {
+      "input": "ApiKey=x",
+      "expected": "ApiKey=[가림]"
+    },
+    {
+      "input": "secretToken=x",
+      "expected": "secretToken=[가림]"
+    },
+    {
+      "input": "refreshToken=x",
+      "expected": "refreshToken=[가림]"
+    },
+    {
+      "input": "dbPassword=x",
+      "expected": "dbPassword=[가림]"
+    },
+    {
+      "input": "userPwd=x",
+      "expected": "userPwd=[가림]"
+    },
+    {
+      "input": "key=x",
+      "expected": "key=[가림]"
+    },
+    {
+      "input": "_key=x",
+      "expected": "_key=[가림]"
+    },
+    {
+      "input": "-key=x",
+      "expected": "-key=[가림]"
+    },
+    {
+      "input": "prefix-key=x",
+      "expected": "prefix-key=[가림]"
+    },
+    {
+      "input": "pin2key=x",
+      "expected": "pin2key=[가림]"
+    },
+    {
+      "input": "xKEY=x",
+      "expected": "xKEY=[가림]"
+    },
+    {
+      "input": "PrivateKey=x",
+      "expected": "PrivateKey=[가림]"
+    },
+    {
+      "input": "hockey=x",
+      "expected": "hockey=x"
+    },
+    {
+      "input": "turkey=x",
+      "expected": "turkey=x"
+    },
+    {
+      "input": "\"credentials\": { \"key\": \"x\" }",
+      "expected": "\"credentials\": [가림]"
+    },
+    {
+      "input": "\"token\" : \"abc\"",
+      "expected": "\"token\" : \"[가림]\""
+    },
+    {
+      "input": "\"credentials\"\n : {\n \"items\": [{\"value\":\"}\"}],\n \"other\": 1\n}, \"ok\": 2",
+      "expected": "\"credentials\"\n : [가림], \"ok\": 2"
+    },
+    {
+      "input": "aUtHoRiZaTiOn: abc123 extra,tail\nok",
+      "expected": "[가림]\nok"
+    },
+    {
+      "input": "aUtHoRiZaTiOn: ApiKey xxx extra,tail\nok",
+      "expected": "[가림]\nok"
+    },
+    {
+      "input": "aUtHoRiZaTiOn: Token xxx extra,tail\nok",
+      "expected": "[가림]\nok"
+    },
+    {
+      "input": "aUtHoRiZaTiOn: Basic xxx extra,tail\nok",
+      "expected": "[가림]\nok"
+    },
+    {
+      "input": "aUtHoRiZaTiOn: Bearer xxx extra,tail\nok",
+      "expected": "[가림]\nok"
+    },
+    {
+      "input": "1801016234567",
+      "expected": "[가림]"
+    },
+    {
+      "input": "1801017234567",
+      "expected": "[가림]"
+    },
+    {
+      "input": "1801018234567",
+      "expected": "[가림]"
+    },
+    {
+      "input": "2025550100",
+      "expected": "[가림]"
+    },
+    {
+      "input": "2085550100",
+      "expected": "[가림]"
+    },
+    {
+      "input": "-keyring=x",
+      "expected": "-keyring=[가림]"
     }
   ],
   "route": [
@@ -609,6 +737,14 @@
     {
       "input": "/a/api_key%3Dabc",
       "expected": "/a/:id"
+    },
+    {
+      "input": "/a/2025550100/1764120000123",
+      "expected": "/a/:id/:id"
+    },
+    {
+      "input": "/a/privateKey=x",
+      "expected": "/a/:id"
     }
   ],
   "version": [
@@ -623,6 +759,10 @@
     {
       "input": "2026.02.1530.0001",
       "expected": "2026.02.1530.0001"
+    },
+    {
+      "input": "2025550100",
+      "expected": "2025550100"
     }
   ]
 }

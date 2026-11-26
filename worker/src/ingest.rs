@@ -14,8 +14,7 @@ const BOUNDS: [u32; 15] = [
 static PRIVATE: LazyLock<Vec<Regex>> =
     LazyLock::new(|| {
         [
-        r"(?-u:\b)(?:set-cookie|cookie)[ \t]*:[^\r\n]*",
-        r#"(?-u:\b)authorization[ \t]*:[ \t]*token[ \t]+[^\s,;&#"']+"#,
+        r"(?-u:\b)(?:set-cookie|cookie|authorization)[ \t]*:[^\r\n]*",
         r#"(?-u:\b)bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;&#"']+"#,
         r"(?-u:\b)basic[ \t]+(?-iu:[A-Za-z0-9+/]{14,}==|[A-Za-z0-9+/]{15,}=|[A-Za-z0-9+/]{16,})",
         r"(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|(?-u:\b)eyJ)[a-z0-9_.=\-]+",
@@ -27,9 +26,9 @@ static SHORT_KEY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i-u:sk_|pk_|rk_)[A-Za-z0-9_]{16,}").expect("short key pattern")
 });
 static CREDENTIAL_NAME: LazyLock<Regex> = LazyLock::new(|| {
-    let name = r"(?:[a-z0-9_-]*(?:token|secret|password|passwd|pwd|apikey)[a-z0-9_-]*|(?:[a-z0-9_-]+[_-])?keys?(?:[_-][a-z0-9_-]+)?)";
+    let name = r"(?:[A-Za-z0-9_-]*(?:(?i:token|secret|password|passwd|pwd|apikey|credential)|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)";
     Regex::new(&format!(
-        r#"(?i)(?:\\*["']{name}\\*["']|(?-u:\b){name})\s*(?:=>|:|=|%3d)\s*"#
+        r#"(?:\\*["']{name}\\*["']|{name})\s*(?:=>|:|=|%3[dD])\s*"#
     ))
     .unwrap()
 });
@@ -180,22 +179,20 @@ fn phones(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
     });
     PHONE.find_iter(text).filter_map(|hit| {
         let value = hit.as_str();
-        let timestamp = matches!(value.len(), 10 | 13)
+        let timestamp = value.len() == 13
             && value.bytes().all(|b| b.is_ascii_digit())
             && (1577836800..=2082758399).contains(&value[..10].parse::<u64>().unwrap())
-            && !(value.len() == 13
-                && value
-                    .bytes()
-                    .enumerate()
-                    .map(|(i, c)| {
-                        let n = u32::from(c - b'0') * (1 + i as u32 % 2);
-                        if n > 9 { n - 9 } else { n }
-                    })
-                    .sum::<u32>()
-                    % 10
-                    == 0)
-            && !(value.len() == 13
-                && matches!(value.as_bytes()[6], b'1'..=b'4')
+            && !(value
+                .bytes()
+                .enumerate()
+                .map(|(i, c)| {
+                    let n = u32::from(c - b'0') * (1 + i as u32 % 2);
+                    if n > 9 { n - 9 } else { n }
+                })
+                .sum::<u32>()
+                % 10
+                == 0)
+            && !(matches!(value.as_bytes()[6], b'1'..=b'8')
                 && chrono::NaiveDate::from_ymd_opt(
                     2000 + value[..2].parse::<i32>().unwrap(),
                     value[2..4].parse().unwrap(),
@@ -205,9 +202,16 @@ fn phones(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
         (!timestamp).then(|| hit.range())
     })
 }
+fn credential_names(text: &str) -> impl Iterator<Item = regex::Match<'_>> {
+    CREDENTIAL_NAME.find_iter(text).filter(|m| {
+        m.as_str().starts_with(['\\', '"', '\''])
+            || m.start() == 0
+            || !matches!(text.as_bytes()[m.start() - 1], b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_')
+    })
+}
 fn private_segment(part: &str) -> bool {
     phones(part).next().is_some()
-        || CREDENTIAL_NAME.is_match(part)
+        || credential_names(part).next().is_some()
         || PRIVATE.iter().any(|p| p.is_match(part))
         || short_keys(part).next().is_some()
 }
@@ -269,7 +273,8 @@ fn value_span(text: &str, start: usize) -> Option<std::ops::Range<usize>> {
         }
         return Some(body..bytes.len());
     }
-    if bytes.get(start) == Some(&b'[') {
+    if let Some(&open @ (b'[' | b'{')) = bytes.get(start) {
+        let close = if open == b'[' { b']' } else { b'}' };
         let mut depth = 0;
         let mut quoted = false;
         let mut iter = bytes.iter().enumerate().skip(start);
@@ -279,8 +284,8 @@ fn value_span(text: &str, start: usize) -> Option<std::ops::Range<usize>> {
                     iter.next();
                 }
                 b'"' => quoted = !quoted,
-                b'[' if !quoted => depth += 1,
-                b']' if !quoted => {
+                c if !quoted && c == open => depth += 1,
+                c if !quoted && c == close => {
                     depth -= 1;
                     if depth == 0 {
                         return Some(start..index + 1);
@@ -303,11 +308,7 @@ pub(crate) fn mask(text: &str) -> String {
         .flat_map(|p| p.find_iter(&text).map(|m| m.range()))
         .chain(short_keys(&text))
         .chain(phones(&text))
-        .chain(
-            CREDENTIAL_NAME
-                .find_iter(&text)
-                .filter_map(|m| value_span(&text, m.end())),
-        )
+        .chain(credential_names(&text).filter_map(|m| value_span(&text, m.end())))
         .collect();
     spans.sort_by_key(|r| r.start);
     let mut result = String::new();

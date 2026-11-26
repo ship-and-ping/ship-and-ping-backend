@@ -1,7 +1,7 @@
 create or replace function private.credential_value_pattern() returns text
 language sql immutable set search_path = '' as $$
-  select format($pat$(?i)(?:\\*["']%1$s\\*["']|(?<![a-z0-9_])%1$s)\s*(?:=>|:|=|%%3d)\s*$pat$,
-    '(?:[a-z0-9_-]*(?:token|secret|password|passwd|pwd|apikey)[a-z0-9_-]*|(?:[a-z0-9_-]+[_-])?keys?(?:[_-][a-z0-9_-]+)?)')
+  select format($pat$(?:\\*["']%1$s\\*["']|(?<![A-Za-z0-9_])%1$s)\s*(?:=>|:|=|%%3[dD])\s*$pat$,
+    '(?:[A-Za-z0-9_-]*(?:[tT][oO][kK][eE][nN]|[sS][eE][cC][rR][eE][tT]|[pP][aA][sS][sS][wW][oO][rR][dD]|[pP][aA][sS][sS][wW][dD]|[pP][wW][dD]|[aA][pP][iI][kK][eE][yY]|[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL]|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)')
 $$;
 
 create or replace function private.numeric_pattern() returns text
@@ -12,8 +12,7 @@ $$;
 create or replace function private.mask_patterns() returns text[]
 language sql immutable set search_path = '' as $$
   select array[
-    '(?<![A-Za-z0-9_])(?:set-cookie|cookie)[ \t]*:[^\r\n]*',
-    '(?<![A-Za-z0-9_])authorization[ \t]*:[ \t]*token[ \t]+[^\s,;&#"'']+',
+    '(?<![A-Za-z0-9_])(?:set-cookie|cookie|authorization)[ \t]*:[^\r\n]*',
     '(?<![A-Za-z0-9_])bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;&#"'']+',
     '(?<![A-Za-z0-9_])basic[ \t]+(?:[A-Za-z0-9+/]{14,}==|[A-Za-z0-9+/]{15,}=|[A-Za-z0-9+/]{16,})',
     '(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|(?<![A-Za-z0-9_])eyJ)[a-z0-9_.=-]+',
@@ -37,16 +36,15 @@ language plpgsql immutable strict set search_path = '' as $$
 declare
   yy int; mm int; dd int; digit int; checksum int := 0;
 begin
-  if n !~ '^(?:[0-9]{10}|[0-9]{13})$'
+  if n !~ '^[0-9]{13}$'
     or left(n, 10) collate "C" not between '1577836800' and '2082758399' then return false; end if;
-  if length(n) = 10 then return true; end if;
   for i in 1..13 loop
     digit := substr(n,i,1)::int * (1 + (i-1)%2);
     checksum := checksum + digit - case when digit > 9 then 9 else 0 end;
   end loop;
   if checksum % 10 = 0 then return false; end if;
   yy := 2000 + left(n,2)::int; mm := substr(n,3,2)::int; dd := substr(n,5,2)::int;
-  if substr(n,7,1) not between '1' and '4' or mm not between 1 and 12 then return true; end if;
+  if substr(n,7,1) not between '1' and '8' or mm not between 1 and 12 then return true; end if;
   return dd not between 1 and extract(day from make_date(yy,mm,1) + interval '1 month - 1 day');
 end $$;
 
@@ -70,14 +68,14 @@ begin
       slashes := case when c = '\' then slashes+1 else 0 end;
     end loop;
     return int4range(body,n+1);
-  elsif substr(t,pos,1) = '[' then
+  elsif q in ('[', '{') then
     i := pos;
     while i <= n loop
       c := substr(t,i,1);
       if quoted and c = '\' then i := i+1;
       elsif c = '"' then quoted := not quoted;
-      elsif not quoted and c = '[' then depth := depth+1;
-      elsif not quoted and c = ']' then
+      elsif not quoted and c = q then depth := depth+1;
+      elsif not quoted and c = (case q when '[' then ']' else '}' end) then
         depth := depth-1;
         if depth = 0 then return int4range(pos,i+1); end if;
       end if;

@@ -19,7 +19,7 @@ it.each(vectors.route)("route %#", ({ input, expected }) => {
 it.each(["mask", "route", "version"] as const)("pgTAP mirrors every %s row", (kind) => {
   const fn = kind === "version" ? "pg_temp.stored_version" : `private.${kind}`;
   const block = sql.split(`${fn}(input)`)[1].split(") as cases")[0];
-  const rows = [...block.matchAll(/^  \((\d+), (.+), (.+)\),?$/gm)];
+  const rows = [...block.matchAll(/^  \((\d+), (E'.*?'), (E'.*')\),?$/gm)];
   function readText(expr: string) {
     return expr.split(" || ").map(s => JSON.parse('"' + s.slice(2, -1) + '"')).join("");
   }

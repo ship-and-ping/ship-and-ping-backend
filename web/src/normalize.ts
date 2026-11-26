@@ -15,13 +15,15 @@ export function normalizePromptInput(value: string): string {
 
 // Header and credential names can follow Korean text.
 const start = "(?<![A-Za-z0-9_])";
-const name = "(?:[a-z0-9_-]*(?:token|secret|password|passwd|pwd|apikey)[a-z0-9_-]*|(?:[a-z0-9_-]+[_-])?keys?(?:[_-][a-z0-9_-]+)?)";
-const credentialName = new RegExp(String.raw`(?:\\*["']${name}\\*["']|${start}${name})\s*(?:=>|:|=|%3d)\s*`, "gi");
+// Fold the credential words independently so lowercase "key" can retain its word boundaries.
+const words = "token|secret|password|passwd|pwd|apikey|credential"
+  .replace(/[a-z]/g, letter => `[${letter}${letter.toUpperCase()}]`);
+const name = `(?:[A-Za-z0-9_-]*(?:${words}|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)`;
+const credentialName = new RegExp(String.raw`(?:\\*["']${name}\\*["']|${start}${name})\s*(?:=>|:|=|%3[dD])\s*`, "g");
 const bareValue = /^(?:(?:bearer|basic)(?:[ \t]*:[ \t]*|[ \t]+))?(?:\[가림\]|\\[^"\s]|[^"'\\\s,;&#])(?:[^\s,;}\]&#]|[}\]]+[^\s,;}\]&#])*/i;
 const numeric = /\+?\(?[0-9](?:[ ().\/_\t֊־᐀᠆‐‑‒–—―⸗⸚⸺⸻⹀⹝〜〰゠︱︲﹘﹣－𐵮𐺭−-]*[0-9]){8,}\)?/g;
 const privatePatterns = [
-  start + /(?:set-cookie|cookie)[ \t]*:[^\r\n]*/.source,
-  start + /authorization[ \t]*:[ \t]*token[ \t]+[^\s,;&#"']+/.source,
+  start + /(?:set-cookie|cookie|authorization)[ \t]*:[^\r\n]*/.source,
   start + /bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;&#"']+/.source,
   start + /basic[ \t]+(?:[a-z0-9+/]{14,}==|[a-z0-9+/]{15,}=|[a-z0-9+/]{16,})/.source,
   "(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|" + start + "eyJ)[a-z0-9_.=-]+",
@@ -46,13 +48,14 @@ function valueSpan(text: string, start: number): Span | undefined {
     }
     return [body, pos];
   }
-  if (text[start] === "[") {
+  if (text[start] === "[" || text[start] === "{") {
+    const close = text[start] === "[" ? "]" : "}";
     let depth = 0, quoted = false;
     for (pos = start; pos < text.length; pos++) {
       if (quoted && text[pos] === "\\") pos++;
       else if (text[pos] === '"') quoted = !quoted;
-      else if (!quoted && text[pos] === "[") depth++;
-      else if (!quoted && text[pos] === "]" && --depth === 0) return [start, pos + 1];
+      else if (!quoted && text[pos] === text[start]) depth++;
+      else if (!quoted && text[pos] === close && --depth === 0) return [start, pos + 1];
     }
     return [start, text.length];
   }
@@ -61,10 +64,9 @@ function valueSpan(text: string, start: number): Span | undefined {
 }
 
 function isTimestamp(number: string) {
-  if (!/^(?:[0-9]{10}|[0-9]{13})$/.test(number)) return false;
+  if (!/^[0-9]{13}$/.test(number)) return false;
   const seconds = Number(number.slice(0, 10));
   if (seconds < 1577836800 || seconds > 2082758399) return false;
-  if (number.length === 10) return true;
   // All other 13–19 digit candidates are already masked by the numeric rule.
   let sum = 0;
   for (let i = 0; i < number.length; i++) {
@@ -72,7 +74,7 @@ function isTimestamp(number: string) {
     sum += digit > 9 ? digit - 9 : digit;
   }
   if (sum % 10 === 0) return false;
-  if (!/[1-4]/.test(number[6])) return true;
+  if (!/[1-8]/.test(number[6])) return true;
   const year = 2000 + Number(number.slice(0, 2));
   const month = Number(number.slice(2, 4)), day = Number(number.slice(4, 6));
   return month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate();

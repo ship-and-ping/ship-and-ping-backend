@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(155);
+select plan(190);
 
 select is(private.mask(input), expected, 'mask ' || id)
 from (values
@@ -77,7 +77,7 @@ from (values
   (70, E'2147483648', E'[가림]'),
   (71, E'2147483648000', E'[가림]'),
   (72, E'12345678', E'12345678'),
-  (73, E'1764120000', E'1764120000'),
+  (73, E'1764120000', E'[가림]'),
   (74, E'1764120000123', E'1764120000123'),
   (75, E'1000000000', E'[가림]'),
   (76, E'2147483647', E'[가림]'),
@@ -120,9 +120,9 @@ from (values
   (113, E'0101234 5678@x.co', E'[가림]'),
   (114, E'Authorization: Token abc', E'[가림]'),
   (115, E'1902293234567', E'1902293234567'),
-  (116, E'1801015234567', E'1801015234567'),
-  (117, E'1577836800', E'1577836800'),
-  (118, E'2082758399', E'2082758399'),
+  (116, E'1801015234567', E'[가림]'),
+  (117, E'1577836800', E'[가림]'),
+  (118, E'2082758399', E'[가림]'),
   (119, E'1577836800000', E'1577836800000'),
   (120, E'2082758399999', E'2082758399999'),
   (121, E'keyboard=abc', E'keyboard=abc'),
@@ -143,7 +143,39 @@ from (values
   (136, E'010֊1234֊5678', E'[가림]'),
   (137, E'sp' || E'_srv_demo@example.test', E'[가림]'),
   (138, E'token=\"\"', E'token=\"\"'),
-  (139, E'\"tokens\": [\"a\",\n[\"b\"', E'\"tokens\": [가림]')
+  (139, E'\"tokens\": [\"a\",\n[\"b\"', E'\"tokens\": [가림]'),
+  (140, E'privateKey=x', E'privateKey=[가림]'),
+  (141, E'accessKey=x', E'accessKey=[가림]'),
+  (142, E'clientKey=x', E'clientKey=[가림]'),
+  (143, E'apiKey=x', E'apiKey=[가림]'),
+  (144, E'ApiKey=x', E'ApiKey=[가림]'),
+  (145, E'secretToken=x', E'secretToken=[가림]'),
+  (146, E'refreshToken=x', E'refreshToken=[가림]'),
+  (147, E'dbPassword=x', E'dbPassword=[가림]'),
+  (148, E'userPwd=x', E'userPwd=[가림]'),
+  (149, E'key=x', E'key=[가림]'),
+  (150, E'_key=x', E'_key=[가림]'),
+  (151, E'-key=x', E'-key=[가림]'),
+  (152, E'prefix-key=x', E'prefix-key=[가림]'),
+  (153, E'pin2key=x', E'pin2key=[가림]'),
+  (154, E'xKEY=x', E'xKEY=[가림]'),
+  (155, E'PrivateKey=x', E'PrivateKey=[가림]'),
+  (156, E'hockey=x', E'hockey=x'),
+  (157, E'turkey=x', E'turkey=x'),
+  (158, E'\"credentials\": { \"key\": \"x\" }', E'\"credentials\": [가림]'),
+  (159, E'\"token\" : \"abc\"', E'\"token\" : \"[가림]\"'),
+  (160, E'\"credentials\"\n : {\n \"items\": [{\"value\":\"}\"}],\n \"other\": 1\n}, \"ok\": 2', E'\"credentials\"\n : [가림], \"ok\": 2'),
+  (161, E'aUtHoRiZaTiOn: abc123 extra,tail\nok', E'[가림]\nok'),
+  (162, E'aUtHoRiZaTiOn: ApiKey xxx extra,tail\nok', E'[가림]\nok'),
+  (163, E'aUtHoRiZaTiOn: Token xxx extra,tail\nok', E'[가림]\nok'),
+  (164, E'aUtHoRiZaTiOn: Basic xxx extra,tail\nok', E'[가림]\nok'),
+  (165, E'aUtHoRiZaTiOn: Bearer xxx extra,tail\nok', E'[가림]\nok'),
+  (166, E'1801016234567', E'[가림]'),
+  (167, E'1801017234567', E'[가림]'),
+  (168, E'1801018234567', E'[가림]'),
+  (169, E'2025550100', E'[가림]'),
+  (170, E'2085550100', E'[가림]'),
+  (171, E'-keyring=x', E'-keyring=[가림]')
 ) as cases(id, input, expected);
 
 select is(private.route(input), expected, 'route ' || id)
@@ -160,7 +192,9 @@ from (values
   (10, E'/a/my_api_key=one', E'/a/:id'),
   (11, E'/short/123456789abcdef', E'/short/:id'),
   (12, E'/a/\u0027secret\u0027:\u0027y\u0027', E'/a/:id'),
-  (13, E'/a/api_key%3Dabc', E'/a/:id')
+  (13, E'/a/api_key%3Dabc', E'/a/:id'),
+  (14, E'/a/2025550100/1764120000123', E'/a/:id/:id'),
+  (15, E'/a/privateKey=x', E'/a/:id')
 ) as cases(id, input, expected);
 
 -- The database receives Worker-sanitized versions through the aggregate RPC.
@@ -184,7 +218,8 @@ select is(pg_temp.stored_version(input), expected, 'version ' || id)
 from (values
   (1, E'2026.11.26.1530', E'2026.11.26.1530'),
   (2, E'v20261126-1530', E'v20261126-1530'),
-  (3, E'2026.02.1530.0001', E'2026.02.1530.0001')
+  (3, E'2026.02.1530.0001', E'2026.02.1530.0001'),
+  (4, E'2025550100', E'2025550100')
 ) as cases(id, input, expected);
 
 select * from finish();
