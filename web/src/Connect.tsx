@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Gateway, Label, Snapshot } from "./data";
-import { buildConnectPrompt, connectRestriction } from "./domain";
+import { buildConnectPrompt, connectRestriction, keyWarning } from "./domain";
 import { displayText, sanitizeRoute } from "./normalize";
 import { Hero, CurrentAppName } from "./Layout";
 
@@ -28,14 +28,14 @@ export function Copy({
   text,
   title,
   secret = false,
-  publicKey,
+  previewKey,
   onCopy,
   compact = false,
 }: {
   text: string;
   title: string;
   secret?: boolean;
-  publicKey?: string;
+  previewKey?: string;
   onCopy?: () => void;
   compact?: boolean;
 }) {
@@ -44,8 +44,8 @@ export function Copy({
   );
   const area = useRef<HTMLTextAreaElement>(null);
   const locked = useRef(false);
-  const preview = publicKey
-    ? text.replace(publicKey, publicKey.slice(0, 8) + "••••")
+  const preview = previewKey
+    ? text.replace(previewKey, previewKey.slice(0, 8) + "••••")
     : text;
   useEffect(() => {
     if (state !== "done") return;
@@ -143,6 +143,9 @@ export function Connect({
   const [error, setError] = useState("");
   const [pub, setPub] = useState(initialKey);
   const [server, setServer] = useState("");
+  const [kind, setKind] = useState<"pub" | "srv">("pub");
+  const appKey = kind === "pub" ? pub : server;
+  const keyTitle = kind === "pub" ? "수집 키" : "서버 키";
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [edits, setEdits] = useState<Record<string, Label>>({});
@@ -367,51 +370,25 @@ export function Connect({
             <section className="panel">
               <h2>연결 요청문</h2>
               <p>휴대폰 앱(플레이스토어·앱스토어)이라면 앱 서버에서 기록을 보내도록 <a href="#server-key"><strong>서버 있음</strong></a>을 골라 주세요. 휴대폰 앱 코드는 바꾸지 않아도 돼요.</p>
-              {pub ? (
-                <>
-                  <p>
-                    요청문에는 비밀 키가 들어가지 않아요. 복사하기 전에 전체
-                    내용을 확인할 수 있어요.
-                  </p>
-                  <Copy
-                    text={buildConnectPrompt(pub, ingest)}
-                    title="연결 요청 복사"
-                    publicKey={pub}
-                    onCopy={() => setCopied(true)}
-                  />
-                  <p>
-                    다른 사람에게 보내지 마세요. 코딩 AI가 바꾼 코드는 배포 전에
-                    한 번 확인해 주세요.
-                  </p>
-                </>
+              <div id="server-key" className="actions" aria-label="기록을 보내는 곳">
+                {(["pub", "srv"] as const).map(option => (
+                  <button key={option} className="secondary" disabled={busy} aria-pressed={kind === option}
+                    onClick={() => { setKind(option); setCopied(false); }}>
+                    {option === "srv" ? "서버 있음" : "브라우저만"}
+                  </button>
+                ))}
+              </div>
+              {appKey ? (
+                <div key={kind}>
+                  <Copy text={buildConnectPrompt(appKey, ingest)} title="연결 요청문 복사(키 포함)"
+                    previewKey={appKey} onCopy={() => setCopied(true)} />
+                  <p>{keyWarning}</p>
+                  <Copy text={appKey} title={keyTitle + " 복사"} secret />
+                </div>
               ) : (
                 <>
-                  <p>
-                    발급한 키는 이 화면을 떠나면 다시 볼 수 없어요. 새 키를
-                    만들면 이전 키는 24시간 뒤에 멈춰요.
-                  </p>
-                  <button disabled={busy} onClick={() => issue("pub")}>
-                    새 수집 키 발급
-                  </button>
-                </>
-              )}
-              <h3 id="server-key" tabIndex={-1}>서버가 있는 앱</h3>
-              <p>
-                서버 키는 배포 설정(환경변수 <code>SHIPPING_SERVER_KEY</code>)에 직접
-                넣으세요. 코딩 AI 대화나 코드에 붙여넣지 마세요.
-              </p>
-              {server ? (
-                <Copy text={server} title="서버 키 복사" secret />
-              ) : (
-                <>
-                  <p>서버 키를 발급하면 이전 서버 키는 24시간 뒤에 멈춰요.</p>
-                  <button
-                    className="secondary"
-                    disabled={busy}
-                    onClick={() => issue("srv")}
-                  >
-                    서버 키 발급
-                  </button>
+                  <p>키를 다시 받아야 해요. 새 키를 만들면 이전 키는 24시간 뒤에 멈춰요.</p>
+                  <button disabled={busy} onClick={() => issue(kind)}>{keyTitle} 재발급</button>
                 </>
               )}
             </section>

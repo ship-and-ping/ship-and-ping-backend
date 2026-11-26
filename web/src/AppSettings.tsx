@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { CurrentAppName } from "./Layout";
 import { Copy } from "./Connect";
 import { displayText, sanitizeRoute } from "./normalize";
-import { appAddressHelp, appAddressLabel, validateApp } from "./domain";
+import { appAddressHelp, appAddressLabel, buildReplacementPrompt, keyWarning, validateApp } from "./domain";
 import type { Gateway, KeySummary, Label, Snapshot } from "./data";
 
 export function AppSettings({ api }: { api: Gateway }) {
@@ -186,6 +186,9 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
           </section>
           {(["pub", "srv"] as const).map((kind) => {
             const title = kind === "srv" ? "서버 키" : "수집 키";
+            const fresh = issued[kind];
+            const markCopied = () => setIssued(current => fresh && current[kind] === fresh
+              ? { ...current, [kind]: { ...fresh, copied: true } } : current);
             return (
               <section className="panel" key={kind}>
                 <h2>{title}</h2>
@@ -247,20 +250,15 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
                 >
                   {title} 재발급
                 </button>
-                {kind === "srv" && (
-                  <p>
-                    배포 설정의 환경변수 SHIPPING_SERVER_KEY에 직접 넣으세요.
-                    코딩 AI 대화나 코드에 붙여넣지 마세요.
-                  </p>
-                )}
-                {issued[kind] && (
-                  <div>
+                {fresh && (
+                  <div key={fresh.raw}>
                     <p>
                       새 키를 만들었어요. 이 화면을 떠나면 다시 볼 수 없어요.
                     </p>
-                    <Copy key={issued[kind].raw} text={issued[kind].raw} title={title+" 복사"} secret
-                      onCopy={()=>setIssued(current=> current[kind]===issued[kind]
-                        ? {...current,[kind]:{...issued[kind],copied:true}} : current)}/>
+                    <Copy text={buildReplacementPrompt(fresh.raw)} title="키 교체 요청문 복사(새 키 포함)"
+                      previewKey={fresh.raw} onCopy={markCopied} />
+                    <p>{keyWarning}</p>
+                    <Copy text={fresh.raw} title={title + " 복사"} secret onCopy={markCopied} />
                   </div>
                 )}
               </section>

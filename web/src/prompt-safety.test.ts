@@ -1,20 +1,29 @@
 import { describe, it, expect } from "vitest";
-import { buildConnectPrompt } from "./domain";
+import { buildConnectPrompt, buildReplacementPrompt } from "./domain";
 import { normalizePromptInput } from "./normalize";
 
 const publicKey = "sp_pub_" + "a".repeat(64);
 describe("요청문에 삽입되는 값", () => {
-  it("재복사할 전문이 같고 키는 인용한 수집 키 한 곳뿐이다", () => {
-    const first = buildConnectPrompt(publicKey, "https://collect.example.test");
+  it.each([publicKey, "sp_srv_" + "b".repeat(64)])("고른 키 하나만 고정 줄에 넣고 재복사한다", (key) => {
+    const first = buildConnectPrompt(key, "https://collect.example.test");
     expect(first).toBe(
-      buildConnectPrompt(publicKey, "https://collect.example.test"),
+      buildConnectPrompt(key, "https://collect.example.test"),
     );
     expect(first.match(/sp_(?:pub|srv)_|sb_(?:publishable|secret)_/gi)).toEqual(
-      ["sp_pub_"],
+      [key.slice(0, 7)],
     );
-    expect(first).toContain('"' + publicKey + '"');
+    expect(first.split("\n")).toContain("이 앱의 쉽앤핑 키: " + key);
     expect(first).toContain('"https://collect.example.test/v1/ingest"');
-    expect(first).toContain("배포 설정");
+    expect(first).toContain("SHIP_AND_PING_KEY");
+    const replacement = buildReplacementPrompt(key);
+    expect(replacement.split("\n")).toContain("이 앱의 새 쉽앤핑 키: " + key);
+    expect(replacement.match(/sp_(?:pub|srv)_\w+/g)).toEqual([key]);
+    for (const prompt of [first, replacement]) {
+      expect(prompt).toContain(".gitignore");
+      expect(prompt).toContain("3~4단계");
+      expect(prompt).toContain("코드나 커밋에 남지 않았는지 검색");
+      expect(prompt).toContain(key.startsWith("sp_pub_") ? "쓰기 전용 키" : "서버에서만 사용");
+    }
   });
   it.each([
     "sp_srv_",

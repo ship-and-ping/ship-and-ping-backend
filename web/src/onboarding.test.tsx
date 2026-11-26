@@ -285,6 +285,10 @@ it("S10 copies only the newly issued key of the selected app",async()=>{
       fireEvent.click(await screen.findByRole("button",{name:"서버 키 복사"}));
       expect(api.issue).toHaveBeenCalledWith(id,"srv");
       expect(copy).toHaveBeenLastCalledWith(raw);
+      fireEvent.click(screen.getByRole("button",{name:"키 교체 요청문 복사(새 키 포함)"}));
+      const prompt = copy.mock.lastCall?.[0] as string;
+      expect(prompt.match(/sp_(?:pub|srv)_\w+/g)).toEqual([raw]);
+      expect(prompt.split("\n")).toContain("이 앱의 새 쉽앤핑 키: " + raw);
       expect(document.body.textContent).not.toContain(raw);
       cleanup();
     }
@@ -367,9 +371,9 @@ it("서버 키 복사는 현재 앱에 한정되고 요청문은 다시 복사�
   });
   open("/apps/a/connect", api);
   fireEvent.click(
-    await screen.findByRole("button", { name: "새 수집 키 발급" }),
+    await screen.findByRole("button", { name: "수집 키 재발급" }),
   );
-  const copy = await screen.findByRole("button", { name: "연결 요청 복사" });
+  const copy = await screen.findByRole("button", { name: "연결 요청문 복사(키 포함)" });
   vi.useFakeTimers();
   await act(async () => {
     fireEvent.click(copy);
@@ -384,7 +388,8 @@ it("서버 키 복사는 현재 앱에 한정되고 요청문은 다시 복사�
   fireEvent.click(copy);
   expect(writeText.mock.calls[0][0]).toBe(writeText.mock.calls[1][0]);
   expect(writeText.mock.calls[0][0]).toBe(buildConnectPrompt(pub, base));
-  fireEvent.click(screen.getByRole("button", { name: "서버 키 발급" }));
+  fireEvent.click(screen.getByRole("button", { name: "서버 있음" }));
+  fireEvent.click(await screen.findByRole("button", { name: "서버 키 재발급" }));
   fireEvent.click(await screen.findByRole("button", { name: "서버 키 복사" }));
   expect(writeText).toHaveBeenLastCalledWith(secret);
   expect(new XMLSerializer().serializeToString(document.body)).not.toContain(
@@ -392,9 +397,12 @@ it("서버 키 복사는 현재 앱에 한정되고 요청문은 다시 복사�
   );
   fireEvent.click(screen.getByRole("link", { name: "내 앱" }));
   fireEvent.click(await screen.findByRole("link", { name: /두 번째 앱/ }));
-  fireEvent.click(await screen.findByRole("button", { name: "서버 키 발급" }));
+  fireEvent.click(await screen.findByRole("button", { name: "서버 있음" }));
+  fireEvent.click(await screen.findByRole("button", { name: "서버 키 재발급" }));
   fireEvent.click(await screen.findByRole("button", { name: "서버 키 복사" }));
   expect(writeText).toHaveBeenLastCalledWith("sp_srv_" + "2".repeat(64));
+  fireEvent.click(screen.getByRole("button", { name: "연결 요청문 복사(키 포함)" }));
+  expect(writeText).toHaveBeenLastCalledWith(buildConnectPrompt("sp_srv_" + "2".repeat(64), base));
 });
 it.each([
   [true, "앱 등록"],
@@ -416,14 +424,14 @@ it("클립보드가 막히면 직접 복사할 전문을 선택한다", async ()
   });
   open("/apps/a/connect", api);
   fireEvent.click(
-    await screen.findByRole("button", { name: "새 수집 키 발급" }),
+    await screen.findByRole("button", { name: "수집 키 재발급" }),
   );
   fireEvent.click(
-    await screen.findByRole("button", { name: "연결 요청 복사" }),
+    await screen.findByRole("button", { name: "연결 요청문 복사(키 포함)" }),
   );
   await screen.findByText(/자동 복사가 막혔어요/);
   const field = screen.getByLabelText(
-    "연결 요청 복사 전문",
+    "연결 요청문 복사(키 포함) 전문",
   ) as HTMLTextAreaElement;
   expect(document.activeElement).toBe(field);
   expect(field.selectionEnd - field.selectionStart).toBe(field.value.length);
@@ -448,7 +456,7 @@ it("등록한 수집 키는 미리 보기에서 가리고 화면을 다시 열�
   });
   fireEvent.click(screen.getByRole("button", { name: "등록" }));
   const preview = (await screen.findByLabelText(
-    "연결 요청 복사 전문",
+    "연결 요청문 복사(키 포함) 전문",
   )) as HTMLTextAreaElement;
   expect(api.create).toHaveBeenCalledWith("내 앱", "");
   expect(api.issue).toHaveBeenCalledWith("a", "pub");
@@ -457,7 +465,7 @@ it("등록한 수집 키는 미리 보기에서 가리고 화면을 다시 열�
   fireEvent.click(screen.getByRole("link", { name: "내 앱" }));
   fireEvent.click(await screen.findByRole("link", { name: /모임모아/ }));
   expect(
-    await screen.findByRole("button", { name: "새 수집 키 발급" }),
+    await screen.findByRole("button", { name: "수집 키 재발급" }),
   ).toBeTruthy();
   expect(api.issue).toHaveBeenCalledTimes(1);
 });
@@ -501,7 +509,8 @@ it("서버 키 복사가 거절되어도 DOM에 원문을 남기지 않는다", 
     value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
   });
   open("/apps/a/connect");
-  fireEvent.click(await screen.findByRole("button", { name: "서버 키 발급" }));
+  fireEvent.click(await screen.findByRole("button", { name: "서버 있음" }));
+  fireEvent.click(await screen.findByRole("button", { name: "서버 키 재발급" }));
   fireEvent.click(await screen.findByRole("button", { name: "서버 키 복사" }));
   expect(await screen.findByText(/브라우저의 복사 권한/)).toBeTruthy();
   expect(new XMLSerializer().serializeToString(document.body)).not.toContain(
@@ -849,14 +858,14 @@ describe("연결 요청문과 등록 입력", () => {
     expect(prompt).toContain(pub);
     expect(prompt).not.toContain("sp_srv_");
     for (const rule of [
-      "SHIPPING_SERVER_KEY",
-      "깃에 올리지 마",
+      "SHIP_AND_PING_KEY",
+      ".gitignore",
       "멈추고 나에게 물어봐",
       "/v1/feature-map",
       "쉽앤핑 수집 주소(INGEST_URL)는 예외",
     ])
       expect(prompt).toContain(rule);
-    expect(() => buildConnectPrompt(secret, base)).toThrow();
+    expect(() => buildConnectPrompt(secret + "\n", base)).toThrow();
     expect(() => buildConnectPrompt(pub, base + "/" + secret)).toThrow();
   });
   it("이름 길이와 https 주소를 검사한다", () => {

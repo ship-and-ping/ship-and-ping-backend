@@ -52,13 +52,13 @@ async function owner(name) {
   const publicKey = await api.issue(id, "pub");
   const serverKey =
     name === "with-server" ? await api.issue(id, "srv") : undefined;
-  const prompt = buildConnectPrompt(publicKey, "https://127.0.0.1:58781");
-  await writeFile(name + "-connect.txt", prompt, { mode: 0o600 });
+  const key = serverKey ?? publicKey;
+  const prompt = buildConnectPrompt(key, "https://127.0.0.1:58781");
   const saved = await readFile(
     root + "/examples/" + name + "/connect.txt",
     "utf8",
   );
-  assert.equal(prompt.replace(publicKey, "<PUBLIC_KEY>") + "\n", saved);
+  assert.equal(prompt.replace(key, serverKey ? "<SERVER_KEY>" : "<PUBLIC_KEY>") + "\n", saved);
   return { id, user, email, token, api, session, publicKey, serverKey };
 }
 async function post(path, key, body) {
@@ -138,8 +138,7 @@ try {
         ...process.env,
         INGEST_URL: endpoint,
         BUILD_VERSION: version,
-        SHIPPING_PUBLIC_KEY: a.publicKey,
-        SHIPPING_SERVER_KEY: a.serverKey,
+        SHIP_AND_PING_KEY: a.serverKey,
       },
       stdio: "inherit",
     },
