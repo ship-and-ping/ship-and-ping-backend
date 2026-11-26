@@ -28,7 +28,7 @@ export interface Snapshot {
 }
 export interface Gateway {
   account(): Promise<{ email: string; joined: string; method: string; hasPassword?: boolean }>;
-  withdraw(origin: string): Promise<"done" | "failed" | "unknown" | "unauthorized">;
+  withdraw(origin: string): Promise<"done" | "failed" | "limited" | "unknown" | "unauthorized">;
   checkAccount(): Promise<"exists" | "deleted" | "unknown">;
   appKeys(id: string): Promise<KeySummary[]>;
   editApp(id: string, name: string, url: string): Promise<void>;
@@ -57,7 +57,8 @@ export interface Gateway {
   passwordLogin(email: string, password: string): Promise<void>;
   signup(email: string, password: string): Promise<void>;
   requestReset(email: string): Promise<void>;
-  updatePassword(password: string): Promise<void>;
+  reauthenticate(): Promise<void>;
+  updatePassword(password: string, nonce?: string): Promise<void>;
   logout(): Promise<void>;
   firstVisit(): Promise<boolean>;
   apps(): Promise<AppSummary[]>;
@@ -89,7 +90,7 @@ export function gateway(client: SupabaseClient): Gateway {
   let withdrawalToken: string | undefined;
   // A fast Auth redirect can finish before React mounts the route listener.
   let initialRecovery: string | undefined;
-  const earlyListener = location.pathname === "/reset-password"
+  const earlyListener = globalThis.location?.pathname === "/reset-password"
     ? client.auth.onAuthStateChange((event, session) => {
         if (event === "PASSWORD_RECOVERY") initialRecovery = session?.user.id;
         if (!session) initialRecovery = undefined;
@@ -116,15 +117,16 @@ export function gateway(client: SupabaseClient): Gateway {
           body:"{}", signal:AbortSignal.timeout(30000),
         });
         if (response.status === 401) {
-          try {
-            const {error} = await client.auth.getUser(withdrawalToken);
-            if (error?.code === "user_not_found") return "done";
-          } catch {
-            // The rejected session cannot confirm the account's status.
-          }
-          return "unauthorized";
+          const refreshed = await client.auth.refreshSession();
+          if (refreshed.data.user) return "failed";
+          if (refreshed.error?.code === "user_not_found") return "done";
+          const {error} = await client.auth.getUser(withdrawalToken);
+          if (error?.code === "user_not_found") return "done";
+          const invalidSession = ["refresh_token_not_found", "refresh_token_already_used", "session_not_found", "session_expired"];
+          return invalidSession.includes(refreshed.error?.code ?? "") ? "unauthorized" : "unknown";
         }
-        if ([429,502,504].includes(response.status)) return "unknown";
+        if (response.status === 429) return "limited";
+        if ([502,504].includes(response.status)) return "unknown";
         if (!response.ok) return "failed";
         return (await response.json()).deleted === true ? "done" : "unknown";
       } catch { return "unknown"; }
@@ -259,8 +261,12 @@ export function gateway(client: SupabaseClient): Gateway {
       });
       if (error && error.code !== "user_not_found") throw error;
     },
-    async updatePassword(password) {
-      const { error } = await client.auth.updateUser({ password, data: { ship_ping_password_set: true } });
+    async reauthenticate() {
+      const { error } = await client.auth.reauthenticate();
+      if (error) throw error;
+    },
+    async updatePassword(password, nonce) {
+      const { error } = await client.auth.updateUser({ password, nonce, data: { ship_ping_password_set: true } });
       if (error) throw error;
     },
     async login(email) {

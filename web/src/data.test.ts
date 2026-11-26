@@ -17,23 +17,49 @@ it("가입 여부와 관계없이 같은 응답을 주고 복구 메일을 현�
 it.each([
   [504, undefined, "unknown"],
   [502, undefined, "unknown"],
-  [429, undefined, "unknown"],
+  [429, undefined, "limited"],
   [503, undefined, "failed"],
   [401, "bad_jwt", "unauthorized"],
   [401, "user_not_found", "done"],
 ] as const)("withdrawal maps HTTP %s and Auth %s to %s", async (status, code, expected) => {
   const auth = {
     getSession: async () => ({data:{session:{access_token:"fixture"}}}),
+    refreshSession: vi.fn(async () => ({data:{user:null},error:{code:"refresh_token_not_found"}})),
     getUser: vi.fn(async () => ({error:{code}})),
   };
   const api = gateway({auth} as unknown as SupabaseClient);
   vi.stubGlobal("fetch", vi.fn(async () => new Response(null,{status})));
   try {
     expect(await api.withdraw("http://localhost")).toBe(expected);
+    expect(auth.refreshSession).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
     expect(auth.getUser).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+it.each([
+  [{data:{user:{id:"member"}},error:null}, "failed"],
+  [{data:{user:null},error:{status:503}}, "unknown"],
+] as const)("구 세션의 401 뒤 갱신 결과를 반영한다", async (refresh, expected) => {
+  const auth = {
+    getSession: async () => ({data:{session:{access_token:"fixture"}}}),
+    refreshSession: vi.fn().mockResolvedValue(refresh),
+    getUser: vi.fn().mockResolvedValue({error:{code:"bad_jwt"}}),
+  };
+  vi.stubGlobal("fetch",vi.fn(async () => new Response(null,{status:401})));
+  try {
+    expect(await gateway({auth} as unknown as SupabaseClient).withdraw("http://localhost")).toBe(expected);
+    expect(auth.refreshSession).toHaveBeenCalledTimes(1);
+  } finally { vi.unstubAllGlobals(); }
+});
+it("재인증 메일을 요청하고 저장 시 받은 번호를 전달한다", async () => {
+  const auth = {reauthenticate:vi.fn().mockResolvedValue({error:null}),updateUser:vi.fn().mockResolvedValue({error:null})};
+  const api = gateway({auth} as unknown as SupabaseClient);
+  await api.reauthenticate();
+  expect(auth.reauthenticate).toHaveBeenCalledTimes(1);
+  await api.updatePassword("example phrase","123123");
+  expect(auth.updateUser).toHaveBeenCalledWith({password:"example phrase",nonce:"123123",data:{ship_ping_password_set:true}});
 });
 
 it("gateway merges proposed, confirmed, unnamed and overflow rows and sends one scoped RPC", async () => {

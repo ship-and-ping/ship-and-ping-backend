@@ -1,4 +1,4 @@
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 mod cron;
 #[cfg(target_arch = "wasm32")]
 mod endpoint;

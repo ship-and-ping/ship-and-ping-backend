@@ -17,6 +17,7 @@ type Stage =
   | "deleting"
   | "checking"
   | "failed"
+  | "limited"
   | "offline";
 
 export function Account({
@@ -46,11 +47,11 @@ export function Account({
   const progress = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (stage === "confirm" || stage === "account") title.current?.focus();
-    if (stage === "failed" || stage === "offline") retryButton.current?.focus();
+    if (stage === "failed" || stage === "limited" || stage === "offline") retryButton.current?.focus();
     if (stage === "checking" || stage === "deleting") progress.current?.focus();
   }, [stage]);
   useEffect(() => {
-    if (stage === "failed" || stage === "offline") pending(false);
+    if (stage === "failed" || stage === "limited" || stage === "offline") pending(false);
   }, [stage, pending]);
   useEffect(() => () => pending(false), [pending]);
   useEffect(() => {
@@ -61,7 +62,6 @@ export function Account({
       })
       .catch(() => {
         if (active) {
-          setInfo(undefined);
           setError(true);
         }
       });
@@ -105,28 +105,21 @@ export function Account({
       const result = await api.withdraw(origin);
       if (result === "done") done();
       else if (result === "unauthorized") done(true);
+      else if (result === "limited") setStage("limited");
       else setStage(result === "unknown" ? "checking" : "failed");
     } catch {
       setStage("checking");
     }
   }
+  const loadError = error && <p role="alert">
+    계정 정보를 불러오지 못했어요.{" "}
+    <button onClick={() => { setError(false); retry(n => n + 1); }}>다시 불러오기</button>
+  </p>;
   if (!info)
     return (
       <div>
         <h1 tabIndex={-1}>내 계정</h1>
-        {error ? (
-          <p role="alert">
-            내 계정을 불러오지 못했어요.{" "}
-            <button
-              onClick={() => {
-                setError(false);
-                retry(attempt + 1);
-              }}
-            >
-              다시 불러오기
-            </button>
-          </p>
-        ) : (
+        {loadError || (
           <p role="status" aria-busy="true">내 계정을 불러오는 중</p>
         )}
       </div>
@@ -162,11 +155,13 @@ export function Account({
             }}>{editingPassword ? "닫기" : info.hasPassword ? "비밀번호 바꾸기" : "비밀번호 만들기"}</button>
             {editingPassword && <AuthForm api={api} mode="account" saved={() => {
               setEditingPassword(false);
+              setInfo({ ...info, hasPassword: true });
               setPasswordSaved(true);
               passwordButton.current?.focus();
               retry(n => n + 1);
             }}/>}
             {passwordSaved && <p role="status">비밀번호를 저장했어요.</p>}
+            {loadError}
           </section>
           <section className="panel">
             <h2>알림 받을 곳</h2>
@@ -273,10 +268,10 @@ export function Account({
               탈퇴 결과를 확인하는 중이에요. 최대 2분 동안 10초마다 다시 확인해요.
             </div>
           )}
-          {stage === "failed" && (
+          {(stage === "failed" || stage === "limited") && (
             <>
               <p role="alert">
-                탈퇴를 마치지 못했어요. 계정은 아직 남아 있고 로그인도 돼요.
+                {stage === "limited" ? "잠시 뒤 다시 시도해 주세요." : "탈퇴를 마치지 못했어요. 계정은 아직 남아 있고 로그인도 돼요."}
               </p>
               <button ref={retryButton} onClick={remove}>다시 시도</button>
             </>

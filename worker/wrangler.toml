@@ -7,3 +7,20 @@ command = "worker-build --release"
 
 [triggers]
 crons = ["* * * * *", "15 0 * * *"]
+
+[env.production]
+name = "ship-and-ping-ingest"
+workers_dev = true
+preview_urls = false
+compatibility_date = "2026-11-24"
+
+[env.production.build]
+# The deploy workflow builds the Wasm before the credentialed upload step.
+command = ""
+
+[env.production.triggers]
+# UTC; match the expressions in src/cron.rs.
+crons = ["* * * * *", "15 0 * * *"]
+
+[env.production.secrets]
+required = ["SUPABASE_URL", "SUPABASE_SECRET_KEY", "RESEND_API_KEY", "MAIL_FROM", "SLACK_CLIENT_ID", "SLACK_CLIENT_SECRET", "WEB_ORIGIN"]

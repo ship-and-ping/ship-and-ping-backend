@@ -27,3 +27,11 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Build Pages and verify the deployed connection policy
+        env:
+          VITE_SUPABASE_URL: https://fixture.supabase.co
+          VITE_INGEST_URL: https://ship-and-ping-ingest.fixture.workers.dev
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ format('{0}_{1}_{2}', 'sb', 'publishable', 'ci-fixture') }}
+        run: |
+          npm run build -- --mode pages
+          grep -F "connect-src $VITE_SUPABASE_URL $VITE_INGEST_URL" dist/_headers
