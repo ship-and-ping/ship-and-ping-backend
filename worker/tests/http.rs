@@ -139,7 +139,9 @@ fn ingest_http_statuses() {
     let digest = fixture("/fixture/cron", None);
     assert_eq!(
         digest,
-        json!({"slack":1,"broken":2,"mail":1,"completed":1,"connected":1,"safe":true})
+        json!({"slack":1,"broken":2,"mail":1,"completed":1,"connected":1,"safe":true,
+        "claims":["1","2","3","4","5","7","1"],"releases":["1","5","1"],
+        "retry":[["9","메일 예약 실패",true],["8","메일 묶음 조회 실패",true]]})
     );
     let no_origin = fixture("/fixture/no-origin", None);
     assert_eq!(no_origin["slack"], 2);

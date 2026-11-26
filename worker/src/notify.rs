@@ -141,6 +141,42 @@ async fn email(
         },
     )
 }
+async fn deliver_email(
+    db: &Supabase,
+    env: &Env,
+    first: &Notice,
+    to: &str,
+    mut body: String,
+    origin: Option<&str>,
+) -> Outcome {
+    if first.digest {
+        let response = rpc(
+            db,
+            "expand_mail_digest",
+            json!({"id":first.id,"token":first.claim_token}),
+        )
+        .await;
+        let Ok(mut response) = response else {
+            return Outcome::Failed("메일 묶음 조회 실패");
+        };
+        let Ok(extra) = response.json::<u32>().await else {
+            return Outcome::Failed("메일 묶음 조회 실패");
+        };
+        if extra > 0 {
+            body.push_str(&format!("\n\n미뤄 둔 알림이 {extra}건 더 있어요."));
+            if let Some(origin) = origin {
+                body.push_str(&format!(
+                    "\n쉽앤핑에서 보기 {}/apps",
+                    origin.trim_end_matches('/')
+                ));
+            }
+        }
+    }
+    email(db, env, first.app, to, body, first.digest)
+        .await
+        .unwrap_or(Outcome::Failed("메일 예약 실패"))
+}
+
 async fn slack(hook: &str, body: String) -> Outcome {
     if !valid_hook(hook) {
         return Outcome::Broken;
@@ -196,7 +232,7 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
     for (_, rows) in groups {
         let first = &rows[0];
         let outcome = {
-            let mut body = rows
+            let body = rows
                 .iter()
                 .map(|n| {
                     let Some(origin) = &origin else {
@@ -217,39 +253,7 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
                 .join("\n\n");
             if first.channel == "email" {
                 if let Some(to) = &first.email {
-                    if first.digest {
-                        let extra = async {
-                            rpc(
-                                db,
-                                "expand_mail_digest",
-                                json!({"id":first.id,"token":first.claim_token}),
-                            )
-                            .await?
-                            .json::<u32>()
-                            .await
-                        }
-                        .await;
-                        let Ok(extra) = extra else {
-                            console_error!("Mail digest expansion unavailable");
-                            continue;
-                        };
-                        if extra > 0 {
-                            body.push_str(&format!("\n\n미뤄 둔 알림이 {extra}건 더 있어요."));
-                            if let Some(origin) = &origin {
-                                body.push_str(&format!(
-                                    "\n쉽앤핑에서 보기 {}/apps",
-                                    origin.trim_end_matches('/')
-                                ));
-                            }
-                        }
-                    }
-                    let Ok(outcome) = email(db, env, first.app, to, body, first.digest).await
-                    else {
-                        // Leave this group's claim for retry when the lease expires.
-                        console_error!("Mail reservation unavailable");
-                        continue;
-                    };
-                    outcome
+                    deliver_email(db, env, first, to, body, origin.as_deref()).await
                 } else {
                     Outcome::Failed("받을 곳 없음")
                 }

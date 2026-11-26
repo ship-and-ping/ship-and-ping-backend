@@ -65,15 +65,15 @@
       "expected": "[가림]"
     },
     {
-      "input": "s\u200bp\u200c_\u200ds\u2060r\ufeffv_demo",
+      "input": "s​p‌_‍s⁠r﻿v_demo",
       "expected": "[가림]"
     },
     {
-      "input": "sp_\u202esrv_\u2066demo\u2069",
+      "input": "sp_‮srv_⁦demo⁩",
       "expected": "[가림]"
     },
     {
-      "input": "Cookie: sid=one\u2028safe\u2029next\u0085end",
+      "input": "Cookie: sid=one safe nextend",
       "expected": "[가림]\nsafe\nnext\nend"
     },
     {
@@ -130,7 +130,7 @@
     },
     {
       "input": "0101234567890123",
-      "expected": "0101234567890123"
+      "expected": "[가림]"
     },
     {
       "input": "메일a@example.test로 전송",
@@ -210,15 +210,15 @@
     },
     {
       "input": "1764120000 1764120000123",
-      "expected": "1764120000 1764120000123"
+      "expected": "[가림]"
     },
     {
       "input": "0111234567 010-123-4567",
-      "expected": "[가림] [가림]"
+      "expected": "[가림]"
     },
     {
       "input": "02-1234-5678 0311234567",
-      "expected": "[가림] [가림]"
+      "expected": "[가림]"
     },
     {
       "input": "+82 10 1234 5678",
@@ -230,7 +230,131 @@
     },
     {
       "input": "1764120000123 01012345678",
-      "expected": "1764120000123 [가림]"
+      "expected": "[가림]"
+    },
+    {
+      "input": "+1 415 555 0100",
+      "expected": "[가림]"
+    },
+    {
+      "input": "+44 20 7946 0958",
+      "expected": "[가림]"
+    },
+    {
+      "input": "82-10-1234-5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "010 - 1234 - 5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "900101-1234567",
+      "expected": "[가림]"
+    },
+    {
+      "input": "110-123-456789",
+      "expected": "[가림]"
+    },
+    {
+      "input": "4111 1111 1111 1111",
+      "expected": "[가림]"
+    },
+    {
+      "input": "4111111111111111",
+      "expected": "[가림]"
+    },
+    {
+      "input": "123456789",
+      "expected": "[가림]"
+    },
+    {
+      "input": "123456789012345",
+      "expected": "[가림]"
+    },
+    {
+      "input": "0999999999",
+      "expected": "[가림]"
+    },
+    {
+      "input": "2147483648",
+      "expected": "[가림]"
+    },
+    {
+      "input": "2147483648000",
+      "expected": "[가림]"
+    },
+    {
+      "input": "12345678",
+      "expected": "12345678"
+    },
+    {
+      "input": "1764120000",
+      "expected": "1764120000"
+    },
+    {
+      "input": "1764120000123",
+      "expected": "1764120000123"
+    },
+    {
+      "input": "1000000000",
+      "expected": "1000000000"
+    },
+    {
+      "input": "2147483647",
+      "expected": "2147483647"
+    },
+    {
+      "input": "1000000000000",
+      "expected": "1000000000000"
+    },
+    {
+      "input": "2147483647999",
+      "expected": "2147483647999"
+    },
+    {
+      "input": "{\\\"api_key\\\":\\\"abc\\\"}",
+      "expected": "{\\\"api_key\\\":\\\"[가림]\\\"}"
+    },
+    {
+      "input": "\"pin_password\": 1234",
+      "expected": "\"pin_password\": [가림]"
+    },
+    {
+      "input": "'secret' => 'x'",
+      "expected": "'secret' => '[가림]'"
+    },
+    {
+      "input": "\"token\":\"abc",
+      "expected": "\"token\":\"[가림]"
+    },
+    {
+      "input": "\"Bearer test\"&next#end",
+      "expected": "\"[가림]\"&next#end"
+    },
+    {
+      "input": "'Basic YWJjZGVmZ2hpamts'#next",
+      "expected": "'[가림]'#next"
+    },
+    {
+      "input": "token: Bearer demo&next#end",
+      "expected": "token: [가림]&next#end"
+    },
+    {
+      "input": "{\"sp_srv_demo_token\":\"Basic YWJjZGVmZ2hpamts\"}",
+      "expected": "{\"[가림]\":\"[가림]\"}"
+    },
+    {
+      "input": "token=\"Bearer abc\"",
+      "expected": "token=\"[가림]\""
+    },
+    {
+      "input": "password='Basic YWJjZGVmZ2hpamts'",
+      "expected": "password='[가림]'"
+    },
+    {
+      "input": "sp_srv_demo_token=value",
+      "expected": "[가림][가림]"
     }
   ],
   "route": [

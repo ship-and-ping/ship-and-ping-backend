@@ -15,21 +15,27 @@ export function normalizePromptInput(value: string): string {
 
 // Header and credential names can follow Korean text.
 const start = "(?<![A-Za-z0-9_])";
+const credentialValue = /((?:\\?["'])?[A-Za-z0-9_-]*(?:token|key|secret|password|passwd|pwd)(?:\\?["'])?\s*(?:=>|:|=)\s*)(?:(\\")(?:\\\\.|\\[^"\\]|[^\\])*(\\"|$)|(")(?:\\.|[^"\\])*("|\\?$)|(')(?:\\.|[^'\\])*('|\\?$)|(?:(?:bearer|basic)(?:[ \t]*:[ \t]*|[ \t]+))?[^"'\\\s,;}\]&#][^\s,;}\]&#]*)/gi;
+const numeric = /\+?\(?[0-9](?:[ ().-]*[0-9]){8,}\)?/g;
 const privatePattern = new RegExp([
   start + /(?:set-cookie|cookie)[ \t]*:[^\r\n]*/.source,
-  start + /bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;]+/.source,
+  start + /bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;&#"']+/.source,
   start + /basic[ \t]+(?:[a-z0-9+/]{14,}==|[a-z0-9+/]{15,}=|[a-z0-9+/]{16,})/.source,
-  /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]*(?:token|key|secret|password|passwd|pwd)[ \t]*[=:][ \t]*)(?:bearer(?:[ \t]*:[ \t]*|[ \t]+))?[^&\s,;#]+/.source,
-  /(["'][A-Za-z0-9_-]*(?:token|key|secret|password|passwd|pwd)["']\s*:\s*)(?:(")(?:\\.|[^"\\])*"|(')(?:\\.|[^'\\])*')/.source,
   "(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|" + start + "eyJ)[a-z0-9_.=-]+",
   /(?<![a-z0-9])(?:sk|pk|rk)_[a-z0-9_]{16,}/.source,
   /[a-z0-9._%+-]+(?:@|%40)[a-z0-9.-]+\.[a-z]{2,}/.source,
-  /(?<![0-9])(?:\+82[ .-]?(?:\(0\)[ .-]?|0)?|\(?0)(?:2|1[016789]|[3-6][1-5]|70|80|50[2-8]?)\)?[ .-]?[0-9]{3,4}[ .-]?[0-9]{4}(?![0-9])/.source,
 ].join("|"), "giu");
 
 export function maskText(value: string): string {
-  // Keep the parameter prefix and, for quoted credentials, its value delimiters.
-  return [...normalizeText(value).replace(privatePattern, "$1$2$3$4[가림]$3$4")].slice(0, 300).join("");
+  const masked = normalizeText(value)
+    .replace(credentialValue, "$1$2$4$6[가림]$3$5$7")
+    .replace(privatePattern, "[가림]")
+    .replace(numeric, number => {
+      const seconds = Number(number.slice(0, 10));
+      return /^(?:[0-9]{10}|[0-9]{13})$/.test(number) &&
+        seconds >= 1000000000 && seconds <= 2147483647 ? number : "[가림]";
+    });
+  return [...masked].slice(0, 300).join("");
 }
 
 const uuid = "[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}";
@@ -46,7 +52,7 @@ export function sanitizeRoute(value: string): string {
   return normalizeText(value).split(/[?#]/, 1)[0].split("/").map(segment => {
     const part = segment.split(";", 1)[0];
     return /^\d+$|\d{9}/.test(part) || uuidSegment.test(part) ||
-      part.search(privatePattern) >= 0 || opaqueSegment(part) ? ":id" : part;
+      [privatePattern, credentialValue, numeric].some(pattern => part.search(pattern) >= 0) || opaqueSegment(part) ? ":id" : part;
   }).join("/");
 }
 

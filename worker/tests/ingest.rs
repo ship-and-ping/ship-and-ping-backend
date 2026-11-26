@@ -25,8 +25,7 @@ fn app_version_preserves_build_times_and_masks_key_prefixes() {
         ("2026.11.26.1530", "2026.11.26.1530"),
         ("1764120000", "1764120000"),
         ("1764120000123", "1764120000123"),
-        ("token: Bearer abc", "token: [가림]"),
-        (r#"{"api_key":"abc"}"#, r#"{"api_key":"[가림]"}"#),
+        ("2026.02.1530.0001", "2026.02.1530.0001"),
         ("v20261126-1530", "v20261126-1530"),
         ("1764120000-ＳＰ＿ＰＵＢ＿demo", "1764120000-[가림]"),
         ("v1-sk_abcdefghijklmnop", "v1-[가림]"),
@@ -317,10 +316,7 @@ fn masks_overlaps_nested_prefixes_and_ascii_phone_neighbors() {
         (nested, format!("x{}_[가림]", short_key())),
         (format!("token={}", short_key()), "token=[가림]".into()),
         ("a01012345678z".into(), "a[가림]z".into()),
-        (
-            "1234567890123456 01012345678".into(),
-            "1234567890123456 [가림]".into(),
-        ),
+        ("1234567890123456 01012345678".into(), "[가림]".into()),
     ];
     for (message, expected) in cases {
         let mut row = request();
@@ -347,7 +343,7 @@ fn shared_sanitize_vectors() {
     }
     let cases: Cases =
         serde_json::from_str(include_str!("../../docs/specs/sanitize-vectors.json")).unwrap();
-    assert_eq!((cases.mask.len(), cases.route.len()), (58, 12));
+    assert_eq!((cases.mask.len(), cases.route.len()), (89, 12));
     for case in cases.mask {
         let mut row = request();
         row["status"] = json!(500);

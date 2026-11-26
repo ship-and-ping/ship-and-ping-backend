@@ -74,6 +74,8 @@ date: 2026-11-24
 ### stats_1h — 시간별 요약 (기록 후 30일까지)
 stats_5m과 같은 열, bucket = 1시간. 매일 Cron이 7일 지난 5분 요약을 앱·기능·버전·시간별로 합친다. 옮긴 행의 판정 입력(`private.evaluation_buckets`)은 외래 키로 함께 삭제한다. 평소 속도 계산은 경계 시각을 포함한 최근 7일의 성공 기록을 쓰고, 이전 성공 건수는 시간별 요약에서도 읽는다.
 
+시간·하루 요약에서 `private.sum_hist(integer[])`는 히스토그램 16개 구간을 위치별로 더한다. PostgreSQL 17의 집계 함수에는 search_path를 설정할 수 없으며, 실제 합산을 맡은 전이 함수 `private.add_hist`에는 빈 search_path가 설정되어 있다.
+
 ### stats_1d — 하루 요약 (한국 날짜 기준 1년)
 stats_1h와 같은 집계 열·기본 키·조회 인덱스를 쓴다. 30일이 지난 시간별 행을 삭제하면서 반환받은 행만 앱·기능·버전·한국 날짜별로 더한다. bucket은 한국 시간 자정이며 1년 전 같은 날짜까지 포함한다. 회원은 자기 앱의 요약만 조회한다.
 
@@ -160,6 +162,10 @@ stats_1h와 같은 집계 열·기본 키·조회 인덱스를 쓴다. 30일이 
 | `revoke_app_key(p_app,p_key)` | 로그인한 소유자의 앱 행을 잠그고 지정한 키의 폐기 시각을 기록한다. 이미 폐기한 키는 첫 폐기 시각을 유지한다. |
 
 S11은 Worker의 `POST /v1/account/delete`를 호출한다. Worker는 Supabase Auth에서 세션 사용자를 확인하고 그 회원의 JWT와 RLS로 앱을 지운다. 앱 삭제의 외래 키와 알림 연결 삭제 트리거가 기록·키·알림 설정·Vault 비밀값을 함께 지운다. 이어서 Worker 비밀 설정의 관리자 키로 해당 Auth 사용자를 지운다. 마지막 단계가 실패해도 같은 회원이 다시 요청하면 남은 계정을 지울 수 있다.
+
+### private.withdrawal_claims — 회원 탈퇴 진행 상태
+
+`member`는 auth.users를 참조하는 기본 키다. 서비스 역할의 Worker가 앱 삭제 전에 `claim_withdrawal(member_id)`로 회원별 토큰을 얻는다. 2분 동안 다른 요청은 null을 받는다. 실패가 확정되면 `release_withdrawal(member_id, claim_token)`으로 현재 토큰을 해제한다. Auth 삭제 결과가 불확실하면 만료 후 다시 확인하며, 회원을 삭제하면 진행 행도 함께 삭제된다.
 
 ## 수집·판정·알림 RPC
 | 함수 | 하는 일 |

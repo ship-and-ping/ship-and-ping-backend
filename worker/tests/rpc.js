@@ -3,6 +3,10 @@ const id = n => "00000000-0000-4000-8000-" + String(n).padStart(12,"0");
 const hook = ["https:/","hooks.slack.com","services","fixture"].join("/");
 const sensitive = ["sp","srv","example"].join("_");
 const report = { slack:0, mail:0, broken:0, completed:0, connected:0, safe:true };
+const withdrawals = new Map([[id(7), id(9)]]);
+report.claims = [];
+report.releases = [];
+report.retry = [];
 let round=0;
 let stateIssued=false;
 function rows() {
@@ -12,6 +16,7 @@ function rows() {
     channel:round===2?"email":"slack",hook,destination:"T/C",secret_id:id(7),email:"member@example.invalid",digest:round>1}));
   // This address sorts before the healthy digest, so a batch-wide return loses both.
   if(round===2) result.push({...result[0],id:id(9),app:id(9),email:"a@example.invalid"});
+  if(round===2) result.push({...result[0],id:id(8),app:id(8),email:"b@example.invalid"});
   return result;
 }
 async function fixtureHash(suffix) {
@@ -50,12 +55,24 @@ export default {
       case "evaluate_all": return new Response(null,{status:503});
       case "claim_notifications": return Response.json(rows());
       case "slack_failed": report.broken++;return Response.json(null);
-      case "complete_notification": if(body.id===id(1)) return new Response(null,{status:503});
+      case "complete_notification": if (!body.ok) report.retry.push([body.id.slice(-1),body.error,body.token===id(3)]);
+        if(body.id===id(1)) return new Response(null,{status:503});
         report.completed+=Number(body.ok && body.token===id(3));return Response.json(null);
       case "reserve_mail": return body.app===id(9) ? new Response(null,{status:503}) : Response.json(body.app===id(4));
-      case "claim_withdrawal": return Response.json(body.member_id===id(7)?null:id(9));
-      case "release_withdrawal": return Response.json(null);
-      case "expand_mail_digest": return Response.json(12);
+      case "claim_withdrawal": {
+        report.claims.push(body.member_id.slice(-1));
+        if (withdrawals.has(body.member_id)) return Response.json(null);
+        const token = crypto.randomUUID();
+        withdrawals.set(body.member_id, token);
+        return Response.json(token);
+      }
+      case "release_withdrawal":
+        if (withdrawals.get(body.member_id) === body.claim_token) {
+          withdrawals.delete(body.member_id);
+          report.releases.push(body.member_id.slice(-1));
+        }
+        return Response.json(null);
+      case "expand_mail_digest": return body.id===id(8) ? new Response(null,{status:503}) : Response.json(12);
       case "start_slack_state": stateIssued=true;return Response.json(id(8));
       case "consume_slack_state":{
         if(!stateIssued || body.ticket!==id(8))return Response.json(null);

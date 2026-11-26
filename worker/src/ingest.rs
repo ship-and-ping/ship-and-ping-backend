@@ -14,7 +14,7 @@ const BOUNDS: [u32; 15] = [
 static PRIVATE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"(?i)(?-u:\b)(?:set-cookie|cookie)[ \t]*:[^\r\n]*",
-        r"|(?-u:\b)bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;]+",
+        r#"|(?-u:\b)bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;&#"']+"#,
         r"|(?-u:\b)basic[ \t]+(?-iu:[A-Za-z0-9+/]{14,}==|[A-Za-z0-9+/]{15,}=|[A-Za-z0-9+/]{16,})",
         r"|(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_|(?-u:\b)eyJ)[a-z0-9_.=\-]+",
         r"|[a-z0-9._%+\-]+(?:@|%40)[a-z0-9.\-]+\.[a-z]{2,}",
@@ -25,13 +25,8 @@ static PRIVATE: LazyLock<Regex> = LazyLock::new(|| {
 static SHORT_KEY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i-u:sk_|pk_|rk_)[A-Za-z0-9_]{16,}").expect("short key pattern")
 });
-static NAMED_SECRET: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i-u:[A-Za-z0-9_-]*(?:token|key|secret|password|passwd|pwd))[ \t]*[=:][ \t]*([^&\s,;#]+)")
-        .expect("credential value")
-});
-
-static QUOTED_SECRET: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)(["'][A-Za-z0-9_-]*(?:token|key|secret|password|passwd|pwd)["']\s*:\s*)(?:(")(?:\\.|[^"\\])*"|(')(?:\\.|[^'\\])*')"#).expect("quoted credential")
+static CREDENTIAL_VALUE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)((?:\\?["'])?[A-Za-z0-9_-]*(?:token|key|secret|password|passwd|pwd)(?:\\?["'])?\s*(?:=>|:|=)\s*)(?:(\\")(?:\\\\.|\\[^"\\]|[^\\])*(\\"|$)|(")(?:\\.|[^"\\])*("|\\?$)|(')(?:\\.|[^'\\])*('|\\?$)|(?:(?:bearer|basic)(?:[ \t]*:[ \t]*|[ \t]+))?[^"'\\\s,;}\]&#][^\s,;}\]&#]*)"#).expect("quoted credential")
 });
 
 #[derive(Debug, PartialEq)]
@@ -172,27 +167,19 @@ fn boundary(text: &str, start: usize) -> bool {
 }
 fn phones(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
     static PHONE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?:\+82[ .-]?(?:\(0\)[ .-]?|0)?|\(?0)(?:2|1[016789]|[3-6][1-5]|70|80|50[2-8]?)\)?[ .-]?[0-9]{3,4}[ .-]?[0-9]{4}").expect("phone pattern")
+        Regex::new(r"\+?\(?[0-9](?:[ ().-]*[0-9]){8,}\)?").expect("numeric sequence")
     });
-    let bytes = text.as_bytes();
-    let mut cursor = 0;
-    std::iter::from_fn(move || {
-        loop {
-            let hit = PHONE.find_at(text, cursor)?;
-            if (hit.start() == 0 || !bytes[hit.start() - 1].is_ascii_digit())
-                && !bytes.get(hit.end()).is_some_and(u8::is_ascii_digit)
-            {
-                cursor = hit.end();
-                return Some(hit.range());
-            }
-            cursor = hit.start() + 1;
-        }
+    PHONE.find_iter(text).filter_map(|hit| {
+        let value = hit.as_str();
+        let timestamp = matches!(value.len(), 10 | 13)
+            && value.bytes().all(|b| b.is_ascii_digit())
+            && (1000000000..=2147483647).contains(&value[..10].parse::<u64>().unwrap());
+        (!timestamp).then(|| hit.range())
     })
 }
 fn private_segment(part: &str) -> bool {
     if phones(part).next().is_some()
-        || (part.contains([':', '='])
-            && (NAMED_SECRET.is_match(part) || QUOTED_SECRET.is_match(part)))
+        || (part.contains([':', '=']) && CREDENTIAL_VALUE.is_match(part))
     {
         return true;
     }
@@ -202,7 +189,7 @@ fn private_segment(part: &str) -> bool {
     // These legacy patterns also match route segments without the four markers.
     static OTHER: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(concat!(
-        r"(?i)(?-u:\b)(?:set-cookie|cookie)[ \t]*:|(?-u:\b)bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;]+",
+        r#"(?i)(?-u:\b)(?:set-cookie|cookie)[ \t]*:|(?-u:\b)bearer(?:[ \t]*:[ \t]*|[ \t]+)[^\s,;&#"']+"#,
         r"|(?-u:\b)basic[ \t]+[a-z0-9+/]{16,}|(?-u:\b)eyj[a-z0-9_.=\-]+",
     )).expect("ASCII route patterns")
     });
@@ -225,23 +212,43 @@ fn short_keys(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
             .map(|start| start..hit.end())
     })
 }
+fn mask_version(version: String) -> String {
+    static KEY: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_)[a-z0-9_.=\-]+")
+            .expect("version key prefixes")
+    });
+    let normalized = normalize(&version);
+    let mut spans: Vec<_> = KEY
+        .find_iter(&normalized)
+        .map(|m| m.range())
+        .chain(short_keys(&normalized))
+        .collect();
+    if spans.is_empty() {
+        return version;
+    }
+    spans.sort_by_key(|span| span.start);
+    let mut result = String::new();
+    let mut end = 0;
+    for span in spans {
+        if end <= span.start {
+            result.push_str(&normalized[end..span.start]);
+            result.push_str("[가림]");
+        }
+        end = end.max(span.end);
+    }
+    result.push_str(&normalized[end..]);
+    result.chars().take(64).collect()
+}
 pub(crate) fn mask(text: &str) -> String {
     let normalized = normalize(text);
-    let normalized = if normalized.contains(['"', '\'']) {
-        QUOTED_SECRET.replace_all(&normalized, "$1$2$3[가림]$2$3")
+    let normalized = if normalized.contains([':', '=']) {
+        CREDENTIAL_VALUE.replace_all(&normalized, "$1$2$4$6[가림]$3$5$7")
     } else {
         normalized
     };
     let mut short = short_keys(&normalized).peekable();
     let mut phone = phones(&normalized).peekable();
-    let mut values = normalized
-        .contains([':', '='])
-        .then(|| NAMED_SECRET.captures_iter(&normalized))
-        .into_iter()
-        .flatten()
-        .map(|caps| caps.get(1).unwrap().range())
-        .peekable();
-    if short.peek().is_none() && phone.peek().is_none() && values.peek().is_none() {
+    if short.peek().is_none() && phone.peek().is_none() {
         return PRIVATE
             .replace_all(&normalized, regex::NoExpand("[가림]"))
             .chars()
@@ -252,7 +259,7 @@ pub(crate) fn mask(text: &str) -> String {
     let mut end = 0;
     let mut result = String::new();
     loop {
-        let first = [main.peek(), short.peek(), phone.peek(), values.peek()]
+        let first = [main.peek(), short.peek(), phone.peek()]
             .into_iter()
             .flatten()
             .map(|r| r.start)
@@ -262,8 +269,6 @@ pub(crate) fn mask(text: &str) -> String {
             main.next()
         } else if short.peek().is_some_and(|r| r.start == start) {
             short.next()
-        } else if values.peek().is_some_and(|r| r.start == start) {
-            values.next()
         } else {
             phone.next()
         }
@@ -473,7 +478,7 @@ pub fn prepare_ingest(
         })
         .collect();
     // Retain the release label for display validation unless it contains private data.
-    let version: String = mask(&batch.app_version).chars().take(64).collect();
+    let version = mask_version(batch.app_version);
     let rpc = json!({"app_key_hash":hash,"payload":{
         "batch_id":batch.batch_id,"app_version":version,"platform":batch.platform,"sent_at":batch.sent_at,
         "stats":stats,"attempts":attempts,"error_samples":samples
