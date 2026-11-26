@@ -1,3 +1,5 @@
+declare const __DIAGNOSTIC_KEYS__: string[];
+
 /** 요청문에 들어갈 외부 문자열의 검사와 표시가 같은 문자를 보도록 한다. */
 function normalizeText(value: string): string {
   return value
@@ -15,12 +17,13 @@ export function normalizePromptInput(value: string): string {
 
 // Header and credential names can follow Korean text.
 const start = "(?<![A-Za-z0-9_])";
-// Fold the credential words independently so lowercase "key" can retain its word boundaries.
-const words = "token|secret|password|passwd|pwd|credential|authorization|cookie|privatekey|accesskey|secretkey|apikey|clientkey|authkey|sessionkey|signingkey|encryptionkey|masterkey"
-  .replace(/[a-z]/g, letter => `[${letter}${letter.toUpperCase()}]`);
-const fields = "(?:user|account|member|customer|session)[_-]?id|uid|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday".replace(/[a-z]/g, letter => `[${letter}${letter.toUpperCase()}]`);
-const name = `(?:${fields}|[A-Za-z0-9_-]*(?:${words}|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)`;
-const credentialName = new RegExp(String.raw`(?:\\*["']${name}\\*["']|${start}${name})\s*(?:=>|->|,|:|=|%3[aAdD])\s*`, "g");
+const allowed = new Set(__DIAGNOSTIC_KEYS__.map(key => key.replaceAll("_", "")));
+// Quoted keys may contain spaces or punctuation. Bare keys end at structural delimiters.
+const credentialName = /[/%]+\s*=>?\s*|(?:\\*"[^"\n]*?\\*"|\\*'[^'\n]*?\\*'|[^\s/\\%"'=:,;<>{}\[\]&?#]+?)\s*(?:=>|->|,+(?=[ \t])|:|=|%3[aAdD])\s*/gu;
+function pairKey(prefix: string) {
+  return prefix.trimEnd().replace(/(?:=>|->|,|:|=|%3[aAdD])$/, "").trimEnd()
+    .replace(/^\\*["']|\\*["']$/g, "").toLowerCase().replace(/[_-]/g, "");
+}
 const bareValue = /^(?:(?:bearer|basic|token|apikey|digest)(?:[ \t]*:[ \t]*|[ \t]+)[^\s;&]+|(?:\[가림\]|\\[^"\s]|[^"'\\\s,;&#])(?:[^\s,;}\]&#]|[}\]]+[^\s,;}\]&#])*)/i;
 const numeric = /\+?\(?[0-9](?:[ ().\/_\t֊־᐀᠆‐‑‒–—―⸗⸚⸺⸻⹀⹝〜〰゠︱︲﹘﹣－𐵮𐺭−-]*[0-9]){8,}\)?/g;
 const privatePatterns = [
@@ -85,7 +88,13 @@ function credentialSpan(text: string, hit: RegExpMatchArray & { index: number })
   }
   if (plainName && !/^[\\"'\[{]/.test(tail)) {
     const size = /^[^\s&;]*/.exec(tail)![0].length;
-    return [start, Math.max(start + size, span?.[1] ?? start)];
+    let end = Math.max(start + size, span?.[1] ?? start);
+    if (/^[ \t]/.test(text.slice(end)) && !/\?\S*$/.test(text.slice(0, hit.index))) {
+      const rest = text.slice(end).split(/[;&\n]/, 1)[0];
+      const next = rest.search(credentialName);
+      end += rest.slice(0, next < 0 ? rest.length : next).trimEnd().length;
+    }
+    return [start, end];
   }
   return span;
 }
@@ -107,10 +116,10 @@ function isTimestamp(number: string) {
   return month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
-function redact(text: string, spans: Span[]) {
+function redact(text: string, spans: Span[], routes: [number, number, string][]) {
   let end = 0, result = "";
-  for (const [start, stop] of spans.sort((a, b) => a[0] - b[0])) {
-    if (start >= end) result += text.slice(end, start) + "[가림]";
+  for (const [start, stop, replacement] of [...spans, ...routes].sort((a, b) => a[0] - b[0])) {
+    if (start >= end) result += text.slice(end, start) + (replacement ?? "[가림]");
     end = Math.max(end, stop);
   }
   return result + text.slice(end);
@@ -129,32 +138,59 @@ export function maskText(value: string): string {
     end += ch.length;
   }
   const truncated = end < value.length;
-  const text = normalizeText(value.slice(0, end)).replace(/(?<![A-Za-z0-9_.:-])([A-Za-z0-9_.:-]*)((?:\/[A-Za-z0-9_.{}:=-]+)+)/g, (match: string, prefix: string, path: string) => {
+  const normalized = [...normalizeText(value.slice(0, end))];
+  const clipped = truncated || normalized.length > 2000;
+  const text = normalized.slice(0, 2000).join("").replace(/(?<![A-Za-z0-9_.:-])([A-Za-z0-9_.:-]*)((?:\/[A-Za-z0-9_.{}:=-]+)+)/g, (match: string, prefix: string, path: string) => {
     if (/^[0-9._-]+$/.test(prefix) && /^[0-9/]+$/.test(path)) return match;
     return prefix + path.split("/").map(part => /^[0-9]+$|^[a-z0-9]{16,}$/i.test(part) || uuidSegment.test(part) ? ":id" : part).join("/");
   });
   const spans: Span[] = [];
+  const versions: Span[] = [];
+  const routes: [number, number, string][] = [];
   const lineValues = /(?<![A-Za-z0-9_])(?:set-cookie|cookie|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday)[ \t]*=([^>\n][^\n]*)/gi;
   for (const hit of text.matchAll(lineValues)) {
     const end = hit.index + hit[0].length;
     spans.push([end - hit[1].length, end]);
   }
-  let cursor = 0;
-  for (const match of text.matchAll(credentialName)) {
-    if (match.index < cursor) continue;
+  const pairs = new RegExp(credentialName);
+  let match: RegExpExecArray | null;
+  while ((match = pairs.exec(text)) !== null) {
+    const key = pairKey(match[0]);
+    const start = match.index + match[0].length;
+    if (match[0].trimEnd().endsWith(":") && ((/^(?:http|https)$/.test(key) && text.startsWith("//", start)) || /(?:bearer|cookie|authorization):\s*$/i.test(match[0]) && /^(?:bearer|.*[^\x00-\x7f](?:bearer|cookie|authorization))$/i.test(key))) continue;
+    if (match[0].trimEnd().endsWith(",") && (!/^\s*$/.test(text.slice(Math.max(0,match.index-1),match.index)) || /^[0-9]/.test(key))) continue;
+    if (allowed.has(key) && !/[/#%\\]/.test(text[match.index - 1] ?? "")) {
+      if (key === "route" || key === "path" || key === "version") {
+        const span = valueSpan(text, start, 0);
+        if (span) {
+          const [a,b] = span;
+          if (key === "version") {
+            const version = text.slice(a, b);
+            if (/^[a-z0-9._+-]{1,64}$/i.test(version) && maskVersion(version) === version) versions.push(span);
+          }
+          else {
+            const stop = /^[^\s"',}\]]+/.exec(text.slice(a))?.[0].length ?? 0;
+            const finish = a === start ? Math.max(b, a + stop) : b;
+            routes.push([a, finish, sanitizeRoute(text.slice(a, finish))]);
+            pairs.lastIndex = finish;
+          }
+        }
+      }
+      continue;
+    }
     const span = credentialSpan(text, match);
     if (span && span[1] > span[0]) {
-      cursor = span[1];
+      pairs.lastIndex = span[1];
       spans.push(span);
     }
   }
   for (const pattern of [...privatePatterns, numeric]) {
     for (const m of text.matchAll(pattern)) {
-      if (pattern !== numeric || !isTimestamp(m[0])) spans.push([m.index, m.index + m[0].length]);
+      if (pattern !== numeric || (!isTimestamp(m[0]) && !versions.some(([a,b]) => a <= m.index && m.index + m[0].length <= b))) spans.push([m.index, m.index + m[0].length]);
     }
   }
-  const result = redact(text, spans).replace(/^\?[^\n]+|\?\S+/gm, "?[가림]");
-  return [...result].slice(0, truncated ? 295 : 300).join("") + (truncated ? "…[잘림]" : "");
+  const result = redact(text, spans, routes).replace(/^\?[^\n]+|\?\S+/gm, "?[가림]");
+  return [...result].slice(0, clipped ? 295 : 300).join("") + (clipped ? "…[잘림]" : "");
 }
 
 const uuid = "[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}";

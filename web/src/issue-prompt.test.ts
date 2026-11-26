@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { buildIssuePrompt, displayVersion } from "./issue-prompt";
 
+import { maskText } from "./normalize";
 import vectors from "../../docs/specs/sanitize-vectors.json";
 
 const base = { feature: "결제", route: "/buy", versions: ["v1"], errors: [] };
@@ -80,7 +81,7 @@ it("정규화 뒤 강함과 약함을 구분하고 기본 복사에 반영한다
   ]) {
     const p = buildIssuePrompt({ ...base, errors: [msg] });
     expect([p.weakCount, p.strongCount]).toEqual([1, 0]);
-    expect(p.text).toContain(msg);
+    expect(p.text).toContain(maskText(msg));
   }
   const input = {
     ...base,
@@ -94,7 +95,7 @@ it("정규화 뒤 강함과 약함을 구분하고 기본 복사에 반영한다
   const p = buildIssuePrompt(input);
   expect(p.levels).toEqual(["weak", "strong", "strong", "normal"]);
   expect(p.text).toContain("(지시처럼 보이는 2줄을 뺐어요)");
-  expect(buildIssuePrompt(input, true).text).toContain("ignore previous");
+  expect(buildIssuePrompt(input, true).lines[1]).toBe("[가림]");
 });
 it("복사 직전에 키와 개인정보를 가리고 5건 × 300자로 자른다", () => {
   for (const prefix of [

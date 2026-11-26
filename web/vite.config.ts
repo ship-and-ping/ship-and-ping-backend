@@ -22,6 +22,9 @@ function pagesHeaders(): Plugin {
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), ...(mode === "pages" ? [pagesHeaders()] : [])],
+  define: {
+    __DIAGNOSTIC_KEYS__: readFileSync(resolve(import.meta.dirname, "../supabase/migrations/20261126210000_diagnostic_keys.sql"), "utf8").split("$keys$")[1],
+  },
   build: { rollupOptions: { output: { manualChunks: { supabase: ["@supabase/supabase-js"] } } } },
   test: { environment: "jsdom" },
 }));

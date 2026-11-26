@@ -26,12 +26,39 @@ static SHORT_KEY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i-u:sk_|pk_|rk_)[A-Za-z0-9_]{16,}").expect("short key pattern")
 });
 static CREDENTIAL_NAME: LazyLock<Regex> = LazyLock::new(|| {
-    let name = r"(?:(?i-u:(?:user|account|member|customer|session)[_-]?id|uid|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday)|[A-Za-z0-9_-]*(?:(?i:token|secret|password|passwd|pwd|credential|authorization|cookie|privatekey|accesskey|secretkey|apikey|clientkey|authkey|sessionkey|signingkey|encryptionkey|masterkey)|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)";
-    Regex::new(&format!(
-        r#"(?:\\*["']{name}\\*["']|{name})\s*(?:=>|->|,|:|=|%3[aAdD])\s*"#
-    ))
-    .unwrap()
+    Regex::new(r#"[/%]+\s*=>?\s*|(?:\\*"[^"\n]*?\\*"|\\*'[^'\n]*?\\*'|[^\s/\\%"'=:,;<>{}\[\]&?#]+?)\s*(?:=>|->|,|:|=|%3[aAdD])\s*"#).unwrap()
 });
+static ALLOWED: LazyLock<Vec<String>> = LazyLock::new(|| {
+    serde_json::from_str::<Vec<String>>(
+        include_str!("../../supabase/migrations/20261126210000_diagnostic_keys.sql")
+            .split("$keys$")
+            .nth(1)
+            .expect("shared diagnostic keys"),
+    )
+    .unwrap()
+    .into_iter()
+    .map(|key| key.replace('_', ""))
+    .collect()
+});
+fn pair_key(prefix: &str) -> String {
+    let prefix = prefix.trim_end();
+    let key = ["%3D", "%3d", "%3a", "%3A", "=>", "->", ",", ":", "="]
+        .iter()
+        .find_map(|op| prefix.strip_suffix(op))
+        .unwrap_or(prefix)
+        .trim_end();
+    let unescaped = key.trim_start_matches('\\');
+    let key = if unescaped.starts_with(['"', '\'']) {
+        let quote = unescaped.as_bytes()[0] as char;
+        unescaped[1..]
+            .strip_suffix(quote)
+            .unwrap_or("")
+            .trim_end_matches('\\')
+    } else {
+        key
+    };
+    key.to_ascii_lowercase().replace(['_', '-'], "")
+}
 static BARE_VALUE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?i)^(?:(?:bearer|basic|token|apikey|digest)(?:[ \t]*:[ \t]*|[ \t]+)[^\s;&]+|(?:\[가림\]|\\[^"\s]|[^"'\\\s,;&#])(?:[^\s,;}\]&#]|[}\]]+[^\s,;}\]&#])*)"#).unwrap()
 });
@@ -54,7 +81,44 @@ mod sanitize_budget {
     use std::time::{Duration, Instant};
 
     #[test]
+    fn diagnostic_batch_budget() {
+        let mut records: Vec<_> = (0..100).map(|i| {
+            let message = ["first_name=x; 이름=y; statusCode=503 ", "stack={\"dob\":123,\"line\":42} ",
+                "Cookie: sid=abc; path=/ ", "path=/users/42?session=raw ", "ﷺ "][i % 5].repeat(8);
+            serde_json::json!({"error_message": message, "error_kind": "kind=timeout member_no=42",
+                "step": "retry=1; login_id=sample"})
+        }).collect();
+        let size = serde_json::to_vec(&records).unwrap().len();
+        for i in 0..100 {
+            let extra = (65536 - size) / 100 + usize::from(i < (65536 - size) % 100);
+            let message =
+                records[i]["error_message"].as_str().unwrap().to_owned() + &"x".repeat(extra);
+            records[i]["error_message"] = message.into();
+        }
+        assert_eq!(serde_json::to_vec(&records).unwrap().len(), 65536);
+        mask("Cookie: warmup");
+        let start = Instant::now();
+        for record in records {
+            for key in ["error_kind", "step", "error_message"] {
+                std::hint::black_box(mask(record[key].as_str().unwrap()));
+            }
+        }
+        let elapsed = start.elapsed();
+        eprintln!("65536 bytes, 100 records, 300 fields: {elapsed:?}");
+        assert!(elapsed < Duration::from_millis(if cfg!(debug_assertions) { 500 } else { 50 }));
+    }
+
+    #[test]
     fn adversarial_64k_lines() {
+        let expanded = "ﷺ".repeat(200);
+        assert_eq!(
+            mask(&expanded),
+            super::normalize(&expanded)
+                .chars()
+                .take(295)
+                .chain("…[잘림]".chars())
+                .collect::<String>()
+        );
         let _ = mask("Cookie: warm up all patterns");
         for unit in [
             "token=x ",
@@ -391,7 +455,22 @@ fn credential_span(text: &str, hit: regex::Match<'_>) -> Option<std::ops::Range<
             + tail
                 .find(|c: char| c.is_whitespace() || matches!(c, '&' | ';'))
                 .unwrap_or(tail.len());
-        return Some(start..end.max(span.map_or(start, |r| r.end)));
+        let mut end = end.max(span.map_or(start, |r| r.end));
+        if text[end..].starts_with([' ', '\t'])
+            && !text[..hit.start()]
+                .rsplit(char::is_whitespace)
+                .next()
+                .unwrap_or_default()
+                .contains('?')
+        {
+            let rest = text[end..]
+                .split([';', '&', '\n'])
+                .next()
+                .unwrap_or_default();
+            let next = CREDENTIAL_NAME.find(rest).map_or(rest.len(), |m| m.start());
+            end += rest[..next].trim_end().len();
+        }
+        return Some(start..end);
     }
     span
 }
@@ -434,12 +513,14 @@ pub(crate) fn mask(text: &str) -> String {
     static QUERY: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?m)^\?[^\n]+|\?\S+"#).unwrap());
     let cutoff = text.char_indices().nth(2000).map(|(pos, _)| pos);
     let normalized = normalize(&text[..cutoff.unwrap_or(text.len())]);
-    let text = message_paths(&normalized);
+    let second_cut = normalized.char_indices().nth(2000).map(|(i, _)| i);
+    let text = message_paths(&normalized[..second_cut.unwrap_or(normalized.len())]);
+    let mut versions = Vec::new();
+    let mut routes = BTreeMap::new();
     let mut spans: Vec<_> = PRIVATE
         .iter()
         .flat_map(|p| p.find_iter(&text).map(|m| m.range()))
         .chain(short_keys(&text))
-        .chain(phones(&text))
         .collect();
     // An assignment inside another bare value can outlive that value's semicolon.
     static LINE_VALUE: LazyLock<Regex> = LazyLock::new(|| {
@@ -453,14 +534,78 @@ pub(crate) fn mask(text: &str) -> String {
             .map(|hit| hit.get(1).unwrap().range()),
     );
     let mut cursor = 0;
-    for hit in credential_names(&text) {
-        if hit.start() >= cursor
-            && let Some(span) = credential_span(&text, hit)
+    while let Some(hit) = CREDENTIAL_NAME.find_at(&text, cursor) {
+        cursor = hit.end();
+        let prefix = hit.as_str().trim_end();
+        let key = pair_key(prefix);
+        if prefix.ends_with(':')
+            && ((matches!(key.as_str(), "http" | "https") && text[hit.end()..].starts_with("//"))
+                || key == "bearer"
+                || ["bearer", "cookie", "authorization"].iter().any(|suffix| {
+                    key.strip_suffix(suffix)
+                        .and_then(|s| s.chars().last())
+                        .is_some_and(|c| !c.is_ascii())
+                }))
         {
+            continue;
+        }
+        if prefix.ends_with(',')
+            && (hit.as_str() == prefix
+                || text[..hit.start()]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| !c.is_whitespace())
+                || key.starts_with(|c: char| c.is_ascii_digit()))
+        {
+            continue;
+        }
+        if ALLOWED.contains(&key) && !text[..hit.start()].ends_with(['/', '#', '%', '\\']) {
+            if matches!(key.as_str(), "version" | "route" | "path")
+                && let Some(mut span) = value_span(&text, hit.end(), 0)
+            {
+                if key == "version" {
+                    let value = &text[span.clone()];
+                    if value.len() <= 64
+                        && value
+                            .bytes()
+                            .all(|c| c.is_ascii_alphanumeric() || b"._+-".contains(&c))
+                        && mask_version(value.to_owned()) == value
+                    {
+                        versions.push(span);
+                    }
+                } else {
+                    if span.start == hit.end() {
+                        span.end = span.end.max(
+                            span.start
+                                + text[span.start..]
+                                    .find(|c: char| {
+                                        c.is_whitespace()
+                                            || matches!(c, '"' | '\'' | ',' | '}' | ']')
+                                    })
+                                    .unwrap_or(text.len() - span.start),
+                        );
+                    }
+                    let path = text[span.clone()]
+                        .split(['?', '#'])
+                        .next()
+                        .unwrap_or_default();
+                    routes.insert((span.start, span.end), route(path));
+                    cursor = span.end;
+                    spans.push(span);
+                }
+            }
+            continue;
+        }
+        if let Some(span) = credential_span(&text, hit) {
             cursor = span.end;
             spans.push(span);
         }
     }
+    spans.extend(phones(&text).filter(|n| {
+        !versions
+            .iter()
+            .any(|v| v.start <= n.start && n.end <= v.end)
+    }));
     spans.sort_by_key(|r| r.start);
     let mut result = String::new();
     let mut end = 0;
@@ -470,13 +615,17 @@ pub(crate) fn mask(text: &str) -> String {
         }
         if span.start >= end {
             result.push_str(&text[end..span.start]);
-            result.push_str("[가림]");
+            result.push_str(
+                routes
+                    .get(&(span.start, span.end))
+                    .map_or("[가림]", String::as_str),
+            );
         }
         end = end.max(span.end);
     }
     result.push_str(&text[end..]);
     let result = QUERY.replace_all(&result, "?[가림]");
-    if cutoff.is_some() {
+    if cutoff.is_some() || second_cut.is_some() {
         result.chars().take(295).chain("…[잘림]".chars()).collect()
     } else {
         result.chars().take(300).collect()

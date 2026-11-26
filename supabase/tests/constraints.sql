@@ -68,8 +68,9 @@ select is(private.mask('a%40example.test ?token=aaa&key=bbb&ACCESS_TOKEN=ccc&sta
   '[가림] ?[가림]','encoded email and complete query string masked');
 select ingest_batch(current_setting('test.hash'),jsonb_build_object('batch_id',gen_random_uuid(),'app_version',' v1 ','stats','[]'::jsonb));
 select results_eq('select version from app_versions',$q$select 'v1'::text$q$,'version trimmed before storage');
-select suggest_feature_map(current_setting('test.hash'),'[{"method":"GET","route":"/items/123?query=private","name":"Items"}]');
+select suggest_feature_map(current_setting('test.hash'),'[{"method":"GET","route":"/items/123?query=private","name":"배송 nickname=sample"}]');
 select results_eq('select route,applied from feature_map_suggestions',$q$select '/items/:id'::text,false$q$,'suggestions normalize route and await confirmation');
+select is((select name from feature_map_suggestions where route=private.route('/items/456')), '배송 nickname=[가림]', 'feature-map label and canonical request route match');
 select throws_ok(format('select suggest_feature_map(current_setting(''test.hash''),%L::jsonb)',items),'22023',null,description)
 from (values
   ('{}'::jsonb,'map requires array'), ('[123]'::jsonb,'map requires objects'),

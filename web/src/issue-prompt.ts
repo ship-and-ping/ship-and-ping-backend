@@ -1,4 +1,4 @@
-import { displayText, maskVersion, sanitizeRoute } from "./normalize";
+import { displayText, normalizePromptInput, maskVersion, sanitizeRoute } from "./normalize";
 
 function hasVersionFormat(raw: string) {
   return /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(raw) && !/[^A-Za-z0-9._+-]/.test(raw);
@@ -52,14 +52,16 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
   const clock = (at: string) => new Date(at).toLocaleTimeString("en-GB", {
     timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit",
   }) + " KST";
-  const lines = records.map((r) => line(typeof r === "string" ? r :
-    [clock(r.at), r.error_kind && r.error_kind + ":", r.message].filter(Boolean).join(" ")));
-  const levels = lines.map((s) =>
-    isStrong(s) ? "strong" : weak.test(s) ? "weak" : "normal",
-  );
-  const messages = records.map((r, i) =>
-    typeof r === "string" ? lines[i].replace(/^\d{1,2}:\d{2}\s+(?:[^:]+:\s+)?/, "") : line(r.message ?? ""),
-  );
+  const lines = records.map(r => typeof r === "string" ? line(r) :
+    [...[clock(r.at), r.error_kind && line(r.error_kind) + ":", r.message && line(r.message)].filter(Boolean).join(" ")].slice(0,300).join(""));
+  // Inspect normalized input even when a whole header is hidden in the copied text.
+  const inspect = (s: string) => normalizePromptInput(s.slice(0, 4000)).slice(0, 4000);
+  const messages = records.map(r => inspect(typeof r === "string"
+    ? r.replace(/^\d{1,2}:\d{2}\s+(?:[^:]+:\s+)?/, "") : r.message ?? ""));
+  const levels = records.map((r,i) => {
+    const raw = inspect(typeof r === "string" ? r : [r.error_kind, r.message].join(" "));
+    return isStrong(raw) || isStrong(lines[i]) ? "strong" : weak.test(raw) || weak.test(lines[i]) ? "weak" : "normal";
+  });
   for (let size = 2; size <= lines.length; size++) {
     for (let i = 0; i + size <= lines.length; i++) {
       if (

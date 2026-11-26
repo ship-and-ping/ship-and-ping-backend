@@ -33,6 +33,7 @@ it("pgTAP uses the shared name and form matrix", () => {
 });
 
 it("limits raw input and reserves space for the truncation marker", () => {
+  expect(maskText("ﷺ".repeat(200))).toBe([...("ﷺ".repeat(200).normalize("NFKC"))].slice(0,295).join("") + "…[잘림]");
   expect(maskText("🔒".repeat(295) + "가".repeat(1706))).toBe("🔒".repeat(295) + "…[잘림]");
   expect(maskText("Cookie=" + "a".repeat(1994))).toBe("Cookie=[가림]…[잘림]");
 });

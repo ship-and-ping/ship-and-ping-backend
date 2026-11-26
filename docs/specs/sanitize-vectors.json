@@ -178,7 +178,7 @@
     },
     {
       "input": "monkey=banana",
-      "expected": "monkey=banana"
+      "expected": "monkey=[가림]"
     },
     {
       "input": "tokenizer=one secret_hint: two",
@@ -190,7 +190,7 @@
     },
     {
       "input": "{\"api_key\":\"abc\",\"id\":1}",
-      "expected": "{\"api_key\":\"[가림]\",\"id\":1}"
+      "expected": "{\"api_key\":\"[가림]\",\"id\":[가림]}"
     },
     {
       "input": "\"password\": \"x\"",
@@ -482,7 +482,7 @@
     },
     {
       "input": "keyboard=abc",
-      "expected": "keyboard=abc"
+      "expected": "keyboard=[가림]"
     },
     {
       "input": "tokens=abc",
@@ -622,11 +622,11 @@
     },
     {
       "input": "hockey=x",
-      "expected": "hockey=x"
+      "expected": "hockey=[가림]"
     },
     {
       "input": "turkey=x",
-      "expected": "turkey=x"
+      "expected": "turkey=[가림]"
     },
     {
       "input": "\"credentials\": { \"key\": \"x\" }",
@@ -638,7 +638,7 @@
     },
     {
       "input": "\"credentials\"\n : {\n \"items\": [{\"value\":\"}\"}],\n \"other\": 1\n}, \"ok\": 2",
-      "expected": "\"credentials\"\n : [가림], \"ok\": 2"
+      "expected": "\"credentials\"\n : [가림], \"ok\": [가림]"
     },
     {
       "input": "aUtHoRiZaTiOn: abc123 extra,tail\nok",
@@ -694,7 +694,7 @@
     },
     {
       "input": "whiskey=x donkey=y",
-      "expected": "whiskey=x donkey=y"
+      "expected": "whiskey=[가림] donkey=[가림]"
     },
     {
       "input": "Cookie=a=1; sid=abc\nok",
@@ -727,6 +727,62 @@
     {
       "input": "token=Cookie=a; sid=x\nok",
       "expected": "token=[가림]\nok"
+    },
+    {
+      "input": "이름=홍길동",
+      "expected": "이름=[가림]"
+    },
+    {
+      "input": "a=1; b=2",
+      "expected": "a=[가림]; b=[가림]"
+    },
+    {
+      "input": "statusCode=503 STATUS-CODE=404 method=GET",
+      "expected": "statusCode=503 STATUS-CODE=404 method=GET"
+    },
+    {
+      "input": "path=/a/42?q=x",
+      "expected": "path=/a/:id"
+    },
+    {
+      "input": "version=2026.11.26.1530",
+      "expected": "version=2026.11.26.1530"
+    },
+    {
+      "input": "stack={\"nickname\":\"sample\",\"line\":42}",
+      "expected": "stack={\"nickname\":\"[가림]\",\"line\":42}"
+    },
+    {
+      "input": "'이 름':'홍길동'",
+      "expected": "'이 름':'[가림]'"
+    },
+    {
+      "input": "first_name=Jane Doe status=503",
+      "expected": "first_name=[가림] status=503"
+    },
+    {
+      "input": "credentials://hidden",
+      "expected": "[가림]"
+    },
+    {
+      "input": "{\"rock'n'roll\":\"private\",\"statusCode\":404}",
+      "expected": "{\"rock'n'roll\":\"[가림]\",\"statusCode\":404}"
+    },
+    {
+      "input": "version={\"line\":1234567890}",
+      "expected": "version={\"line\":[가림]}"
+    },
+    {
+      "input": "status=500 status_code=408 code=E1 error=timeout errorCode=E2 type=network kind=io",
+      "expected": "status=500 status_code=408 code=E1 error=timeout errorCode=E2 type=network kind=io"
+    },
+    {
+      "input": "reason=busy method=GET route=/items/42?q=secret line=12 column=4 file=a.rs function=run stack=failed",
+      "expected": "reason=busy method=GET route=/items/:id line=12 column=4 file=a.rs function=run stack=failed"
+    },
+    {
+      "input": "duration=3 duration-ms=4 timeout=5 retry=1 attempt=2 step=load version=v1 platform=web feature=배송",
+      "expected": "duration=3 duration-ms=4 timeout=5 retry=1 attempt=2 step=load version=v1 platform=web feature=배송"
     }
   ],
   "route": [
@@ -861,7 +917,15 @@
       "address",
       "addr",
       "birth",
-      "birthday"
+      "birthday",
+      "first_name",
+      "nickname",
+      "dob",
+      "이름",
+      "JSESSIONID",
+      "member_no",
+      "login_id",
+      "🧪"
     ],
     "forms": [
       {
@@ -966,15 +1030,15 @@
       },
       {
         "input": "{\"{N}\":[\"one\",{\"x\":\"]\"}],\"ok\":1}",
-        "expected": "{\"{N}\":[가림],\"ok\":1}"
+        "expected": "{\"{N}\":[가림],\"ok\":[가림]}"
       },
       {
         "input": "{\"{N}\":{\"x\":[\"a}\",\"b\"]},\"ok\":1}",
-        "expected": "{\"{N}\":[가림],\"ok\":1}"
+        "expected": "{\"{N}\":[가림],\"ok\":[가림]}"
       },
       {
         "input": "{\"{N}\":123,\"ok\":1}",
-        "expected": "{\"{N}\":[가림],\"ok\":1}"
+        "expected": "{\"{N}\":[가림],\"ok\":[가림]}"
       },
       {
         "input": "log {N} => one, two\nok",
@@ -990,40 +1054,40 @@
       },
       {
         "input": "{N}%3Dopaque%20value&next=y",
-        "expected": "{N}%3D[가림]&next=y"
+        "expected": "{N}%3D[가림]&next=[가림]"
       },
       {
         "input": "{N}%3dopaque%20value&next=y",
-        "expected": "{N}%3d[가림]&next=y"
+        "expected": "{N}%3d[가림]&next=[가림]"
       },
       {
         "input": "{N}%3Aopaque%20value&next=y",
-        "expected": "{N}%3A[가림]&next=y"
+        "expected": "{N}%3A[가림]&next=[가림]"
       },
       {
         "input": "{N}%3aopaque%20value&next=y",
-        "expected": "{N}%3a[가림]&next=y"
+        "expected": "{N}%3a[가림]&next=[가림]"
       },
       {
         "input": "{N}%3Aa=1; sid=abc; token=x&ok=y",
-        "expected": "{N}%3A[가림]&ok=y"
+        "expected": "{N}%3A[가림]&ok=[가림]"
       },
       {
         "input": "{N}=Token demo,tail; ok=y",
-        "expected": "{N}=[가림]; ok=y",
+        "expected": "{N}=[가림]; ok=[가림]",
         "fullLineExpected": "{N}=[가림]"
       },
       {
         "input": "{\\\"{N}\\\":[\\\"a]b\\\",\\\"hidden\\\"],\\\"ok\\\":1}",
-        "expected": "{\\\"{N}\\\":[가림],\\\"ok\\\":1}"
+        "expected": "{\\\"{N}\\\":[가림],\\\"ok\\\":[가림]}"
       },
       {
         "input": "{\\\\\\\"{N}\\\\\\\":[\\\\\\\"a]b\\\\\\\",\\\\\\\"hidden\\\\\\\"],\\\\\\\"ok\\\\\\\":1}",
-        "expected": "{\\\\\\\"{N}\\\\\\\":[가림],\\\\\\\"ok\\\\\\\":1}"
+        "expected": "{\\\\\\\"{N}\\\\\\\":[가림],\\\\\\\"ok\\\\\\\":[가림]}"
       },
       {
         "input": "{'{N}':['a]b','hidden'],'ok':1}",
-        "expected": "{'{N}':[가림],'ok':1}"
+        "expected": "{'{N}':[가림],'ok':[가림]}"
       }
     ]
   }

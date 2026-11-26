@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(2243);
+select plan(2578);
 
 select is(private.mask(input), expected, 'mask ' || id)
 from (values
@@ -21,8 +21,8 @@ from (values
   (14, E'Basic YWJjZGVmZ2hpamts', E'[가림]'),
   (15, E'Basic YWJjZGVmZ2hpaw==', E'[가림]'),
   (16, E'ＳＰ＿ＳＲＶ＿demo', E'[가림]'),
-  (17, E's\u200bp\u200c_\u200ds\u2060r\ufeffv_demo', E'[가림]'),
-  (18, E'sp' || E'_\u202esrv_\u2066demo\u2069', E'[가림]'),
+  (17, E's​p‌_‍s⁠r﻿v_demo', E'[가림]'),
+  (18, E'sp' || E'_‮srv_⁦demo⁩', E'[가림]'),
   (19, E'Cookie: sid=one\u2028safe\u2029next\u0085end', E'[가림]\nsafe\nnext\nend'),
   (20, E'a%40example.test 010-1234-5678', E'[가림] [가림]'),
   (21, E'Bearer: demo; token=test', E'[가림]; token=[가림]'),
@@ -49,10 +49,10 @@ from (values
   (42, E'client_secret=one', E'client_secret=[가림]'),
   (43, E'X-Api-Key: two', E'[가림]'),
   (44, E'db-PASSWD : one Pwd=two password=three', E'[가림]'),
-  (45, E'monkey=banana', E'monkey=banana'),
+  (45, E'monkey=banana', E'monkey=[가림]'),
   (46, E'tokenizer=one secret_hint: two', E'tokenizer=[가림] [가림]'),
   (47, E'token: Bearer abc; next', E'[가림]'),
-  (48, E'{\"api_key\":\"abc\",\"id\":1}', E'{\"api_key\":\"[가림]\",\"id\":1}'),
+  (48, E'{\"api_key\":\"abc\",\"id\":1}', E'{\"api_key\":\"[가림]\",\"id\":[가림]}'),
   (49, E'\"password\": \"x\"', E'\"password\": \"[가림]\"'),
   (50, E'\u0027secret\u0027:\u0027y\u0027', E'\u0027secret\u0027:\u0027[가림]\u0027'),
   (51, E'{\"MY-ACCESS_TOKEN\":\"Bearer abc def\",\"db_passwd\":\"a\\\"b\",\"pwd\":\"x,y\"}', E'{\"MY-ACCESS_TOKEN\":\"[가림]\",\"db_passwd\":\"[가림]\",\"pwd\":\"[가림]\"}'),
@@ -125,7 +125,7 @@ from (values
   (118, E'2082758399', E'[가림]'),
   (119, E'1577836800000', E'1577836800000'),
   (120, E'2082758399999', E'2082758399999'),
-  (121, E'keyboard=abc', E'keyboard=abc'),
+  (121, E'keyboard=abc', E'keyboard=[가림]'),
   (122, E'tokens=abc', E'tokens=[가림]'),
   (123, E'api_keys=abc', E'api_keys=[가림]'),
   (124, E'secrets=abc', E'secrets=[가림]'),
@@ -160,11 +160,11 @@ from (values
   (153, E'pin2key=x', E'pin2key=[가림]'),
   (154, E'xKEY=x', E'xKEY=[가림]'),
   (155, E'PrivateKey=x', E'PrivateKey=[가림]'),
-  (156, E'hockey=x', E'hockey=x'),
-  (157, E'turkey=x', E'turkey=x'),
+  (156, E'hockey=x', E'hockey=[가림]'),
+  (157, E'turkey=x', E'turkey=[가림]'),
   (158, E'\"credentials\": { \"key\": \"x\" }', E'\"credentials\": [가림]'),
   (159, E'\"token\" : \"abc\"', E'\"token\" : \"[가림]\"'),
-  (160, E'\"credentials\"\n : {\n \"items\": [{\"value\":\"}\"}],\n \"other\": 1\n}, \"ok\": 2', E'\"credentials\"\n : [가림], \"ok\": 2'),
+  (160, E'\"credentials\"\n : {\n \"items\": [{\"value\":\"}\"}],\n \"other\": 1\n},\u0020\"ok\": 2', E'\"credentials\"\n : [가림],\u0020\"ok\": [가림]'),
   (161, E'aUtHoRiZaTiOn: abc123 extra,tail\nok', E'[가림]\nok'),
   (162, E'aUtHoRiZaTiOn: ApiKey xxx extra,tail\nok', E'[가림]\nok'),
   (163, E'aUtHoRiZaTiOn: Token xxx extra,tail\nok', E'[가림]\nok'),
@@ -178,7 +178,7 @@ from (values
   (171, E'-keyring=x', E'-keyring=[가림]'),
   (172, E'Cookie: a=1; sid=abc; token=x', E'[가림]'),
   (173, E'Set-Cookie: sid=abc; Path=/; HttpOnly', E'[가림]'),
-  (174, E'whiskey=x donkey=y', E'whiskey=x donkey=y'),
+  (174, E'whiskey=x donkey=y', E'whiskey=[가림] donkey=[가림]'),
   (175, E'Cookie=a=1; sid=abc\nok', E'Cookie=[가림]\nok'),
   (176, E'cookie=sid=abc;token=x', E'cookie=[가림]'),
   (177, E'GET https://example.test/a/42/550e8400-e29b-41d4-a716-446655440000/abcdefghijklmnop?q=one&b=two failed', E'GET https://example.test/a/:id/:id/:id?[가림] failed'),
@@ -186,7 +186,21 @@ from (values
   (179, E'name=Jane Doe', E'name=[가림]'),
   (180, E'배송 라벨', E'배송 라벨'),
   (181, E'GET https://node2.example2/42?sort=a\u0027b&next=c failed', E'GET https://node2.example2/:id?[가림] failed'),
-  (182, E'token=Cookie=a; sid=x\nok', E'token=[가림]\nok')
+  (182, E'token=Cookie=a; sid=x\nok', E'token=[가림]\nok'),
+  (183, E'이름=홍길동', E'이름=[가림]'),
+  (184, E'a=1; b=2', E'a=[가림]; b=[가림]'),
+  (185, E'statusCode=503 STATUS-CODE=404 method=GET', E'statusCode=503 STATUS-CODE=404 method=GET'),
+  (186, E'path=/a/42?q=x', E'path=/a/:id'),
+  (187, E'version=2026.11.26.1530', E'version=2026.11.26.1530'),
+  (188, E'stack={\"nickname\":\"sample\",\"line\":42}', E'stack={\"nickname\":\"[가림]\",\"line\":42}'),
+  (189, E'\u0027이 름\u0027:\u0027홍길동\u0027', E'\u0027이 름\u0027:\u0027[가림]\u0027'),
+  (190, E'first_name=Jane Doe status=503', E'first_name=[가림] status=503'),
+  (191, E'credentials://hidden', E'[가림]'),
+  (192, E'{\"rock\u0027n\u0027roll\":\"private\",\"statusCode\":404}', E'{\"rock\u0027n\u0027roll\":\"[가림]\",\"statusCode\":404}'),
+  (193, E'version={\"line\":1234567890}', E'version={\"line\":[가림]}'),
+  (194, E'status=500 status_code=408 code=E1 error=timeout errorCode=E2 type=network kind=io', E'status=500 status_code=408 code=E1 error=timeout errorCode=E2 type=network kind=io'),
+  (195, E'reason=busy method=GET route=/items/42?q=secret line=12 column=4 file=a.rs function=run stack=failed', E'reason=busy method=GET route=/items/:id line=12 column=4 file=a.rs function=run stack=failed'),
+  (196, E'duration=3 duration-ms=4 timeout=5 retry=1 attempt=2 step=load version=v1 platform=web feature=배송', E'duration=3 duration-ms=4 timeout=5 retry=1 attempt=2 step=load version=v1 platform=web feature=배송')
 ) as cases(id, input, expected);
 
 select is(private.route(input), expected, 'route ' || id)
@@ -285,7 +299,15 @@ with matrix as (select $matrix${
     "address",
     "addr",
     "birth",
-    "birthday"
+    "birthday",
+    "first_name",
+    "nickname",
+    "dob",
+    "이름",
+    "JSESSIONID",
+    "member_no",
+    "login_id",
+    "🧪"
   ],
   "forms": [
     {
@@ -390,15 +412,15 @@ with matrix as (select $matrix${
     },
     {
       "input": "{\"{N}\":[\"one\",{\"x\":\"]\"}],\"ok\":1}",
-      "expected": "{\"{N}\":[가림],\"ok\":1}"
+      "expected": "{\"{N}\":[가림],\"ok\":[가림]}"
     },
     {
       "input": "{\"{N}\":{\"x\":[\"a}\",\"b\"]},\"ok\":1}",
-      "expected": "{\"{N}\":[가림],\"ok\":1}"
+      "expected": "{\"{N}\":[가림],\"ok\":[가림]}"
     },
     {
       "input": "{\"{N}\":123,\"ok\":1}",
-      "expected": "{\"{N}\":[가림],\"ok\":1}"
+      "expected": "{\"{N}\":[가림],\"ok\":[가림]}"
     },
     {
       "input": "log {N} => one, two\nok",
@@ -414,40 +436,40 @@ with matrix as (select $matrix${
     },
     {
       "input": "{N}%3Dopaque%20value&next=y",
-      "expected": "{N}%3D[가림]&next=y"
+      "expected": "{N}%3D[가림]&next=[가림]"
     },
     {
       "input": "{N}%3dopaque%20value&next=y",
-      "expected": "{N}%3d[가림]&next=y"
+      "expected": "{N}%3d[가림]&next=[가림]"
     },
     {
       "input": "{N}%3Aopaque%20value&next=y",
-      "expected": "{N}%3A[가림]&next=y"
+      "expected": "{N}%3A[가림]&next=[가림]"
     },
     {
       "input": "{N}%3aopaque%20value&next=y",
-      "expected": "{N}%3a[가림]&next=y"
+      "expected": "{N}%3a[가림]&next=[가림]"
     },
     {
       "input": "{N}%3Aa=1; sid=abc; token=x&ok=y",
-      "expected": "{N}%3A[가림]&ok=y"
+      "expected": "{N}%3A[가림]&ok=[가림]"
     },
     {
       "input": "{N}=Token demo,tail; ok=y",
-      "expected": "{N}=[가림]; ok=y",
+      "expected": "{N}=[가림]; ok=[가림]",
       "fullLineExpected": "{N}=[가림]"
     },
     {
       "input": "{\\\"{N}\\\":[\\\"a]b\\\",\\\"hidden\\\"],\\\"ok\\\":1}",
-      "expected": "{\\\"{N}\\\":[가림],\\\"ok\\\":1}"
+      "expected": "{\\\"{N}\\\":[가림],\\\"ok\\\":[가림]}"
     },
     {
       "input": "{\\\\\\\"{N}\\\\\\\":[\\\\\\\"a]b\\\\\\\",\\\\\\\"hidden\\\\\\\"],\\\\\\\"ok\\\\\\\":1}",
-      "expected": "{\\\\\\\"{N}\\\\\\\":[가림],\\\\\\\"ok\\\\\\\":1}"
+      "expected": "{\\\\\\\"{N}\\\\\\\":[가림],\\\\\\\"ok\\\\\\\":[가림]}"
     },
     {
       "input": "{'{N}':['a]b','hidden'],'ok':1}",
-      "expected": "{'{N}':[가림],'ok':1}"
+      "expected": "{'{N}':[가림],'ok':[가림]}"
     }
   ]
 }$matrix$::jsonb as spec)
@@ -458,5 +480,6 @@ from matrix, jsonb_array_elements_text(spec->'names') names(name),
 
 select is(private.mask(repeat('🔒',295)||repeat('가',1706)), repeat('🔒',295)||'…[잘림]', 'Unicode output budget');
 select is(private.mask('Cookie='||repeat('a',1994)), 'Cookie=[가림]…[잘림]', 'mask prefix before marking truncation');
+select is(private.mask(repeat('ﷺ',200)), left(private.normalize_text(repeat('ﷺ',200)),295) || '…[잘림]', 'cap NFKC expansion');
 select * from finish();
 rollback;
