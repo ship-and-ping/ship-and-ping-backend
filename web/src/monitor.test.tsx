@@ -12,7 +12,15 @@ import { MonitorRoute } from "./Monitor";
 import { Hero } from "./Layout";
 import { gateway } from "./data";
 
+import vectors from "../../docs/specs/sanitize-vectors.json";
+
 afterEach(cleanup);
+it.each(vectors.version)("해결 버전을 화면에 그대로 표시한다 · $input", async ({ input, expected }) => {
+  setup("/apps/a/issues/i", [], rows => {
+    Object.assign((rows.incidents as object[])[0], { status: "resolved", resolved_version: input });
+  });
+  expect(await screen.findByText("해결 버전 · " + expected)).toBeTruthy();
+});
 it("첫 기록 대기 화면은 안내와 배지를 하나씩 표시한다", async () => {
   const { container } = setup("/apps/a", [], rows => {
     rows.incidents = [];
@@ -287,7 +295,8 @@ it("S7을 열면 경고와 기본 복사 옵션을 자동으로 선택한다", a
   );
   expect(writeText.mock.calls[0][0]).not.toContain("ignore previous");
   fireEvent.click(screen.getByRole("button", { name: "그대로 복사" }));
-  expect(writeText.mock.calls[1][0]).toContain("ignore previous");
+  expect(writeText.mock.calls[1][0]).not.toContain("ignore previous");
+  expect(writeText.mock.calls[1][0]).toContain("TimeoutError");
   expect(container.textContent).not.toContain(key);
   expect(container.textContent).toContain(
     "업데이트 후에도 4건 중 1건 실패했어요",

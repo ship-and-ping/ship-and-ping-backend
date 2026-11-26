@@ -1,3 +1,4 @@
+import { errorKind, errorName, stepName } from "./normalize";
 import { useContext, useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { Copy } from "./Connect";
@@ -405,7 +406,7 @@ function FeaturePage({
   data.errorKinds
     .filter((s) => Date.parse(s.at) >= data.now - days * day)
     .forEach((s) => {
-      const kind = displayText(s.error_kind ?? "종류 미상");
+      const kind = errorKind(s.error_kind) ?? "종류 미상";
       kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
     });
   return (
@@ -470,7 +471,7 @@ function FeaturePage({
         <summary>자세히</summary>
         <p>{route(f)}</p>
         <h3>오류 종류별 기록</h3>
-        {data.step && <p>실패한 단계 · {displayText(data.step)}</p>}
+        {stepName(data.step) && <p>실패한 단계 · {stepName(data.step)}</p>}
         {[...kinds].map(([k, n]) => (
           <p key={k}>
             {k} {n}건
@@ -504,8 +505,7 @@ function Samples({ data }: { data: Monitor }) {
     <ul>
       {data.samples.map((s, i) => (
         <li key={i}>
-          {when(s.at)} {displayText(s.error_kind ?? "")}{" "}
-          {displayText(s.message ?? "")}
+          {when(s.at)} {errorKind(s.error_kind) ?? errorName(s.message) ?? "(내용 저장 안 함)"}
         </li>
       ))}
     </ul>
@@ -725,7 +725,7 @@ function Issue({
           <details>
             <summary>자세히</summary>
             <p>{route(f)}</p>
-            {data.step && <p>실패한 단계 · {displayText(data.step)}</p>}
+            {stepName(data.step) && <p>실패한 단계 · {stepName(data.step)}</p>}
             <Samples data={data} />
           </details>
           {i.status === "open" && !dismissed && (

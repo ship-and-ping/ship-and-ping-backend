@@ -150,9 +150,9 @@ it("S10 keeps the failed deletion confirmation locked for retry", async () => {
   fireEvent.click(retry);
   expect(api.removeApp).toHaveBeenCalledTimes(2);
 });
-it("S10 requires a replacement for a masked label before saving", async () => {
+it.each([secret, "name=Jane Doe", "계정 user_id=sample"])("S10 requires a replacement for masked label %s before saving", async (labelName) => {
   const api = fake();
-  vi.mocked(api.snapshot).mockResolvedValue({app,labels:[{id:"l",method:"GET",route:"/a",name:secret,hidden:false}]});
+  vi.mocked(api.snapshot).mockResolvedValue({app,labels:[{id:"l",method:"GET",route:"/a",name:labelName,hidden:false}]});
   open("/apps/a/settings", api);
   const field = await screen.findByLabelText(/기능 이름$/);
   expect((field as HTMLInputElement).value).toBe("");

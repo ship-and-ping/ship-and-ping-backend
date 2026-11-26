@@ -140,7 +140,7 @@ export function Account({
               <dt>가입일</dt>
               <dd>{new Date(info.joined).toLocaleDateString("ko-KR")}</dd>
               <dt>로그인 방법</dt>
-              <dd>{displayText(info.method)}</dd>
+              <dd>{info.method.split(", ").map(method => displayText(method)).join(", ")}</dd>
               <dt>등록한 앱</dt>
               <dd>{count}개 / 3개</dd>
             </dl>

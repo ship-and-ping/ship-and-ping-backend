@@ -304,13 +304,14 @@ try {
         .select("*")
         .eq("app_id", member.id),
     );
-    assert.ok(samples.some((s) => s.message?.includes("[가림]")));
+    assert.ok(samples.some((s) => s.error_kind === "WriteError" && s.message === null));
     const prompt = buildIssuePrompt({
       feature: "시험",
       route: "/benchmark",
       versions: [version],
-      errors: samples.map((s) => s.message ?? ""),
+      errors: samples,
     });
+    assert.match(prompt.text, /WriteError/);
     assert.doesNotMatch(
       JSON.stringify([samples, prompt.text]),
       /test-user|ignored-body-marker|ignored-query-marker/,

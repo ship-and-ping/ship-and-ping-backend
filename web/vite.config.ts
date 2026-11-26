@@ -21,7 +21,10 @@ function pagesHeaders(): Plugin {
 }
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), ...(mode === "pages" ? [pagesHeaders()] : [])],
+  plugins: [
+    react(),
+    ...(mode === "pages" ? [pagesHeaders()] : []),
+  ],
   build: { rollupOptions: { output: { manualChunks: { supabase: ["@supabase/supabase-js"] } } } },
   test: { environment: "jsdom" },
 }));

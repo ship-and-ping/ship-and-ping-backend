@@ -56,7 +56,7 @@ select is(ingest_batch(current_setting('test.hash'),pg_temp.attempt('attempt_sta
 update attempts set status='unconfirmed';
 select ingest_batch(current_setting('test.hash'),pg_temp.attempt('attempt_result','browser',now()));
 select results_eq('select status,source,duration_ms from attempts',$q$select 'failure'::text,'browser'::text,660000$q$,'late result completes unconfirmed attempt');
-select is((select message from error_samples),'[가림]','attempt error sample masked');
+select is((select message from error_samples),null::text,'attempt error sample masked');
 select ingest_batch(current_setting('test.hash'),jsonb_set(pg_temp.attempt('attempt_start',null,now()-interval '10 minutes'),
  '{attempts,0,attempt_id}','"22222222-2222-4222-8222-222222222222"'));
 select evaluate_all();
@@ -65,11 +65,12 @@ select ingest_batch(current_setting('test.hash'),jsonb_set(jsonb_set(pg_temp.att
  '{attempts,0,attempt_id}','"22222222-2222-4222-8222-222222222222"'),'{attempts,0,result}','"success"'));
 select is((select status from attempts where attempt_id='22222222-2222-4222-8222-222222222222'),'success','late success replaces unconfirmed');
 select is(private.mask('a%40example.test ?token=aaa&key=bbb&ACCESS_TOKEN=ccc&status=ok'),
-  '[가림] ?token=[가림]&key=[가림]&ACCESS_TOKEN=[가림]&status=ok','encoded email and query credential values masked');
+  '[가림] ?[가림]','encoded email and complete query string masked');
 select ingest_batch(current_setting('test.hash'),jsonb_build_object('batch_id',gen_random_uuid(),'app_version',' v1 ','stats','[]'::jsonb));
 select results_eq('select version from app_versions',$q$select 'v1'::text$q$,'version trimmed before storage');
-select suggest_feature_map(current_setting('test.hash'),'[{"method":"GET","route":"/items/123?query=private","name":"Items"}]');
+select suggest_feature_map(current_setting('test.hash'),'[{"method":"GET","route":"/items/123?query=private","name":"배송 nickname=sample"}]');
 select results_eq('select route,applied from feature_map_suggestions',$q$select '/items/:id'::text,false$q$,'suggestions normalize route and await confirmation');
+select is((select name from feature_map_suggestions where route=private.route('/items/456')), '배송 nickname=[가림]', 'feature-map label and canonical request route match');
 select throws_ok(format('select suggest_feature_map(current_setting(''test.hash''),%L::jsonb)',items),'22023',null,description)
 from (values
   ('{}'::jsonb,'map requires array'), ('[123]'::jsonb,'map requires objects'),

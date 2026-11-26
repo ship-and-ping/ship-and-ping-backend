@@ -3,13 +3,21 @@ const id = n => "00000000-0000-4000-8000-" + String(n).padStart(12,"0");
 const hook = ["https:/","hooks.slack.com","services","fixture"].join("/");
 const sensitive = ["sp","srv","example"].join("_");
 const report = { slack:0, mail:0, broken:0, completed:0, connected:0, safe:true };
+const withdrawals = new Map([[id(7), id(9)]]);
+report.claims = [];
+report.releases = [];
+report.retry = [];
 let round=0;
 let stateIssued=false;
 function rows() {
   round++;
-  return [1,2].map(n=>({id:id(n),claim_token:id(3),app:id(4),incident:id(n),event:"open",
+  const result = [1,2].map(n=>({id:id(n),claim_token:id(3),app:id(4),incident:id(n),event:"open",
     kind:"slow",feature:"신청 "+sensitive,metric:{total:10,p50:n===1?3400.5:null,baseline:n===1?1100:null,raw:"private-body"},raw_route:"/private-route",
     channel:round===2?"email":"slack",hook,destination:"T/C",secret_id:id(7),email:"member@example.invalid",digest:round>1}));
+  // This address sorts before the healthy digest, so a batch-wide return loses both.
+  if(round===2) result.push({...result[0],id:id(9),app:id(9),email:"a@example.invalid"});
+  if(round===2) result.push({...result[0],id:id(8),app:id(8),email:"b@example.invalid"});
+  return result;
 }
 async function fixtureHash(suffix) {
   const raw = new TextEncoder().encode(["sp","pub",suffix].join("_"));
@@ -23,7 +31,7 @@ export default {
     if(url.hostname==="hooks.slack.com" || url.hostname==="api.resend.com") {
       const payload=await request.json();
       report.safe &&= ![sensitive,"private-body","private-route",hook].some(value=>payload.text.includes(value))
-        && payload.text.includes("3.4초") && payload.text.includes("평소 1.1초") && !payload.text.includes("0.0초")
+        && payload.text.includes("평소 1.1초. 최근 30분 보통 3.4초") && !payload.text.includes("0.0초")
         && (round===3 ? !payload.text.includes("쉽앤핑에서 보기") : [1,2].every(n=>payload.text.includes("https://web.test/apps/"+id(4)+"/issues/"+id(n))));
       if(url.hostname==="hooks.slack.com"){ report.slack++; return new Response("action_prohibited",{status:403}); }
       report.safe &&= payload.to[0]==="member@example.invalid" && payload.subject.includes("모아") && payload.text.includes("12건 더");
@@ -47,10 +55,24 @@ export default {
       case "evaluate_all": return new Response(null,{status:503});
       case "claim_notifications": return Response.json(rows());
       case "slack_failed": report.broken++;return Response.json(null);
-      case "complete_notification": if(body.id===id(1)) return new Response(null,{status:503});
+      case "complete_notification": if (!body.ok) report.retry.push([body.id.slice(-1),body.error,body.token===id(3)]);
+        if(body.id===id(1)) return new Response(null,{status:503});
         report.completed+=Number(body.ok && body.token===id(3));return Response.json(null);
-      case "reserve_mail": return Response.json(body.app===id(4));
-      case "expand_mail_digest": return Response.json(12);
+      case "reserve_mail": return body.app===id(9) ? new Response(null,{status:503}) : Response.json(body.app===id(4));
+      case "claim_withdrawal": {
+        report.claims.push(body.member_id.slice(-1));
+        if (withdrawals.has(body.member_id)) return Response.json(null);
+        const token = crypto.randomUUID();
+        withdrawals.set(body.member_id, token);
+        return Response.json(token);
+      }
+      case "release_withdrawal":
+        if (withdrawals.get(body.member_id) === body.claim_token) {
+          withdrawals.delete(body.member_id);
+          report.releases.push(body.member_id.slice(-1));
+        }
+        return Response.json(null);
+      case "expand_mail_digest": return body.id===id(8) ? new Response(null,{status:503}) : Response.json(12);
       case "start_slack_state": stateIssued=true;return Response.json(id(8));
       case "consume_slack_state":{
         if(!stateIssued || body.ticket!==id(8))return Response.json(null);

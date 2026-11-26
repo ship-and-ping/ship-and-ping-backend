@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 #[derive(Default)]
+// These beta quotas live in one Worker isolate. A new or parallel isolate has fresh counters.
 pub(crate) struct Limits {
     withdrawals: HashMap<uuid::Uuid, (u64, u8)>,
     keys: HashMap<String, (String, u64)>,

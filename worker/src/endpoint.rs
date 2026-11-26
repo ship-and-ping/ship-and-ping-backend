@@ -357,11 +357,20 @@ async fn delete_self(mut req: Request, env: &Env) -> Result<Response> {
     }) {
         return error(429, "check result before retrying");
     }
+    let member_arg = json!({"member_id":member.id}).to_string().into_bytes();
+    let Ok(mut response) = db.rpc("claim_withdrawal", member_arg).await else {
+        return error(503, "account unavailable");
+    };
+    let Some(token) = response.json::<Option<uuid::Uuid>>().await? else {
+        return error(429, "check result before retrying");
+    };
+    let claim = json!({"member_id":member.id,"claim_token":token}).to_string();
     let apps = format!("/rest/v1/apps?owner_id=eq.{}", member.id);
     let removed = db
         .account_request(Method::Delete, &apps, Some(&auth))
         .await?;
     if !(200..300).contains(&removed.status_code()) {
+        let _ = db.rpc("release_withdrawal", claim.into_bytes()).await;
         return error(503, "account unavailable");
     }
     let path = format!("/auth/v1/admin/users/{}", member.id);
@@ -372,6 +381,7 @@ async fn delete_self(mut req: Request, env: &Env) -> Result<Response> {
         return error(504, "result unknown");
     }
     if !(200..300).contains(&removed.status_code()) && removed.status_code() != 404 {
+        let _ = db.rpc("release_withdrawal", claim.into_bytes()).await;
         return error(503, "account unavailable");
     }
     Response::from_json(&json!({"deleted":true}))

@@ -24,6 +24,8 @@ fn app_version_preserves_build_times_and_masks_key_prefixes() {
     for (version, expected) in [
         ("2026.11.26.1530", "2026.11.26.1530"),
         ("1764120000", "1764120000"),
+        ("1764120000123", "1764120000123"),
+        ("2026.02.1530.0001", "2026.02.1530.0001"),
         ("v20261126-1530", "v20261126-1530"),
         ("1764120000-ＳＰ＿ＰＵＢ＿demo", "1764120000-[가림]"),
         ("v1-sk_abcdefghijklmnop", "v1-[가림]"),
@@ -49,11 +51,7 @@ fn masks_identifiers_and_private_text_before_rpc() {
     let rpc = run(input).unwrap();
     assert_eq!(rpc["payload"]["app_version"], "v1-[가림]");
     assert_eq!(rpc["payload"]["stats"][0]["route"], "/a/:id/:id/:id/short");
-    let msg = rpc["payload"]["error_samples"][0]["message"]
-        .as_str()
-        .unwrap();
-    assert!(msg.starts_with("[가림] [가림] [가림] [가림] [가림] "));
-    assert_eq!(msg.chars().count(), 300);
+    assert!(rpc["payload"]["error_samples"][0]["message"].is_null());
     assert_eq!(
         rpc["app_key_hash"],
         "4069827db68e902782e6c46c90b4dbcab15758c2183f7df1bc1ed7f6294acc53"
@@ -93,10 +91,7 @@ fn masks_credentials_in_attempt_results() {
         let out = run(batch(vec![row])).unwrap();
         assert_eq!(
             out["payload"]["attempts"][0]["error_message"],
-            message
-                .split_once('=')
-                .filter(|_| message.ends_with("=demo"))
-                .map_or("[가림]".into(), |(name, _)| format!("{name}=[가림]")),
+            Value::Null,
             "{message}"
         );
     }
@@ -158,9 +153,9 @@ fn request_error_samples_and_status_bounds() {
     assert_eq!(stats["client_errors"], 1);
     let samples = rpc["payload"]["error_samples"].as_array().unwrap();
     assert_eq!(samples.len(), 3);
-    assert_eq!(samples[0]["error_kind"], "[가림]");
-    assert_eq!(samples[1]["error_kind"], "[가림]");
-    assert!(samples.iter().all(|s| s["message"] == "task_queue"));
+    assert_eq!(samples[0]["error_kind"], Value::Null);
+    assert_eq!(samples[1]["error_kind"], Value::Null);
+    assert!(samples.iter().all(|s| s["message"].is_null()));
 }
 
 #[test]
@@ -181,9 +176,9 @@ fn deep_events_validate_fields_and_mask_result_details() {
     let attempts = rpc["payload"]["attempts"].as_array().unwrap();
     assert_eq!(attempts.len(), 2);
     assert_eq!(attempts[0]["type"], "attempt_start");
-    assert_eq!(attempts[1]["step"], "token=[가림]");
+    assert_eq!(attempts[1]["step"], Value::Null);
     for field in ["error_kind", "error_message"] {
-        assert_eq!(attempts[1][field], "[가림]");
+        assert_eq!(attempts[1][field], Value::Null);
     }
 }
 
@@ -222,7 +217,6 @@ fn validates_envelope_fields_and_records() {
         ("status", json!(600)),
         ("duration_ms", json!(2.5)),
         ("ts", json!("bad")),
-        ("error_kind", json!("a".repeat(81))),
         ("type", json!("unknown")),
     ] {
         let mut r = request();
@@ -314,18 +308,15 @@ fn masks_overlaps_nested_prefixes_and_ascii_phone_neighbors() {
         (nested, format!("x{}_[가림]", short_key())),
         (format!("token={}", short_key()), "token=[가림]".into()),
         ("a01012345678z".into(), "a[가림]z".into()),
-        (
-            "1234567890123456 01012345678".into(),
-            "1234567890123456 [가림]".into(),
-        ),
+        ("1234567890123456 01012345678".into(), "[가림]".into()),
     ];
-    for (message, expected) in cases {
+    for (message, _) in cases {
         let mut row = request();
         row["status"] = json!(500);
         row["error_message"] = json!(message);
         row["route"] = json!("/Bearer: abc/X-Key: demo/ordinary");
         let out = run(batch(vec![row])).unwrap();
-        assert_eq!(out["payload"]["error_samples"][0]["message"], expected);
+        assert_eq!(out["payload"]["error_samples"][0]["message"], Value::Null);
         assert_eq!(out["payload"]["stats"][0]["route"], "/:id/:id/ordinary");
     }
 }
@@ -338,22 +329,57 @@ fn shared_sanitize_vectors() {
         expected: String,
     }
     #[derive(serde::Deserialize)]
-    struct Cases {
-        mask: Vec<Case>,
-        route: Vec<Case>,
+    struct Diagnostic {
+        input: String,
+        message: Option<String>,
+        kind: Option<String>,
+        step: Option<String>,
     }
-    let cases: Cases =
+    #[derive(serde::Deserialize)]
+    struct Matrix {
+        names: Vec<String>,
+        forms: Vec<String>,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Cases {
+        matrix: Matrix,
+        omitted_messages: Vec<String>,
+        diagnostics: Vec<Diagnostic>,
+        route: Vec<Case>,
+        version: Vec<Case>,
+    }
+    let mut cases: Cases =
         serde_json::from_str(include_str!("../../docs/specs/sanitize-vectors.json")).unwrap();
-    assert_eq!((cases.mask.len(), cases.route.len()), (46, 10));
-    for case in cases.mask {
+    for name in &cases.matrix.names {
+        for form in &cases.matrix.forms {
+            cases.omitted_messages.push(form.replace("{N}", name));
+        }
+    }
+    for d in cases.diagnostics {
+        let row = json!({"type":"attempt_result","feature_key":"join","attempt_id":ID,"source":"browser","result":"failure","ts":AT,
+            "step": d.input, "error_kind": d.input, "error_message": d.input});
+        let out = run(batch(vec![row])).unwrap();
+        let record = &out["payload"]["attempts"][0];
+        assert_eq!(record["step"], json!(d.step), "{}", d.input);
+        assert_eq!(record["error_kind"], json!(d.kind), "{}", d.input);
+        assert_eq!(record["error_message"], json!(d.message), "{}", d.input);
+    }
+    for case in cases.version {
+        let mut row = batch(vec![request()]);
+        row["app_version"] = json!(case.input);
+        assert_eq!(run(row).unwrap()["payload"]["app_version"], case.expected);
+    }
+    for input in cases.omitted_messages {
         let mut row = request();
         row["status"] = json!(500);
-        row["error_message"] = json!(case.input);
+        row["error_message"] = json!(input);
         let out = run(batch(vec![row])).unwrap();
         assert_eq!(
-            out["payload"]["error_samples"][0]["message"], case.expected,
+            out["payload"]["error_samples"][0]["message"],
+            Value::Null,
             "{:?}",
-            case.input
+            input
         );
     }
     for case in cases.route {
