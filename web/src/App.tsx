@@ -9,7 +9,7 @@ import {
   useParams,
 } from "react-router-dom";
 import type { AppSummary, Gateway } from "./data";
-import { validateApp } from "./domain";
+import { appAddressHelp, appAddressLabel, validateApp } from "./domain";
 import { displayText } from "./normalize";
 import { Hero, Landing, Shell } from "./Layout";
 import { AuthPage } from "./AuthPage";
@@ -230,7 +230,7 @@ function Register({
             onChange={(e) => setName(e.target.value)}
           />
           <small id="name-help">{errors.name ?? "1~40자로 적어 주세요."}</small>
-          <label htmlFor="app-url">앱 주소 (선택)</label>
+          <label htmlFor="app-url">{appAddressLabel}</label>
           <input
             id="app-url"
             type="url"
@@ -241,7 +241,7 @@ function Register({
             onChange={(e) => setUrl(e.target.value)}
           />
           <small id="url-help">
-            {errors.url ?? "앱 주소는 나중에 적어도 돼요."}
+            {errors.url ?? appAddressHelp}
           </small>
           <button disabled={busy}>{busy ? "등록하는 중" : "등록"}</button>
           {error && (

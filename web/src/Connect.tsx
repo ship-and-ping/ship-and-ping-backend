@@ -366,6 +366,7 @@ export function Connect({
           <div className="cols">
             <section className="panel">
               <h2>연결 요청문</h2>
+              <p>휴대폰 앱(플레이스토어·앱스토어)이라면 앱 서버에서 기록을 보내도록 <a href="#server-key"><strong>서버 있음</strong></a>을 골라 주세요. 휴대폰 앱 코드는 바꾸지 않아도 돼요.</p>
               {pub ? (
                 <>
                   <p>
@@ -394,7 +395,7 @@ export function Connect({
                   </button>
                 </>
               )}
-              <h3>서버가 있는 앱</h3>
+              <h3 id="server-key" tabIndex={-1}>서버가 있는 앱</h3>
               <p>
                 서버 키는 배포 설정(환경변수 <code>SHIPPING_SERVER_KEY</code>)에 직접
                 넣으세요. 코딩 AI 대화나 코드에 붙여넣지 마세요.
