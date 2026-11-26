@@ -17,6 +17,8 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
   const [email, setEmail] = useState("");
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [needsCode, setNeedsCode] = useState(false);
+  const codeField = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState(() => mode === "login" && /error(_code)?=/.test(location.search + location.hash)
     ? "로그인 링크를 확인할 수 없어요. 새 링크를 받아 주세요." : "");
@@ -26,6 +28,20 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
   const fieldError = (name: string) => invalidField === name && error
     ? <p id={errorId} role="alert">{error}</p> : null;
   const newPassword = ["signup", "reset", "account"].includes(mode);
+  async function sendCode() {
+    setMessage("");
+    setError("");
+    setInvalidField("");
+    setNeedsCode(true);
+    try {
+      await api.reauthenticate();
+      if (codeField.current) codeField.current.value = "";
+      setMessage("본인 확인을 위해 메일로 보낸 번호를 적어 주세요.");
+      codeField.current?.focus();
+    } catch {
+      setError("인증번호를 보내지 못했어요. 잠시 뒤 번호를 다시 받아 주세요.");
+    }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -47,6 +63,13 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
     }
     if (action !== "link" && mode === "login" && !password) {
       invalid("password", "비밀번호를 적어 주세요.");
+      return;
+    }
+    if (action === "resend" && needsCode) {
+      locked.current = true;
+      setBusy(true);
+      try { await sendCode(); }
+      finally { locked.current = false; setBusy(false); }
       return;
     }
     if (newPassword && password.length < 8) {
@@ -76,7 +99,14 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
         await api.requestReset(email.trim());
         setMessage("가입한 이메일이라면 비밀번호 재설정 메일을 받을 수 있어요. 스팸함도 확인해 주세요.");
       } else {
-        await api.updatePassword(password);
+        if (needsCode) {
+          const nonce = String(fields.get("nonce") ?? "").trim();
+          if (!nonce) {
+            invalid("nonce", "메일로 받은 번호를 적어 주세요.");
+            return;
+          }
+          await api.updatePassword(password, nonce);
+        } else await api.updatePassword(password);
         if (mode === "reset") navigate("/apps", {replace:true});
         else saved?.();
       }
@@ -86,6 +116,18 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
       setVisible(false);
       const status = cause && typeof cause === "object" && "status" in cause ? cause.status : undefined;
       const code = cause && typeof cause === "object" && "code" in cause ? cause.code : undefined;
+      if (mode === "account" && code === "reauthentication_needed" && !needsCode) {
+        await sendCode();
+        return;
+      }
+      if (needsCode && (code === "reauthentication_not_valid" || code === "otp_expired" || code === "reauthentication_needed")) {
+        invalid("nonce", code === "otp_expired" ? "번호가 만료됐어요. 새 번호를 받아 주세요." : "번호를 다시 확인해 주세요. 시간이 지났다면 새 번호를 받아 주세요.");
+        return;
+      }
+      if (newPassword && (code === "same_password" || code === "weak_password")) {
+        invalid("password", code === "same_password" ? "이전과 다른 비밀번호를 적어 주세요." : "쉽게 짐작하기 어려운 비밀번호로 바꿔 주세요.");
+        return;
+      }
       if (mode === "reset" && (code === "session_expired" || code === "session_not_found" || code === "otp_expired" || status === 401)) {
         expired?.();
         return;
@@ -121,7 +163,13 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
       </>}
       <button type="button" className="secondary" aria-pressed={visible} onClick={() => setVisible(!visible)}>비밀번호 보기</button>
     </>}
+    {needsCode && <>
+      <label>메일 인증번호<input ref={codeField} name="nonce" autoComplete="one-time-code" inputMode="numeric"
+        aria-invalid={invalidField === "nonce"} aria-describedby={invalidField === "nonce" ? errorId : undefined}/></label>
+      {fieldError("nonce")}
+    </>}
     <button disabled={busy}>{busy ? "처리하는 중" : titles[mode]}</button>
+    {needsCode && <button value="resend" className="secondary" disabled={busy}>번호 다시 받기</button>}
     {mode === "login" && <button className="secondary" value="link" formNoValidate disabled={busy}>비밀번호 없이 메일 링크로 받기</button>}
     <p role="status">{message}</p>
     {!invalidField && error && <p role="alert">{error}</p>}
