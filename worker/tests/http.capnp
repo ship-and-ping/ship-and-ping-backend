@@ -12,6 +12,7 @@ const config :Workerd.Config = (
       bindings = [
         (name = "SUPABASE_URL", text = "https://rpc.test"),
         (name = "SUPABASE_SECRET_KEY", text = "fixture"),
+        (name = "SUPABASE_PUBLISHABLE_KEY", text = "fixture-public"),
         (name = "NO_ORIGIN", service = "no-origin"),
         (name = "WEB_ORIGIN", text = "https://web.test"),
         (name = "SLACK_CLIENT_ID", text = "fixture"),

@@ -901,3 +901,5 @@ h1[tabindex="-1"]:focus { outline: none; }
 @media (min-width: 640px) {
   .compact > a[aria-label="내 계정"] { display: none; }
 }
+.login-number { display:block; font-size:2.5rem; font-variant-numeric:tabular-nums; letter-spacing:.12em; }
+.login-approval { max-width:36rem; margin-inline:auto; }

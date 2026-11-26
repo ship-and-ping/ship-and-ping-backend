@@ -2,6 +2,23 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { expect, it, vi } from "vitest";
 import { gateway } from "./data";
 
+it.each([429, 503])("승인 요청 생성이 %s여도 일반 메일 로그인과 가입을 계속한다", async status => {
+  const auth = {
+    signInWithOtp: vi.fn().mockResolvedValue({error:null}),
+    signUp: vi.fn().mockResolvedValue({error:null}),
+  };
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(null, {status})));
+  try {
+    const api = gateway({auth} as unknown as SupabaseClient, "https://worker.invalid");
+    const email = "member@example.invalid";
+    await expect(api.login(email)).resolves.toBeUndefined();
+    await expect(api.signup(email, "example phrase")).resolves.toBeUndefined();
+    const emailRedirectTo = location.origin + "/login";
+    expect(auth.signInWithOtp).toHaveBeenCalledWith({email, options:{emailRedirectTo}});
+    expect(auth.signUp).toHaveBeenCalledWith(expect.objectContaining({email, options:expect.objectContaining({emailRedirectTo})}));
+  } finally { vi.unstubAllGlobals(); }
+});
+
 it("가입 여부와 관계없이 같은 응답을 주고 복구 메일을 현재 사이트로 연결한다", async () => {
   const auth = {
     signUp: vi.fn().mockResolvedValueOnce({error:null}).mockResolvedValueOnce({error:{code:"user_already_exists"}}),

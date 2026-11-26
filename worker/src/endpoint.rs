@@ -284,6 +284,9 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
 }
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    if req.path() == "/v1/login-requests" || req.path().starts_with("/v1/login-requests/") {
+        return login_api::route(req, &env).await;
+    }
     let result = if req.path() == "/v1/account/delete" {
         delete_self(req, &env).await
     } else if req.path().starts_with("/v1/slack/") {
@@ -305,6 +308,9 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     )?;
     Ok(response)
 }
+
+#[path = "login_api.rs"]
+mod login_api;
 
 async fn delete_self(mut req: Request, env: &Env) -> Result<Response> {
     if req.method() == Method::Options {

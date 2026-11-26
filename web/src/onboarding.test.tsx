@@ -70,6 +70,31 @@ function fake(user: string | null = "member"): Gateway {
     save: vi.fn(async () => []),
   };
 }
+it("requires a PC number before mobile approval and allows immediate refusal", async () => {
+  const api = fake();
+  api.requests = {create:vi.fn(),poll:vi.fn(),decide:vi.fn()
+    .mockResolvedValueOnce({status:"pending",client_info:{browser:"Firefox",place:"KR"},created_at:app.created_at})
+    .mockResolvedValueOnce({status:"denied"})};
+  open("/login/approve?req=sample&proof=fixture",api);
+  const approve = await screen.findByRole<HTMLButtonElement>("button",{name:"이 PC 로그인 승인"});
+  expect(approve.disabled).toBe(true);
+  expect(screen.getByText(/직접 로그인하려는 게 아니라면/)).toBeTruthy();
+  const input = screen.getByRole("textbox",{name:"PC 확인 숫자 두 자리"});
+  fireEvent.change(input,{target:{value:"0"}});
+  expect(approve.disabled).toBe(true);
+  fireEvent.change(input,{target:{value:"07"}});
+  expect(approve.disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button",{name:"거절"}));
+  expect(await screen.findByText("휴대폰에서 거절했어요.")).toBeTruthy();
+  expect(api.requests.decide).toHaveBeenLastCalledWith("sample","deny","fixture","07");
+});
+it("기존 세션으로 요청 번호만 열면 메일 링크를 안내한다", async () => {
+  const api = fake();
+  api.requests = {create:vi.fn(),poll:vi.fn(),decide:vi.fn()};
+  open("/login/approve?req=sample",api);
+  expect(await screen.findByText("메일의 링크를 다시 눌러 주세요.")).toBeTruthy();
+  expect(api.requests.decide).not.toHaveBeenCalled();
+});
 it("로그인은 기본 제출이고 메일 링크는 구분선 다음 보조 행동이다", async () => {
   vi.stubEnv("VITE_GOOGLE_LOGIN_ENABLED", "");
   try {
@@ -557,7 +582,7 @@ it("가입은 일치하는 비밀번호로 한 번만 요청하고 메일 안내
   fireEvent.change(confirm, {target:{value:"example phrase"}});
   fireEvent.click(button);
   fireEvent.click(button);
-  await screen.findByText(/확인 메일을 보냈어요/);
+  await screen.findByText("이 메일 링크는 링크를 연 기기에서 로그인돼요.");
   expect(api.signup).toHaveBeenCalledTimes(1);
   expect(password.value).toBe("");
 });

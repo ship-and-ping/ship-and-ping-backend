@@ -19,7 +19,7 @@ function start() {
       return (
         <BrowserRouter>
           <App
-            api={gateway(createClient(httpsOrigin(url), key))}
+            api={gateway(createClient(httpsOrigin(url), key), endpoint)}
             ingest={endpoint}
           />
         </BrowserRouter>

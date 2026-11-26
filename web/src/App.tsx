@@ -13,6 +13,7 @@ import { appAddressHelp, appAddressLabel, validateApp } from "./domain";
 import { displayText } from "./normalize";
 import { Hero, Landing, Shell } from "./Layout";
 import { AuthPage } from "./AuthPage";
+import { LoginApproval } from "./LoginApproval";
 import { MonitorRoute } from "./Monitor";
 import { DeepPage } from "./DeepPage";
 import { Notifications } from "./Notifications";
@@ -355,6 +356,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     return <main role="status">로그인 상태를 확인하는 중</main>;
   return (
     <Routes>
+      <Route path="/login/approve" element={<LoginApproval api={api} user={user ?? null}/>}/>
       <Route path="/signup" element={user ? <AfterLogin api={api}/> : <AuthPage api={api} mode="signup"/>}/>
       <Route path="/forgot-password" element={<AuthPage api={api} mode="forgot"/>}/>
       <Route path="/reset-password" element={<AuthPage api={api} mode="reset" expired={() => setRecoveryUser(null)} recovery={!!user && recoveryUser === user}/>}/>

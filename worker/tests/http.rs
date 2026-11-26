@@ -50,6 +50,24 @@ fn ingest_http_statuses() {
         assert!(Instant::now() < deadline, "workerd startup timeout");
         thread::sleep(Duration::from_millis(30));
     }
+    for (origin, expected) in [("https://web.test", "204"), ("https://else.test", "403")] {
+        let output = Command::new("curl")
+            .args([
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "-X",
+                "OPTIONS",
+                "-H",
+                &format!("Origin: {origin}"),
+                &format!("http://{addr}/v1/login-requests"),
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), expected);
+    }
     let fixture = |path: &str, body: Option<Value>| {
         let mut curl = Command::new("curl");
         curl.args(["--silent", "--show-error", "--max-time", "5"]);
@@ -66,6 +84,70 @@ fn ingest_http_statuses() {
         let output = curl.arg(format!("http://{addr}{path}")).output().unwrap();
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
+    for body in [
+        json!({"email":"phone@example.invalid"}),
+        json!({"email":"phone@example.invalid","password":"fixture-password"}),
+    ] {
+        let created = Command::new("curl")
+            .args([
+                "-s",
+                "-H",
+                "Origin: https://web.test",
+                "--json",
+                &body.to_string(),
+                &format!("http://{addr}/v1/login-requests"),
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&created.stdout).unwrap(),
+            json!({
+                "request_id":"00000000-0000-4000-8000-000000000042","poll_secret":"pc-only",
+                "match_code":"07","expires_at":"fixture-expiry"
+            })
+        );
+    }
+    let request_url =
+        format!("http://{addr}/v1/login-requests/00000000-0000-4000-8000-000000000042");
+    let approved = Command::new("curl")
+        .args([
+            "-s",
+            "-H",
+            "Origin: https://web.test",
+            "-H",
+            "Authorization: Bearer phone",
+            "--json",
+            r#"{"match_code":"07"}"#,
+            "-H",
+            "X-Mail-Proof: fixture-mail",
+            &format!("{request_url}/approve"),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        serde_json::from_slice::<Value>(&approved.stdout).unwrap(),
+        json!({"status":"approved"})
+    );
+    for expected in [
+        json!({"status":"approved","token_hash":"fixture-pc-grant"}),
+        json!({"status":"missing"}),
+    ] {
+        let polled = Command::new("curl")
+            .args([
+                "-s",
+                "-H",
+                "Origin: https://web.test",
+                "-H",
+                "X-Poll-Secret: pc-only",
+                &request_url,
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&polled.stdout).unwrap(),
+            expected
+        );
+    }
     let delete = |address, token: &str| {
         let output = Command::new("curl")
             .args([

@@ -28,6 +28,7 @@ const cases = [
   ["회원 가입","/signup","normal","input[name=confirm]"],
   ["새 비밀번호","/reset-password#type=recovery&access_token=qa-local-only&refresh_token=qa-local-only&expires_in=3600&token_type=bearer","normal","input[name=confirm]"],
   ["비밀번호 찾기","/forgot-password","normal","input[type=email]"],
+  ["PC 로그인 승인","/login/approve?req=qa-request&proof=fixture","approval","input[inputmode=numeric]"],
 ];
 // Keep the original D6 indices stable for before/after comparisons.
 const flow = [
@@ -62,6 +63,7 @@ const flow = [
   [21,"탈퇴 진행","deleting"],
   [21,"탈퇴 실패","failed"],
   [21,"탈퇴 완료","done"],
+  [25,"휴대폰에서 PC 로그인 승인"],
 ].map(([index,title,variant]) => {
   const [,path,state,ready] = cases[index];
   return [title,path,variant ?? state,ready];
@@ -90,7 +92,7 @@ try {
         reducedMotion: reduced ? "reduce" : "no-preference", locale:"ko-KR",timezoneId:"Asia/Seoul", serviceWorkers:"block" });
       try {
         await page.clock.setFixedTime(new Date(now));
-        await mockPage(page,state,path.startsWith("/apps") || path==="/account",origin);
+        await mockPage(page,state,path.startsWith("/apps") || path==="/account" || state==="approval",origin);
         await page.goto(origin+path,{waitUntil:"domcontentloaded"});
         await page.locator(ready).first().waitFor({timeout:12000});
         if (gallery) await prepareScene(page,state);
@@ -190,7 +192,7 @@ async function prepareScene(page,state) {
   if (state === "mail") {
     await page.locator("[name=email]").fill(exampleEmail);
     await button("비밀번호 없이 메일 링크로 받기").click();
-    await page.getByText(/로그인 링크를 보냈어요/).waitFor();
+    await page.getByText("메일을 확인해 주세요",{exact:true}).waitFor();
   } else if (state === "reauth") {
     await button("비밀번호 바꾸기").click();
     for (const field of ["password","confirm"]) await page.locator('[name="'+field+'"]').fill("example-only-password");

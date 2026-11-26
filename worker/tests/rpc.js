@@ -4,6 +4,7 @@ const hook = ["https:/","hooks.slack.com","services","fixture"].join("/");
 const sensitive = ["sp","srv","example"].join("_");
 const report = { slack:0, mail:0, broken:0, completed:0, connected:0, safe:true };
 const withdrawals = new Map([[id(7), id(9)]]);
+let pcGrant;
 report.claims = [];
 report.releases = [];
 report.retry = [];
@@ -41,9 +42,25 @@ export default {
       const code=(await request.formData()).get("code");
       return Response.json(code==="denied"?{ok:false,error:"action_prohibited"}:{ok:true,team:{id:"T"},incoming_webhook:{url:hook,channel:"#test",channel_id:"C"}});
     }
+    if (["/auth/v1/otp","/auth/v1/signup"].includes(url.pathname)) {
+      const redirect = new URL(url.searchParams.get("redirect_to"));
+      const body = await request.json();
+      const valid = redirect.origin==="https://web.test" && redirect.pathname==="/login/approve"
+        && redirect.searchParams.get("req")===id(42) && redirect.searchParams.get("proof")==="fixture-mail"
+        && request.headers.get("apikey")==="fixture-public" && body.email==="phone@example.invalid"
+        && (url.pathname.endsWith("otp") ? body.create_user===true : body.data.ship_ping_password_set===true && body.password==="fixture-password");
+      return new Response(null,{status:valid ? 200 : 400});
+    }
     if (request.headers.get("apikey") !== "fixture") return new Response(null, {status: 500});
     const path = new URL(request.url).pathname;
     const member = request.headers.get("Authorization")?.slice(7);
+    if (path === "/auth/v1/user" && member === "phone") return Response.json({id:id(42),email:"phone@example.invalid",email_confirmed_at:"2026-11-26"});
+    if (path === "/rest/v1/rpc/login_mail_time" && member === "phone") return Response.json(Math.floor(Date.now()/1000));
+    if (path === "/auth/v1/admin/generate_link") {
+      const input=await request.json();
+      if(input.type!=="magiclink" || input.email!=="phone@example.invalid") return new Response(null,{status:400});
+      return Response.json({id:id(42),hashed_token:"fixture-pc-grant"});
+    }
     if (path === "/auth/v1/user") return member === "6" ? new Response(null,{status:401}) : Response.json({id:id(member)});
     if (path === "/rest/v1/apps") return new Response(null,{status:member === "5" ? 503 : 204});
     if (path.startsWith("/auth/v1/admin/users/")) {
@@ -52,6 +69,13 @@ export default {
     }
     const body = await request.json();
     switch(path.split("/").pop()){
+      case "login_auth_budget": return Response.json(true);
+      case "login_create": return Response.json({request_id:id(42),mail_secret:"fixture-mail",poll_secret:"pc-only",match_code:"07",expires_at:"fixture-expiry"});
+      case "login_step":
+        if(body.p_action==="claim" && body.p_email==="phone@example.invalid" && body.p_code==="07" && body.p_proof==="fixture-mail" && body.p_mail_time>0) return Response.json({status:"issuing"});
+        if(body.p_action==="seal" && body.p_token==="fixture-pc-grant"){ pcGrant=body.p_token; return Response.json({status:"approved"}); }
+        if(body.p_action==="poll" && body.p_secret==="pc-only" && pcGrant){ const grant=pcGrant; pcGrant=null; return Response.json({status:"approved",token_hash:grant}); }
+        return Response.json({status:"missing"});
       case "evaluate_all": return new Response(null,{status:503});
       case "claim_notifications": return Response.json(rows());
       case "slack_failed": report.broken++;return Response.json(null);
