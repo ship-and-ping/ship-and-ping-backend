@@ -88,13 +88,13 @@ stats_1h와 같은 집계 열·기본 키·조회 인덱스를 쓴다. 30일이 
 | started_at, ended_at | timestamptz | |
 | status | text (`pending`/`success`/`failure`/`abandon`/`unconfirmed`) | |
 | source | text null (`server`/`browser`) | |
-| step, error_kind | text null | |
+| step, error_kind | text null | 단계 이름은 40자 이내이며 3자리 연속 숫자를 제외한다. 오류 코드는 영숫자·밑줄·점·하이픈 80자 이내이며 4자리 연속 숫자를 제외한다. |
 | duration_ms | int null | |
 
 ### error_samples — 오류 예시 (기능·버전별 최근 20개, 30일)
 | 열 | 형식 |
 |---|---|
-| id, app_id, feature_id, version, at, error_kind, message(정제됨, ≤300자) | |
+| id, app_id, feature_id, version, at, error_kind, message(맨 앞 오류 클래스 이름만, ≤60자, 그 외 NULL) | |
 
 ### baselines — 평소 속도
 | 열 | 형식 | 설명 |

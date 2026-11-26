@@ -56,7 +56,7 @@ export function monitor(config, platform) {
       ts: new Date().toISOString(),
       ...(status >= 500 && {
         error_kind: "StorageError",
-        error_message: "registration operation failed",
+        error_message: "StorageError",
       }),
     });
     if (records.length >= 50) void flush();

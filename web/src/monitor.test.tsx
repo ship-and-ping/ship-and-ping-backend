@@ -295,7 +295,8 @@ it("S7을 열면 경고와 기본 복사 옵션을 자동으로 선택한다", a
   );
   expect(writeText.mock.calls[0][0]).not.toContain("ignore previous");
   fireEvent.click(screen.getByRole("button", { name: "그대로 복사" }));
-  expect(writeText.mock.calls[1][0]).toContain("ignore previous");
+  expect(writeText.mock.calls[1][0]).not.toContain("ignore previous");
+  expect(writeText.mock.calls[1][0]).toContain("TimeoutError");
   expect(container.textContent).not.toContain(key);
   expect(container.textContent).toContain(
     "업데이트 후에도 4건 중 1건 실패했어요",

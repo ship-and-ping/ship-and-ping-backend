@@ -1,4 +1,3 @@
-import diagnosticKeys from "../diagnostic-keys.mjs";
 
 /** 요청문에 들어갈 외부 문자열의 검사와 표시가 같은 문자를 보도록 한다. */
 function normalizeText(value: string): string {
@@ -17,7 +16,6 @@ export function normalizePromptInput(value: string): string {
 
 // Header and credential names can follow Korean text.
 const start = "(?<![A-Za-z0-9_])";
-const allowed = new Set(diagnosticKeys.map(key => key.replaceAll("_", "")));
 // Quoted keys may contain spaces or punctuation. Bare keys end at structural delimiters.
 const credentialName = /[/%]+\s*=>?\s*|(?:\\*"[^"\n]*?\\*"|\\*'[^'\n]*?\\*'|[^\s/\\%"'=:,;<>{}\[\]&?#]+?)\s*(?:=>|->|,+(?=[ \t])|:|=|%3[aAdD])\s*/gu;
 function pairKey(prefix: string) {
@@ -145,7 +143,6 @@ export function maskText(value: string): string {
     return prefix + path.split("/").map(part => /^[0-9]+$|^[a-z0-9]{16,}$/i.test(part) || uuidSegment.test(part) ? ":id" : part).join("/");
   });
   const spans: Span[] = [];
-  const versions: Span[] = [];
   const routes: [number, number, string][] = [];
   const lineValues = /(?<![A-Za-z0-9_])(?:set-cookie|cookie|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday)[ \t]*=([^>\n][^\n]*)/gi;
   for (const hit of text.matchAll(lineValues)) {
@@ -159,25 +156,6 @@ export function maskText(value: string): string {
     const start = match.index + match[0].length;
     if (match[0].trimEnd().endsWith(":") && ((/^(?:http|https)$/.test(key) && text.startsWith("//", start)) || /(?:bearer|cookie|authorization):\s*$/i.test(match[0]) && /^(?:bearer|.*[^\x00-\x7f](?:bearer|cookie|authorization))$/i.test(key))) continue;
     if (match[0].trimEnd().endsWith(",") && (!/^\s*$/.test(text.slice(Math.max(0,match.index-1),match.index)) || /^[0-9]/.test(key))) continue;
-    if (allowed.has(key) && !/[/#%\\]/.test(text[match.index - 1] ?? "")) {
-      if (key === "route" || key === "path" || key === "version") {
-        const span = valueSpan(text, start, 0);
-        if (span) {
-          const [a,b] = span;
-          if (key === "version") {
-            const version = text.slice(a, b);
-            if (/^[a-z0-9._+-]{1,64}$/i.test(version) && maskVersion(version) === version) versions.push(span);
-          }
-          else {
-            const stop = /^[^\s"',}\]]+/.exec(text.slice(a))?.[0].length ?? 0;
-            const finish = a === start ? Math.max(b, a + stop) : b;
-            routes.push([a, finish, sanitizeRoute(text.slice(a, finish))]);
-            pairs.lastIndex = finish;
-          }
-        }
-      }
-      continue;
-    }
     const span = credentialSpan(text, match);
     if (span && span[1] > span[0]) {
       pairs.lastIndex = span[1];
@@ -186,7 +164,7 @@ export function maskText(value: string): string {
   }
   for (const pattern of [...privatePatterns, numeric]) {
     for (const m of text.matchAll(pattern)) {
-      if (pattern !== numeric || (!isTimestamp(m[0]) && !versions.some(([a,b]) => a <= m.index && m.index + m[0].length <= b))) spans.push([m.index, m.index + m[0].length]);
+      if (pattern !== numeric || !isTimestamp(m[0])) spans.push([m.index, m.index + m[0].length]);
     }
   }
   const result = redact(text, spans, routes).replace(/^\?[^\n]+|\?\S+/gm, "?[가림]");
@@ -219,4 +197,23 @@ export function displayText(
   if (field === "login-email") return value;
   if (field === "key-prefix") return /^sp_(pub|srv)_[a-f0-9]$/.test(value) ? value : "[가림]";
   return maskText(value).replace(/\n+/g, " ");
+}
+
+function safeDiagnostic(value: string) {
+  return privatePatterns.every(pattern => value.search(pattern) < 0)
+    && [...value.matchAll(numeric)].every(match => isTimestamp(match[0]));
+}
+
+export function errorName(raw?: string | null) {
+  const name = raw?.split(/[: \t\n\r]/, 1)[0];
+  return name && name.length <= 60 && /^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)*[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)
+    && /(?:Error|Exception|Fault)$/.test(name) && safeDiagnostic(name) ? name : null;
+}
+
+export function errorKind(raw?: string | null) {
+  return raw && raw.length <= 80 && !/[^A-Za-z0-9_.-]|\d{4}/.test(raw) && safeDiagnostic(raw) ? raw : null;
+}
+
+export function stepName(raw?: string | null) {
+  return raw?.trim() && (!raw.includes(" ") || /[가-힣]/.test(raw)) && raw.length <= 40 && !/[^A-Za-z0-9_.가-힣 -]|\d{3}/.test(raw) && safeDiagnostic(raw) ? raw : null;
 }

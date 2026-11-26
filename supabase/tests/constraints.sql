@@ -56,7 +56,7 @@ select is(ingest_batch(current_setting('test.hash'),pg_temp.attempt('attempt_sta
 update attempts set status='unconfirmed';
 select ingest_batch(current_setting('test.hash'),pg_temp.attempt('attempt_result','browser',now()));
 select results_eq('select status,source,duration_ms from attempts',$q$select 'failure'::text,'browser'::text,660000$q$,'late result completes unconfirmed attempt');
-select is((select message from error_samples),'[가림]','attempt error sample masked');
+select is((select message from error_samples),null::text,'attempt error sample masked');
 select ingest_batch(current_setting('test.hash'),jsonb_set(pg_temp.attempt('attempt_start',null,now()-interval '10 minutes'),
  '{attempts,0,attempt_id}','"22222222-2222-4222-8222-222222222222"'));
 select evaluate_all();

@@ -28,18 +28,6 @@ static SHORT_KEY: LazyLock<Regex> = LazyLock::new(|| {
 static CREDENTIAL_NAME: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"[/%]+\s*=>?\s*|(?:\\*"[^"\n]*?\\*"|\\*'[^'\n]*?\\*'|[^\s/\\%"'=:,;<>{}\[\]&?#]+?)\s*(?:=>|->|,|:|=|%3[aAdD])\s*"#).unwrap()
 });
-static ALLOWED: LazyLock<Vec<String>> = LazyLock::new(|| {
-    serde_json::from_str::<Vec<String>>(
-        include_str!("../../supabase/migrations/20261126210000_diagnostic_keys.sql")
-            .split("$keys$")
-            .nth(1)
-            .expect("shared diagnostic keys"),
-    )
-    .unwrap()
-    .into_iter()
-    .map(|key| key.replace('_', ""))
-    .collect()
-});
 fn pair_key(prefix: &str) -> String {
     let prefix = prefix.trim_end();
     let key = ["%3D", "%3d", "%3a", "%3A", "=>", "->", ",", ":", "="]
@@ -99,9 +87,9 @@ mod sanitize_budget {
         mask("Cookie: warmup");
         let start = Instant::now();
         for record in records {
-            for key in ["error_kind", "step", "error_message"] {
-                std::hint::black_box(mask(record[key].as_str().unwrap()));
-            }
+            std::hint::black_box(super::error_kind(record["error_kind"].as_str().unwrap()));
+            std::hint::black_box(super::step_name(record["step"].as_str().unwrap()));
+            std::hint::black_box(super::error_name(record["error_message"].as_str().unwrap()));
         }
         let elapsed = start.elapsed();
         eprintln!("65536 bytes, 100 records, 300 fields: {elapsed:?}");
@@ -205,8 +193,42 @@ fn require(ok: bool) -> Result<(), ApiError> {
 fn bounded(value: &str, max: usize) -> bool {
     !value.trim().is_empty() && value.chars().count() <= max
 }
-fn valid_kind(kind: &Option<String>) -> bool {
-    kind.as_ref().is_none_or(|s| bounded(s, 80))
+fn error_name(raw: &str) -> Option<String> {
+    static NAME: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)*[A-Za-z_$][A-Za-z0-9_$]*$").unwrap()
+    });
+    let name = raw.split([':', ' ', '\t', '\n', '\r']).next()?;
+    (name.len() <= 60
+        && ["Error", "Exception", "Fault"]
+            .iter()
+            .any(|s| name.ends_with(s))
+        && NAME.is_match(name)
+        && !private_segment(name))
+    .then(|| name.to_owned())
+}
+
+fn error_kind(raw: &str) -> Option<String> {
+    static DIGITS: LazyLock<Regex> = LazyLock::new(|| Regex::new("[0-9]{4}").unwrap());
+    (!raw.is_empty()
+        && raw.len() <= 80
+        && raw
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"_.-".contains(&c))
+        && !DIGITS.is_match(raw)
+        && !private_segment(raw))
+    .then(|| raw.to_owned())
+}
+
+fn step_name(raw: &str) -> Option<String> {
+    static STEP: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^[A-Za-z0-9_.가-힣 -]{1,40}$").unwrap());
+    static DIGITS: LazyLock<Regex> = LazyLock::new(|| Regex::new("[0-9]{3}").unwrap());
+    (!raw.trim().is_empty()
+        && (!raw.contains(' ') || raw.chars().any(|c| ('가'..='힣').contains(&c)))
+        && STEP.is_match(raw)
+        && !DIGITS.is_match(raw)
+        && !private_segment(raw))
+    .then(|| raw.to_owned())
 }
 fn clean_char(c: char) -> Option<char> {
     match c {
@@ -515,8 +537,6 @@ pub(crate) fn mask(text: &str) -> String {
     let normalized = normalize(&text[..cutoff.unwrap_or(text.len())]);
     let second_cut = normalized.char_indices().nth(2000).map(|(i, _)| i);
     let text = message_paths(&normalized[..second_cut.unwrap_or(normalized.len())]);
-    let mut versions = Vec::new();
-    let mut routes = BTreeMap::new();
     let mut spans: Vec<_> = PRIVATE
         .iter()
         .flat_map(|p| p.find_iter(&text).map(|m| m.range()))
@@ -559,53 +579,12 @@ pub(crate) fn mask(text: &str) -> String {
         {
             continue;
         }
-        if ALLOWED.contains(&key) && !text[..hit.start()].ends_with(['/', '#', '%', '\\']) {
-            if matches!(key.as_str(), "version" | "route" | "path")
-                && let Some(mut span) = value_span(&text, hit.end(), 0)
-            {
-                if key == "version" {
-                    let value = &text[span.clone()];
-                    if value.len() <= 64
-                        && value
-                            .bytes()
-                            .all(|c| c.is_ascii_alphanumeric() || b"._+-".contains(&c))
-                        && mask_version(value.to_owned()) == value
-                    {
-                        versions.push(span);
-                    }
-                } else {
-                    if span.start == hit.end() {
-                        span.end = span.end.max(
-                            span.start
-                                + text[span.start..]
-                                    .find(|c: char| {
-                                        c.is_whitespace()
-                                            || matches!(c, '"' | '\'' | ',' | '}' | ']')
-                                    })
-                                    .unwrap_or(text.len() - span.start),
-                        );
-                    }
-                    let path = text[span.clone()]
-                        .split(['?', '#'])
-                        .next()
-                        .unwrap_or_default();
-                    routes.insert((span.start, span.end), route(path));
-                    cursor = span.end;
-                    spans.push(span);
-                }
-            }
-            continue;
-        }
         if let Some(span) = credential_span(&text, hit) {
             cursor = span.end;
             spans.push(span);
         }
     }
-    spans.extend(phones(&text).filter(|n| {
-        !versions
-            .iter()
-            .any(|v| v.start <= n.start && n.end <= v.end)
-    }));
+    spans.extend(phones(&text));
     spans.sort_by_key(|r| r.start);
     let mut result = String::new();
     let mut end = 0;
@@ -615,11 +594,7 @@ pub(crate) fn mask(text: &str) -> String {
         }
         if span.start >= end {
             result.push_str(&text[end..span.start]);
-            result.push_str(
-                routes
-                    .get(&(span.start, span.end))
-                    .map_or("[가림]", String::as_str),
-            );
+            result.push_str("[가림]");
         }
         end = end.max(span.end);
     }
@@ -684,13 +659,12 @@ impl Aggregate {
                 require(
                     valid_method(&method)
                         && (status == 0 || (100..600).contains(&status))
-                        && duration_ms <= 600000
-                        && valid_kind(&error_kind),
+                        && duration_ms <= 600000,
                 )?;
                 let client = (400..500).contains(&status);
                 let failed = !client && (status == 0 || status >= 500 || error_kind.is_some());
                 if (failed || client) && (error_message.is_some() || error_kind.is_some()) {
-                    self.samples.push(json!({"route":path,"method":method,"at":ts,"error_kind":error_kind.as_deref().map(mask),"message":error_message.as_deref().map(mask)}));
+                    self.samples.push(json!({"route":path,"method":method,"at":ts,"error_kind":error_kind.as_deref().and_then(self::error_kind),"message":error_message.as_deref().and_then(error_name)}));
                 }
                 let row = self
                     .groups
@@ -724,12 +698,11 @@ impl Aggregate {
             } => {
                 require(
                     !feature_key.trim().is_empty()
-                        && valid_kind(&error_kind)
                         && matches!(result.as_str(), "success" | "failure" | "abandon")
                         && (source == "browser"
                             || (source == "server" && key.starts_with("sp_srv_"))),
                 )?;
-                self.attempts.push(json!({"type":"attempt_result","feature_key":feature_key,"attempt_id":attempt_id,"ts":ts,"source":source,"result":result,"step":step.as_deref().map(mask),"error_kind":error_kind.as_deref().map(mask),"error_message":error_message.as_deref().map(mask)}));
+                self.attempts.push(json!({"type":"attempt_result","feature_key":feature_key,"attempt_id":attempt_id,"ts":ts,"source":source,"result":result,"step":step.as_deref().and_then(step_name),"error_kind":error_kind.as_deref().and_then(self::error_kind),"error_message":error_message.as_deref().and_then(error_name)}));
             }
         }
         Ok(())

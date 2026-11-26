@@ -1,4 +1,4 @@
-import { displayText, normalizePromptInput, maskVersion, sanitizeRoute } from "./normalize";
+import { errorName, errorKind, stepName, displayText, normalizePromptInput, maskVersion, sanitizeRoute } from "./normalize";
 
 function hasVersionFormat(raw: string) {
   return /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(raw) && !/[^A-Za-z0-9._+-]/.test(raw);
@@ -52,8 +52,9 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
   const clock = (at: string) => new Date(at).toLocaleTimeString("en-GB", {
     timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit",
   }) + " KST";
-  const lines = records.map(r => typeof r === "string" ? line(r) :
-    [...[clock(r.at), r.error_kind && line(r.error_kind) + ":", r.message && line(r.message)].filter(Boolean).join(" ")].slice(0,300).join(""));
+  const omitted = "(내용 저장 안 함)";
+  const lines = records.map(r => typeof r === "string" ? errorName(r) ?? omitted :
+    clock(r.at) + " " + (errorKind(r.error_kind) ?? errorName(r.message) ?? omitted));
   // Inspect normalized input even when a whole header is hidden in the copied text.
   const inspect = (s: string) => normalizePromptInput(s.slice(0, 4000)).slice(0, 4000);
   const messages = records.map(r => inspect(typeof r === "string"
@@ -114,8 +115,9 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
       " (" +
       line(sanitizeRoute(input.route)) +
       ")",
-    ...(input.step ? ["실패한 단계: " + line(input.step)] : []),
-    "오류 기록 (최근 5개, 개인정보 가림):",
+    ...(stepName(input.step) ? ["실패한 단계: " + stepName(input.step)] : []),
+    "오류 종류 (최근 5개):",
+    ...(lines.length ? [] : [omitted]),
     ...lines.flatMap((s, i) =>
       includeStrong || levels[i] !== "strong" ? ["- " + s] : [],
     ),

@@ -1,788 +1,403 @@
 {
-  "mask": [
-    {
-      "input": "v1sp_srv_demo",
-      "expected": "v1[가림]"
-    },
-    {
-      "input": "xSP_PUB_demo",
-      "expected": "x[가림]"
-    },
-    {
-      "input": "x_sb_secret_sample",
-      "expected": "x_[가림]"
-    },
-    {
-      "input": "aSb_PuBlIsHaBlE_demo",
-      "expected": "a[가림]"
-    },
-    {
-      "input": "(sk_abcdefghijklmnop)",
-      "expected": "([가림])"
-    },
-    {
-      "input": "_PK_0123456789abcdef",
-      "expected": "_[가림]"
-    },
-    {
-      "input": "rk_ABCDEFGHIJKLMNOP",
-      "expected": "[가림]"
-    },
-    {
-      "input": "sk_abcdefghijklmno",
-      "expected": "sk_abcdefghijklmno"
-    },
-    {
-      "input": "xsk_abcdefghijklmnop",
-      "expected": "xsk_abcdefghijklmnop"
-    },
-    {
-      "input": "9pk_abcdefghijklmnop",
-      "expected": "9pk_abcdefghijklmnop"
-    },
-    {
-      "input": "task_queue",
-      "expected": "task_queue"
-    },
-    {
-      "input": "basic auth failed",
-      "expected": "basic auth failed"
-    },
-    {
-      "input": "Basic abcdefghijklmno",
-      "expected": "Basic abcdefghijklmno"
-    },
-    {
-      "input": "Basic YWJjZGVmZ2hpamts",
-      "expected": "[가림]"
-    },
-    {
-      "input": "Basic YWJjZGVmZ2hpaw==",
-      "expected": "[가림]"
-    },
-    {
-      "input": "ＳＰ＿ＳＲＶ＿demo",
-      "expected": "[가림]"
-    },
-    {
-      "input": "s​p‌_‍s⁠r﻿v_demo",
-      "expected": "[가림]"
-    },
-    {
-      "input": "sp_‮srv_⁦demo⁩",
-      "expected": "[가림]"
-    },
-    {
-      "input": "Cookie: sid=one safe nextend",
-      "expected": "[가림]\nsafe\nnext\nend"
-    },
-    {
-      "input": "a%40example.test 010-1234-5678",
-      "expected": "[가림] [가림]"
-    },
-    {
-      "input": "Bearer: demo; token=test",
-      "expected": "[가림]; token=[가림]"
-    },
-    {
-      "input": "한글sk_live___fixture__",
-      "expected": "한글[가림]"
-    },
-    {
-      "input": "sk_test___fixture__",
-      "expected": "[가림]"
-    },
-    {
-      "input": "(pk_live___fixture__)",
-      "expected": "([가림])"
-    },
-    {
-      "input": "rk_live___fixture__",
-      "expected": "[가림]"
-    },
-    {
-      "input": "sk_test___short___",
-      "expected": "sk_test___short___"
-    },
-    {
-      "input": "desk_live___fixture__",
-      "expected": "desk_live___fixture__"
-    },
-    {
-      "input": "/task_list",
-      "expected": "/task_list"
-    },
-    {
-      "input": "/task_list_abcdefghijk",
-      "expected": "/task_list_abcdefghijk"
-    },
-    {
-      "input": "épk_abcdefghijklmnop",
-      "expected": "é[가림]"
-    },
-    {
-      "input": "010-1234-5678로 전송 실패",
-      "expected": "[가림]로 전송 실패"
-    },
-    {
-      "input": "번호01012345678",
-      "expected": "번호[가림]"
-    },
-    {
-      "input": "0101234567890123",
-      "expected": "[가림]"
-    },
-    {
-      "input": "메일a@example.test로 전송",
-      "expected": "메일[가림]로 전송"
-    },
-    {
-      "input": "오류Bearer: demo; 값token=demo",
-      "expected": "오류[가림]; 값token=[가림]"
-    },
-    {
-      "input": "헤더Cookie: sid=one",
-      "expected": "헤더[가림]"
-    },
-    {
-      "input": "인증Basic YWJjZGVmZ2hpamts",
-      "expected": "인증[가림]"
-    },
-    {
-      "input": "인증eyJdemo",
-      "expected": "인증[가림]"
-    },
-    {
-      "input": "refresh_token=abc",
-      "expected": "refresh_token=[가림]"
-    },
-    {
-      "input": "id_token=one&api_key=two",
-      "expected": "id_token=[가림]&api_key=[가림]"
-    },
-    {
-      "input": "my_api_key=one; apikey=two",
-      "expected": "my_api_key=[가림]; apikey=[가림]"
-    },
-    {
-      "input": "client_secret=one",
-      "expected": "client_secret=[가림]"
-    },
-    {
-      "input": "X-Api-Key: two",
-      "expected": "[가림]"
-    },
-    {
-      "input": "db-PASSWD : one Pwd=two password=three",
-      "expected": "[가림]"
-    },
-    {
-      "input": "monkey=banana",
-      "expected": "monkey=[가림]"
-    },
-    {
-      "input": "tokenizer=one secret_hint: two",
-      "expected": "tokenizer=[가림] [가림]"
-    },
-    {
-      "input": "token: Bearer abc; next",
-      "expected": "[가림]"
-    },
-    {
-      "input": "{\"api_key\":\"abc\",\"id\":1}",
-      "expected": "{\"api_key\":\"[가림]\",\"id\":[가림]}"
-    },
-    {
-      "input": "\"password\": \"x\"",
-      "expected": "\"password\": \"[가림]\""
-    },
-    {
-      "input": "'secret':'y'",
-      "expected": "'secret':'[가림]'"
-    },
-    {
-      "input": "{\"MY-ACCESS_TOKEN\":\"Bearer abc def\",\"db_passwd\":\"a\\\"b\",\"pwd\":\"x,y\"}",
-      "expected": "{\"MY-ACCESS_TOKEN\":\"[가림]\",\"db_passwd\":\"[가림]\",\"pwd\":\"[가림]\"}"
-    },
-    {
-      "input": "\"secret_hint\":\"ok\"",
-      "expected": "\"secret_hint\":\"[가림]\""
-    },
-    {
-      "input": "1764120000 1764120000123",
-      "expected": "[가림]"
-    },
-    {
-      "input": "0111234567 010-123-4567",
-      "expected": "[가림]"
-    },
-    {
-      "input": "02-1234-5678 0311234567",
-      "expected": "[가림]"
-    },
-    {
-      "input": "+82 10 1234 5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "(02) 123-4567, 070.1234.5678",
-      "expected": "[가림], [가림]"
-    },
-    {
-      "input": "1764120000123 01012345678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "+1 415 555 0100",
-      "expected": "[가림]"
-    },
-    {
-      "input": "+44 20 7946 0958",
-      "expected": "[가림]"
-    },
-    {
-      "input": "82-10-1234-5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "010 - 1234 - 5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "900101-1234567",
-      "expected": "[가림]"
-    },
-    {
-      "input": "110-123-456789",
-      "expected": "[가림]"
-    },
-    {
-      "input": "4111 1111 1111 1111",
-      "expected": "[가림]"
-    },
-    {
-      "input": "4111111111111111",
-      "expected": "[가림]"
-    },
-    {
-      "input": "123456789",
-      "expected": "[가림]"
-    },
-    {
-      "input": "123456789012345",
-      "expected": "[가림]"
-    },
-    {
-      "input": "0999999999",
-      "expected": "[가림]"
-    },
-    {
-      "input": "2147483648",
-      "expected": "[가림]"
-    },
-    {
-      "input": "2147483648000",
-      "expected": "[가림]"
-    },
-    {
-      "input": "12345678",
-      "expected": "12345678"
-    },
-    {
-      "input": "1764120000",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1764120000123",
-      "expected": "1764120000123"
-    },
-    {
-      "input": "1000000000",
-      "expected": "[가림]"
-    },
-    {
-      "input": "2147483647",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1000000000000",
-      "expected": "[가림]"
-    },
-    {
-      "input": "2147483647999",
-      "expected": "[가림]"
-    },
-    {
-      "input": "{\\\"api_key\\\":\\\"abc\\\"}",
-      "expected": "{\\\"api_key\\\":\\\"[가림]\\\"}"
-    },
-    {
-      "input": "\"pin_password\": 1234",
-      "expected": "\"pin_password\": [가림]"
-    },
-    {
-      "input": "'secret' => 'x'",
-      "expected": "'secret' => '[가림]'"
-    },
-    {
-      "input": "\"token\":\"abc",
-      "expected": "\"token\":\"[가림]"
-    },
-    {
-      "input": "\"Bearer test\"&next#end",
-      "expected": "\"[가림]\"&next#end"
-    },
-    {
-      "input": "'Basic YWJjZGVmZ2hpamts'#next",
-      "expected": "'[가림]'#next"
-    },
-    {
-      "input": "token: Bearer demo&next#end",
-      "expected": "[가림]"
-    },
-    {
-      "input": "{\"sp_srv_demo_token\":\"Basic YWJjZGVmZ2hpamts\"}",
-      "expected": "{\"[가림]\":\"[가림]\"}"
-    },
-    {
-      "input": "token=\"Bearer abc\"",
-      "expected": "token=\"[가림]\""
-    },
-    {
-      "input": "password='Basic YWJjZGVmZ2hpamts'",
-      "expected": "password='[가림]'"
-    },
-    {
-      "input": "sp_srv_demo_token=value",
-      "expected": "[가림]"
-    },
-    {
-      "input": "token=abc}def",
-      "expected": "token=[가림]"
-    },
-    {
-      "input": "\"token\": [가림]",
-      "expected": "\"token\": [가림]"
-    },
-    {
-      "input": "token=\\opaque",
-      "expected": "token=[가림]"
-    },
-    {
-      "input": "010/1234/5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "010_1234_5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "010\t1234\t5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "010–1234–5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "010‐1234‐5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "010‒1234‒5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "010—1234—5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "010‑1234‑5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "010―1234―5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "010−1234−5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1501013234567",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1801013234567",
-      "expected": "[가림]"
-    },
-    {
-      "input": "2002294234567",
-      "expected": "[가림]"
-    },
-    {
-      "input": "2125550100",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1234567890",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1002123456789",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1577836799",
-      "expected": "[가림]"
-    },
-    {
-      "input": "2082758400",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1577836799999",
-      "expected": "[가림]"
-    },
-    {
-      "input": "2082758400000",
-      "expected": "[가림]"
-    },
-    {
-      "input": "0101234 5678@x.co",
-      "expected": "[가림]"
-    },
-    {
-      "input": "Authorization: Token abc",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1902293234567",
-      "expected": "1902293234567"
-    },
-    {
-      "input": "1801015234567",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1577836800",
-      "expected": "[가림]"
-    },
-    {
-      "input": "2082758399",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1577836800000",
-      "expected": "1577836800000"
-    },
-    {
-      "input": "2082758399999",
-      "expected": "2082758399999"
-    },
-    {
-      "input": "keyboard=abc",
-      "expected": "keyboard=[가림]"
-    },
-    {
-      "input": "tokens=abc",
-      "expected": "tokens=[가림]"
-    },
-    {
-      "input": "api_keys=abc",
-      "expected": "api_keys=[가림]"
-    },
-    {
-      "input": "secrets=abc",
-      "expected": "secrets=[가림]"
-    },
-    {
-      "input": "password_confirmation=abc",
-      "expected": "password_confirmation=[가림]"
-    },
-    {
-      "input": "token_value=abc",
-      "expected": "token_value=[가림]"
-    },
-    {
-      "input": "token%3Dabc",
-      "expected": "token%3D[가림]"
-    },
-    {
-      "input": "api_key%3Dabc",
-      "expected": "api_key%3D[가림]"
-    },
-    {
-      "input": "{\\\\\\\"token\\\\\\\":\\\\\\\"abc\\\\\\\"}",
-      "expected": "{\\\\\\\"token\\\\\\\":\\\\\\\"[가림]\\\\\\\"}"
-    },
-    {
-      "input": "\"token\": [\"abc\",\"def\"], ok",
-      "expected": "\"token\": [가림], ok"
-    },
-    {
-      "input": "\"token\": [[\"a]\"], \"b\"]",
-      "expected": "\"token\": [가림]"
-    },
-    {
-      "input": "5555 5555 5555 4444",
-      "expected": "[가림]"
-    },
-    {
-      "input": "378282246310005",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1764120000120",
-      "expected": "[가림]"
-    },
-    {
-      "input": "accessTokenValue=example",
-      "expected": "accessTokenValue=[가림]"
-    },
-    {
-      "input": "010֊1234֊5678",
-      "expected": "[가림]"
-    },
-    {
-      "input": "sp_srv_demo@example.test",
-      "expected": "[가림]"
-    },
-    {
-      "input": "token=\"\"",
-      "expected": "token=\"\""
-    },
-    {
-      "input": "\"tokens\": [\"a\",\n[\"b\"",
-      "expected": "\"tokens\": [가림]"
-    },
-    {
-      "input": "privateKey=x",
-      "expected": "privateKey=[가림]"
-    },
-    {
-      "input": "accessKey=x",
-      "expected": "accessKey=[가림]"
-    },
-    {
-      "input": "clientKey=x",
-      "expected": "clientKey=[가림]"
-    },
-    {
-      "input": "apiKey=x",
-      "expected": "apiKey=[가림]"
-    },
-    {
-      "input": "ApiKey=x",
-      "expected": "ApiKey=[가림]"
-    },
-    {
-      "input": "secretToken=x",
-      "expected": "secretToken=[가림]"
-    },
-    {
-      "input": "refreshToken=x",
-      "expected": "refreshToken=[가림]"
-    },
-    {
-      "input": "dbPassword=x",
-      "expected": "dbPassword=[가림]"
-    },
-    {
-      "input": "userPwd=x",
-      "expected": "userPwd=[가림]"
-    },
-    {
-      "input": "key=x",
-      "expected": "key=[가림]"
-    },
-    {
-      "input": "_key=x",
-      "expected": "_key=[가림]"
-    },
-    {
-      "input": "-key=x",
-      "expected": "-key=[가림]"
-    },
-    {
-      "input": "prefix-key=x",
-      "expected": "prefix-key=[가림]"
-    },
-    {
-      "input": "pin2key=x",
-      "expected": "pin2key=[가림]"
-    },
-    {
-      "input": "xKEY=x",
-      "expected": "xKEY=[가림]"
-    },
-    {
-      "input": "PrivateKey=x",
-      "expected": "PrivateKey=[가림]"
-    },
-    {
-      "input": "hockey=x",
-      "expected": "hockey=[가림]"
-    },
-    {
-      "input": "turkey=x",
-      "expected": "turkey=[가림]"
-    },
-    {
-      "input": "\"credentials\": { \"key\": \"x\" }",
-      "expected": "\"credentials\": [가림]"
-    },
-    {
-      "input": "\"token\" : \"abc\"",
-      "expected": "\"token\" : \"[가림]\""
-    },
-    {
-      "input": "\"credentials\"\n : {\n \"items\": [{\"value\":\"}\"}],\n \"other\": 1\n}, \"ok\": 2",
-      "expected": "\"credentials\"\n : [가림], \"ok\": [가림]"
-    },
-    {
-      "input": "aUtHoRiZaTiOn: abc123 extra,tail\nok",
-      "expected": "[가림]\nok"
-    },
-    {
-      "input": "aUtHoRiZaTiOn: ApiKey xxx extra,tail\nok",
-      "expected": "[가림]\nok"
-    },
-    {
-      "input": "aUtHoRiZaTiOn: Token xxx extra,tail\nok",
-      "expected": "[가림]\nok"
-    },
-    {
-      "input": "aUtHoRiZaTiOn: Basic xxx extra,tail\nok",
-      "expected": "[가림]\nok"
-    },
-    {
-      "input": "aUtHoRiZaTiOn: Bearer xxx extra,tail\nok",
-      "expected": "[가림]\nok"
-    },
-    {
-      "input": "1801016234567",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1801017234567",
-      "expected": "[가림]"
-    },
-    {
-      "input": "1801018234567",
-      "expected": "[가림]"
-    },
-    {
-      "input": "2025550100",
-      "expected": "[가림]"
-    },
-    {
-      "input": "2085550100",
-      "expected": "[가림]"
-    },
-    {
-      "input": "-keyring=x",
-      "expected": "-keyring=[가림]"
-    },
-    {
-      "input": "Cookie: a=1; sid=abc; token=x",
-      "expected": "[가림]"
-    },
-    {
-      "input": "Set-Cookie: sid=abc; Path=/; HttpOnly",
-      "expected": "[가림]"
-    },
-    {
-      "input": "whiskey=x donkey=y",
-      "expected": "whiskey=[가림] donkey=[가림]"
-    },
-    {
-      "input": "Cookie=a=1; sid=abc\nok",
-      "expected": "Cookie=[가림]\nok"
-    },
-    {
-      "input": "cookie=sid=abc;token=x",
-      "expected": "cookie=[가림]"
-    },
-    {
-      "input": "GET https://example.test/a/42/550e8400-e29b-41d4-a716-446655440000/abcdefghijklmnop?q=one&b=two failed",
-      "expected": "GET https://example.test/a/:id/:id/:id?[가림] failed"
-    },
-    {
-      "input": "failed /users/1234567890123?unlisted=raw",
-      "expected": "failed /users/:id?[가림]"
-    },
-    {
-      "input": "name=Jane Doe",
-      "expected": "name=[가림]"
-    },
-    {
-      "input": "배송 라벨",
-      "expected": "배송 라벨"
-    },
-    {
-      "input": "GET https://node2.example2/42?sort=a'b&next=c failed",
-      "expected": "GET https://node2.example2/:id?[가림] failed"
-    },
-    {
-      "input": "token=Cookie=a; sid=x\nok",
-      "expected": "token=[가림]\nok"
-    },
-    {
-      "input": "이름=홍길동",
-      "expected": "이름=[가림]"
-    },
-    {
-      "input": "a=1; b=2",
-      "expected": "a=[가림]; b=[가림]"
-    },
-    {
-      "input": "statusCode=503 STATUS-CODE=404 method=GET",
-      "expected": "statusCode=503 STATUS-CODE=404 method=GET"
-    },
-    {
-      "input": "path=/a/42?q=x",
-      "expected": "path=/a/:id"
-    },
-    {
-      "input": "version=2026.11.26.1530",
-      "expected": "version=2026.11.26.1530"
-    },
-    {
-      "input": "stack={\"nickname\":\"sample\",\"line\":42}",
-      "expected": "stack={\"nickname\":\"[가림]\",\"line\":42}"
-    },
-    {
-      "input": "'이 름':'홍길동'",
-      "expected": "'이 름':'[가림]'"
-    },
-    {
-      "input": "first_name=Jane Doe status=503",
-      "expected": "first_name=[가림] status=503"
-    },
-    {
-      "input": "credentials://hidden",
-      "expected": "[가림]"
-    },
-    {
-      "input": "{\"rock'n'roll\":\"private\",\"statusCode\":404}",
-      "expected": "{\"rock'n'roll\":\"[가림]\",\"statusCode\":404}"
-    },
-    {
-      "input": "version={\"line\":1234567890}",
-      "expected": "version={\"line\":[가림]}"
-    },
-    {
-      "input": "status=500 status_code=408 code=E1 error=timeout errorCode=E2 type=network kind=io",
-      "expected": "status=500 status_code=408 code=E1 error=timeout errorCode=E2 type=network kind=io"
-    },
-    {
-      "input": "reason=busy method=GET route=/items/42?q=secret line=12 column=4 file=a.rs function=run stack=failed",
-      "expected": "reason=busy method=GET route=/items/:id line=12 column=4 file=a.rs function=run stack=failed"
-    },
-    {
-      "input": "duration=3 duration-ms=4 timeout=5 retry=1 attempt=2 step=load version=v1 platform=web feature=배송",
-      "expected": "duration=3 duration-ms=4 timeout=5 retry=1 attempt=2 step=load version=v1 platform=web feature=배송"
+  "omittedMessages": [
+    "v1sp_srv_demo",
+    "xSP_PUB_demo",
+    "x_sb_secret_sample",
+    "aSb_PuBlIsHaBlE_demo",
+    "(sk_abcdefghijklmnop)",
+    "_PK_0123456789abcdef",
+    "rk_ABCDEFGHIJKLMNOP",
+    "sk_abcdefghijklmno",
+    "xsk_abcdefghijklmnop",
+    "9pk_abcdefghijklmnop",
+    "task_queue",
+    "basic auth failed",
+    "Basic abcdefghijklmno",
+    "Basic YWJjZGVmZ2hpamts",
+    "Basic YWJjZGVmZ2hpaw==",
+    "ＳＰ＿ＳＲＶ＿demo",
+    "s​p‌_‍s⁠r﻿v_demo",
+    "sp_‮srv_⁦demo⁩",
+    "Cookie: sid=one safe nextend",
+    "a%40example.test 010-1234-5678",
+    "Bearer: demo; token=test",
+    "한글sk_live___fixture__",
+    "sk_test___fixture__",
+    "(pk_live___fixture__)",
+    "rk_live___fixture__",
+    "sk_test___short___",
+    "desk_live___fixture__",
+    "/task_list",
+    "/task_list_abcdefghijk",
+    "épk_abcdefghijklmnop",
+    "010-1234-5678로 전송 실패",
+    "번호01012345678",
+    "0101234567890123",
+    "메일a@example.test로 전송",
+    "오류Bearer: demo; 값token=demo",
+    "헤더Cookie: sid=one",
+    "인증Basic YWJjZGVmZ2hpamts",
+    "인증eyJdemo",
+    "refresh_token=abc",
+    "id_token=one&api_key=two",
+    "my_api_key=one; apikey=two",
+    "client_secret=one",
+    "X-Api-Key: two",
+    "db-PASSWD : one Pwd=two password=three",
+    "monkey=banana",
+    "tokenizer=one secret_hint: two",
+    "token: Bearer abc; next",
+    "{\"api_key\":\"abc\",\"id\":1}",
+    "\"password\": \"x\"",
+    "'secret':'y'",
+    "{\"MY-ACCESS_TOKEN\":\"Bearer abc def\",\"db_passwd\":\"a\\\"b\",\"pwd\":\"x,y\"}",
+    "\"secret_hint\":\"ok\"",
+    "1764120000 1764120000123",
+    "0111234567 010-123-4567",
+    "02-1234-5678 0311234567",
+    "+82 10 1234 5678",
+    "(02) 123-4567, 070.1234.5678",
+    "1764120000123 01012345678",
+    "+1 415 555 0100",
+    "+44 20 7946 0958",
+    "82-10-1234-5678",
+    "010 - 1234 - 5678",
+    "900101-1234567",
+    "110-123-456789",
+    "4111 1111 1111 1111",
+    "4111111111111111",
+    "123456789",
+    "123456789012345",
+    "0999999999",
+    "2147483648",
+    "2147483648000",
+    "12345678",
+    "1764120000",
+    "1764120000123",
+    "1000000000",
+    "2147483647",
+    "1000000000000",
+    "2147483647999",
+    "{\\\"api_key\\\":\\\"abc\\\"}",
+    "\"pin_password\": 1234",
+    "'secret' => 'x'",
+    "\"token\":\"abc",
+    "\"Bearer test\"&next#end",
+    "'Basic YWJjZGVmZ2hpamts'#next",
+    "token: Bearer demo&next#end",
+    "{\"sp_srv_demo_token\":\"Basic YWJjZGVmZ2hpamts\"}",
+    "token=\"Bearer abc\"",
+    "password='Basic YWJjZGVmZ2hpamts'",
+    "sp_srv_demo_token=value",
+    "token=abc}def",
+    "\"token\": [가림]",
+    "token=\\opaque",
+    "010/1234/5678",
+    "010_1234_5678",
+    "010\t1234\t5678",
+    "010–1234–5678",
+    "010‐1234‐5678",
+    "010‒1234‒5678",
+    "010—1234—5678",
+    "010‑1234‑5678",
+    "010―1234―5678",
+    "010−1234−5678",
+    "1501013234567",
+    "1801013234567",
+    "2002294234567",
+    "2125550100",
+    "1234567890",
+    "1002123456789",
+    "1577836799",
+    "2082758400",
+    "1577836799999",
+    "2082758400000",
+    "0101234 5678@x.co",
+    "Authorization: Token abc",
+    "1902293234567",
+    "1801015234567",
+    "1577836800",
+    "2082758399",
+    "1577836800000",
+    "2082758399999",
+    "keyboard=abc",
+    "tokens=abc",
+    "api_keys=abc",
+    "secrets=abc",
+    "password_confirmation=abc",
+    "token_value=abc",
+    "token%3Dabc",
+    "api_key%3Dabc",
+    "{\\\\\\\"token\\\\\\\":\\\\\\\"abc\\\\\\\"}",
+    "\"token\": [\"abc\",\"def\"], ok",
+    "\"token\": [[\"a]\"], \"b\"]",
+    "5555 5555 5555 4444",
+    "378282246310005",
+    "1764120000120",
+    "accessTokenValue=example",
+    "010֊1234֊5678",
+    "sp_srv_demo@example.test",
+    "token=\"\"",
+    "\"tokens\": [\"a\",\n[\"b\"",
+    "privateKey=x",
+    "accessKey=x",
+    "clientKey=x",
+    "apiKey=x",
+    "ApiKey=x",
+    "secretToken=x",
+    "refreshToken=x",
+    "dbPassword=x",
+    "userPwd=x",
+    "key=x",
+    "_key=x",
+    "-key=x",
+    "prefix-key=x",
+    "pin2key=x",
+    "xKEY=x",
+    "PrivateKey=x",
+    "hockey=x",
+    "turkey=x",
+    "\"credentials\": { \"key\": \"x\" }",
+    "\"token\" : \"abc\"",
+    "\"credentials\"\n : {\n \"items\": [{\"value\":\"}\"}],\n \"other\": 1\n}, \"ok\": 2",
+    "aUtHoRiZaTiOn: abc123 extra,tail\nok",
+    "aUtHoRiZaTiOn: ApiKey xxx extra,tail\nok",
+    "aUtHoRiZaTiOn: Token xxx extra,tail\nok",
+    "aUtHoRiZaTiOn: Basic xxx extra,tail\nok",
+    "aUtHoRiZaTiOn: Bearer xxx extra,tail\nok",
+    "1801016234567",
+    "1801017234567",
+    "1801018234567",
+    "2025550100",
+    "2085550100",
+    "-keyring=x",
+    "Cookie: a=1; sid=abc; token=x",
+    "Set-Cookie: sid=abc; Path=/; HttpOnly",
+    "whiskey=x donkey=y",
+    "Cookie=a=1; sid=abc\nok",
+    "cookie=sid=abc;token=x",
+    "GET https://example.test/a/42/550e8400-e29b-41d4-a716-446655440000/abcdefghijklmnop?q=one&b=two failed",
+    "failed /users/1234567890123?unlisted=raw",
+    "name=Jane Doe",
+    "배송 라벨",
+    "GET https://node2.example2/42?sort=a'b&next=c failed",
+    "token=Cookie=a; sid=x\nok",
+    "이름=홍길동",
+    "a=1; b=2",
+    "statusCode=503 STATUS-CODE=404 method=GET",
+    "path=/a/42?q=x",
+    "version=2026.11.26.1530",
+    "stack={\"nickname\":\"sample\",\"line\":42}",
+    "'이 름':'홍길동'",
+    "first_name=Jane Doe status=503",
+    "credentials://hidden",
+    "{\"rock'n'roll\":\"private\",\"statusCode\":404}",
+    "version={\"line\":1234567890}",
+    "status=500 status_code=408 code=E1 error=timeout errorCode=E2 type=network kind=io",
+    "reason=busy method=GET route=/items/42?q=secret line=12 column=4 file=a.rs function=run stack=failed",
+    "duration=3 duration-ms=4 timeout=5 retry=1 attempt=2 step=load version=v1 platform=web feature=배송"
+  ],
+  "matrix": {
+    "names": [
+      "Authorization",
+      "Proxy-Authorization",
+      "Cookie",
+      "Set-Cookie",
+      "X-Api-Key",
+      "Api-Key",
+      "X-Auth-Token",
+      "X-Access-Token",
+      "X-CSRF-Token",
+      "pRoXy-AuThOrIzAtIoN",
+      "sEt-CoOkIe",
+      "privatekey",
+      "accesskey",
+      "secretkey",
+      "apikey",
+      "clientkey",
+      "authkey",
+      "sessionkey",
+      "signingkey",
+      "encryptionkey",
+      "masterkey",
+      "token",
+      "dbPassword",
+      "secret_hint",
+      "DB-PASSWD",
+      "userPwd",
+      "PrivateKey",
+      "api_key",
+      "user_id",
+      "userId",
+      "uid",
+      "account_id",
+      "accountId",
+      "member_id",
+      "memberId",
+      "customer_id",
+      "customerId",
+      "session_id",
+      "sessionId",
+      "name",
+      "full_name",
+      "fullName",
+      "username",
+      "email",
+      "phone",
+      "mobile",
+      "tel",
+      "address",
+      "addr",
+      "birth",
+      "birthday",
+      "first_name",
+      "nickname",
+      "dob",
+      "이름",
+      "JSESSIONID",
+      "member_no",
+      "login_id",
+      "🧪"
+    ],
+    "forms": [
+      "log {N} : Bearer demo extra\nok",
+      "{N}=Bearer demo",
+      "log {N} : Basic demo extra\nok",
+      "{N}=Basic demo",
+      "log {N} : Token demo extra\nok",
+      "{N}=Token demo",
+      "log {N} : ApiKey demo extra\nok",
+      "{N}=ApiKey demo",
+      "log {N} : Digest username=\"value\", nonce=\"other\" extra\nok",
+      "{N}=Digest username=\"value\", nonce=\"other\"",
+      "log {N} : demo extra\nok",
+      "{N}=demo",
+      "{N}: one two",
+      "?{N}=opaque,tail&next=y",
+      "?{N}=opaque,tail; next=y",
+      "?{N}=opaque,tail next=y",
+      "?{N}=opaque,tail",
+      "{\"{N}\":\"one, two\"}",
+      "{\"{N}\" : \"one, two\"}",
+      "{'{N}':'one, two'}",
+      "{'{N}' : 'one, two'}",
+      "{\\\"{N}\\\":\\\"one, two\\\"}",
+      "{\\\"{N}\\\" : \\\"one, two\\\"}",
+      "{\\\\\\\"{N}\\\\\\\":\\\\\\\"one, two\\\\\\\"}",
+      "{\\\\\\\"{N}\\\\\\\" : \\\\\\\"one, two\\\\\\\"}",
+      "{\"{N}\":[\"one\",{\"x\":\"]\"}],\"ok\":1}",
+      "{\"{N}\":{\"x\":[\"a}\",\"b\"]},\"ok\":1}",
+      "{\"{N}\":123,\"ok\":1}",
+      "log {N} => one, two\nok",
+      "log {N} -> one, two\nok",
+      "log {N}, one, two\nok",
+      "{N}%3Dopaque%20value&next=y",
+      "{N}%3dopaque%20value&next=y",
+      "{N}%3Aopaque%20value&next=y",
+      "{N}%3aopaque%20value&next=y",
+      "{N}%3Aa=1; sid=abc; token=x&ok=y",
+      "{N}=Token demo,tail; ok=y",
+      "{\\\"{N}\\\":[\\\"a]b\\\",\\\"hidden\\\"],\\\"ok\\\":1}",
+      "{\\\\\\\"{N}\\\\\\\":[\\\\\\\"a]b\\\\\\\",\\\\\\\"hidden\\\\\\\"],\\\\\\\"ok\\\\\\\":1}",
+      "{'{N}':['a]b','hidden'],'ok':1}"
+    ]
+  },
+  "diagnostics": [
+    {
+      "input": "TypeError: secret",
+      "message": "TypeError",
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "java.lang.NullPointerException secret",
+      "message": "java.lang.NullPointerException",
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "StorageFault",
+      "message": "StorageFault",
+      "kind": "StorageFault",
+      "step": "StorageFault"
+    },
+    {
+      "input": "nickname:Jane",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "E404",
+      "message": null,
+      "kind": "E404",
+      "step": null
+    },
+    {
+      "input": "http_500",
+      "message": null,
+      "kind": "http_500",
+      "step": null
+    },
+    {
+      "input": "E4040",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "배송 저장",
+      "message": null,
+      "kind": null,
+      "step": "배송 저장"
+    },
+    {
+      "input": "배송 123",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "token=abc",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
+      "message": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
+      "kind": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
+      "step": null
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
+      "step": null
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "message": null,
+      "kind": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "step": null
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+      "message": null,
+      "kind": null,
+      "step": "가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가"
+    },
+    {
+      "input": "가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+      "message": null,
+      "kind": null,
+      "step": null
     }
   ],
   "route": [
@@ -864,231 +479,5 @@
       "input": "2025550100",
       "expected": "2025550100"
     }
-  ],
-  "matrix": {
-    "names": [
-      "Authorization",
-      "Proxy-Authorization",
-      "Cookie",
-      "Set-Cookie",
-      "X-Api-Key",
-      "Api-Key",
-      "X-Auth-Token",
-      "X-Access-Token",
-      "X-CSRF-Token",
-      "pRoXy-AuThOrIzAtIoN",
-      "sEt-CoOkIe",
-      "privatekey",
-      "accesskey",
-      "secretkey",
-      "apikey",
-      "clientkey",
-      "authkey",
-      "sessionkey",
-      "signingkey",
-      "encryptionkey",
-      "masterkey",
-      "token",
-      "dbPassword",
-      "secret_hint",
-      "DB-PASSWD",
-      "userPwd",
-      "PrivateKey",
-      "api_key",
-      "user_id",
-      "userId",
-      "uid",
-      "account_id",
-      "accountId",
-      "member_id",
-      "memberId",
-      "customer_id",
-      "customerId",
-      "session_id",
-      "sessionId",
-      "name",
-      "full_name",
-      "fullName",
-      "username",
-      "email",
-      "phone",
-      "mobile",
-      "tel",
-      "address",
-      "addr",
-      "birth",
-      "birthday",
-      "first_name",
-      "nickname",
-      "dob",
-      "이름",
-      "JSESSIONID",
-      "member_no",
-      "login_id",
-      "🧪"
-    ],
-    "forms": [
-      {
-        "input": "log {N} : Bearer demo extra\nok",
-        "expected": "log [가림]\nok"
-      },
-      {
-        "input": "{N}=Bearer demo",
-        "expected": "{N}=[가림]"
-      },
-      {
-        "input": "log {N} : Basic demo extra\nok",
-        "expected": "log [가림]\nok"
-      },
-      {
-        "input": "{N}=Basic demo",
-        "expected": "{N}=[가림]"
-      },
-      {
-        "input": "log {N} : Token demo extra\nok",
-        "expected": "log [가림]\nok"
-      },
-      {
-        "input": "{N}=Token demo",
-        "expected": "{N}=[가림]"
-      },
-      {
-        "input": "log {N} : ApiKey demo extra\nok",
-        "expected": "log [가림]\nok"
-      },
-      {
-        "input": "{N}=ApiKey demo",
-        "expected": "{N}=[가림]"
-      },
-      {
-        "input": "log {N} : Digest username=\"value\", nonce=\"other\" extra\nok",
-        "expected": "log [가림]\nok"
-      },
-      {
-        "input": "{N}=Digest username=\"value\", nonce=\"other\"",
-        "expected": "{N}=[가림]"
-      },
-      {
-        "input": "log {N} : demo extra\nok",
-        "expected": "log [가림]\nok"
-      },
-      {
-        "input": "{N}=demo",
-        "expected": "{N}=[가림]"
-      },
-      {
-        "input": "{N}: one two",
-        "expected": "[가림]"
-      },
-      {
-        "input": "?{N}=opaque,tail&next=y",
-        "expected": "?[가림]"
-      },
-      {
-        "input": "?{N}=opaque,tail; next=y",
-        "expected": "?[가림]"
-      },
-      {
-        "input": "?{N}=opaque,tail next=y",
-        "expected": "?[가림]"
-      },
-      {
-        "input": "?{N}=opaque,tail",
-        "expected": "?[가림]"
-      },
-      {
-        "input": "{\"{N}\":\"one, two\"}",
-        "expected": "{\"{N}\":\"[가림]\"}"
-      },
-      {
-        "input": "{\"{N}\" : \"one, two\"}",
-        "expected": "{\"{N}\" : \"[가림]\"}"
-      },
-      {
-        "input": "{'{N}':'one, two'}",
-        "expected": "{'{N}':'[가림]'}"
-      },
-      {
-        "input": "{'{N}' : 'one, two'}",
-        "expected": "{'{N}' : '[가림]'}"
-      },
-      {
-        "input": "{\\\"{N}\\\":\\\"one, two\\\"}",
-        "expected": "{\\\"{N}\\\":\\\"[가림]\\\"}"
-      },
-      {
-        "input": "{\\\"{N}\\\" : \\\"one, two\\\"}",
-        "expected": "{\\\"{N}\\\" : \\\"[가림]\\\"}"
-      },
-      {
-        "input": "{\\\\\\\"{N}\\\\\\\":\\\\\\\"one, two\\\\\\\"}",
-        "expected": "{\\\\\\\"{N}\\\\\\\":\\\\\\\"[가림]\\\\\\\"}"
-      },
-      {
-        "input": "{\\\\\\\"{N}\\\\\\\" : \\\\\\\"one, two\\\\\\\"}",
-        "expected": "{\\\\\\\"{N}\\\\\\\" : \\\\\\\"[가림]\\\\\\\"}"
-      },
-      {
-        "input": "{\"{N}\":[\"one\",{\"x\":\"]\"}],\"ok\":1}",
-        "expected": "{\"{N}\":[가림],\"ok\":[가림]}"
-      },
-      {
-        "input": "{\"{N}\":{\"x\":[\"a}\",\"b\"]},\"ok\":1}",
-        "expected": "{\"{N}\":[가림],\"ok\":[가림]}"
-      },
-      {
-        "input": "{\"{N}\":123,\"ok\":1}",
-        "expected": "{\"{N}\":[가림],\"ok\":[가림]}"
-      },
-      {
-        "input": "log {N} => one, two\nok",
-        "expected": "log {N} => [가림]\nok"
-      },
-      {
-        "input": "log {N} -> one, two\nok",
-        "expected": "log {N} -> [가림]\nok"
-      },
-      {
-        "input": "log {N}, one, two\nok",
-        "expected": "log {N}, [가림]\nok"
-      },
-      {
-        "input": "{N}%3Dopaque%20value&next=y",
-        "expected": "{N}%3D[가림]&next=[가림]"
-      },
-      {
-        "input": "{N}%3dopaque%20value&next=y",
-        "expected": "{N}%3d[가림]&next=[가림]"
-      },
-      {
-        "input": "{N}%3Aopaque%20value&next=y",
-        "expected": "{N}%3A[가림]&next=[가림]"
-      },
-      {
-        "input": "{N}%3aopaque%20value&next=y",
-        "expected": "{N}%3a[가림]&next=[가림]"
-      },
-      {
-        "input": "{N}%3Aa=1; sid=abc; token=x&ok=y",
-        "expected": "{N}%3A[가림]&ok=[가림]"
-      },
-      {
-        "input": "{N}=Token demo,tail; ok=y",
-        "expected": "{N}=[가림]; ok=[가림]",
-        "fullLineExpected": "{N}=[가림]"
-      },
-      {
-        "input": "{\\\"{N}\\\":[\\\"a]b\\\",\\\"hidden\\\"],\\\"ok\\\":1}",
-        "expected": "{\\\"{N}\\\":[가림],\\\"ok\\\":[가림]}"
-      },
-      {
-        "input": "{\\\\\\\"{N}\\\\\\\":[\\\\\\\"a]b\\\\\\\",\\\\\\\"hidden\\\\\\\"],\\\\\\\"ok\\\\\\\":1}",
-        "expected": "{\\\\\\\"{N}\\\\\\\":[가림],\\\\\\\"ok\\\\\\\":[가림]}"
-      },
-      {
-        "input": "{'{N}':['a]b','hidden'],'ok':1}",
-        "expected": "{'{N}':[가림],'ok':[가림]}"
-      }
-    ]
-  }
+  ]
 }

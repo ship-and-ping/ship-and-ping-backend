@@ -72,7 +72,7 @@ export function deepPrompt(
     "===== 데이터 끝 =====",
     "시작할 때 새 UUID로 attempt_id를 만들고 feature_key, attempt_id, ts와 함께 attempt_start를 보내.",
     "같은 feature_key·attempt_id로 attempt_result와 ts를 보내. 실제 저장이 끝나면 result는 success, 실패하면 failure, 취소하거나 화면을 떠나면 abandon이야.",
-    "실패한 단계는 step, 오류 종류와 정제한 메시지는 error_kind·error_message에 넣어.",
+    "step에는 고정 단계 이름, error_kind에는 오류 종류 코드만 넣어. error_message에는 오류 클래스 이름만 보내.",
     "서버가 있으면 저장을 마친 서버에서 source=server로 보내. 서버 키는 환경변수 SHIPPING_SERVER_KEY에서 읽고, 값을 묻거나 코드에 쓰지 마.",
     "서버가 없으면 저장 완료 응답을 받은 브라우저에서 source=browser와 기존 연결의 공개 수집 키로 보내.",
     "입력값, 요청·응답 본문, 쿠키·토큰, 사용자 계정 ID, 쿼리 문자열과 주소 안의 실제 값은 보내지 마.",
