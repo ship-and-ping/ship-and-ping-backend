@@ -27,7 +27,7 @@ export interface Snapshot {
   labels: Label[];
 }
 export interface Gateway {
-  account(): Promise<{ email: string; joined: string; method: string }>;
+  account(): Promise<{ email: string; joined: string; method: string; hasPassword?: boolean }>;
   withdraw(origin: string): Promise<"done" | "failed" | "unknown" | "unauthorized">;
   checkAccount(): Promise<"exists" | "deleted" | "unknown">;
   appKeys(id: string): Promise<KeySummary[]>;
@@ -52,8 +52,12 @@ export interface Gateway {
   threshold(app: string, feature: string, ms: number): Promise<void>;
   dismiss(issue: string): Promise<void>;
   session(): Promise<string | null>;
-  listen(fn: (id: string | null) => void): () => void;
+  listen(fn: (id: string | null, recovery?: boolean) => void): () => void;
   login(email?: string): Promise<void>;
+  passwordLogin(email: string, password: string): Promise<void>;
+  signup(email: string, password: string): Promise<void>;
+  requestReset(email: string): Promise<void>;
+  updatePassword(password: string): Promise<void>;
   logout(): Promise<void>;
   firstVisit(): Promise<boolean>;
   apps(): Promise<AppSummary[]>;
@@ -83,12 +87,24 @@ function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
 export function gateway(client: SupabaseClient): Gateway {
   const columns = "id,name,url,created_at,first_record_at";
   let withdrawalToken: string | undefined;
+  // A fast Auth redirect can finish before React mounts the route listener.
+  let initialRecovery: string | undefined;
+  const earlyListener = location.pathname === "/reset-password"
+    ? client.auth.onAuthStateChange((event, session) => {
+        if (event === "PASSWORD_RECOVERY") initialRecovery = session?.user.id;
+        if (!session) initialRecovery = undefined;
+      }).data.subscription : undefined;
   return {
     async account() {
       const { data: { user } } = await client.auth.getUser();
       if (!user?.email) throw Error("로그인이 필요해요");
       return { email: user.email, joined: user.created_at,
-        method: user.app_metadata.provider === "google" ? "Google" : "이메일 링크" };
+        hasPassword: user.user_metadata.ship_ping_password_set === true,
+        method: [
+          ...(user.app_metadata.provider === "google" ? ["Google"] : []),
+          ...(user.user_metadata.ship_ping_password_set === true ? ["이메일과 비밀번호"] : []),
+          "메일 링크",
+        ].join(", ") };
     },
     async withdraw(origin) {
       const { data } = await client.auth.getSession();
@@ -217,10 +233,35 @@ export function gateway(client: SupabaseClient): Gateway {
       return data.session?.user.id ?? null;
     },
     listen(fn) {
-      const { data } = client.auth.onAuthStateChange((_event, session) =>
-        fn(session?.user.id ?? null),
+      const { data } = client.auth.onAuthStateChange((event, session) =>
+        fn(session?.user.id ?? null, event === "PASSWORD_RECOVERY"),
       );
+      earlyListener?.unsubscribe();
+      if (initialRecovery) {
+        fn(initialRecovery, true);
+        initialRecovery = undefined;
+      }
       return () => data.subscription.unsubscribe();
+    },
+    async passwordLogin(email, password) {
+      const { error } = await client.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    },
+    async signup(email, password) {
+      const { error } = await client.auth.signUp({ email, password, options: {
+        emailRedirectTo: location.origin + "/login", data: { ship_ping_password_set: true },
+      } });
+      if (error && error.code !== "user_already_exists" && error.code !== "email_exists") throw error;
+    },
+    async requestReset(email) {
+      const { error } = await client.auth.resetPasswordForEmail(email, {
+        redirectTo: location.origin + "/reset-password",
+      });
+      if (error && error.code !== "user_not_found") throw error;
+    },
+    async updatePassword(password) {
+      const { error } = await client.auth.updateUser({ password, data: { ship_ping_password_set: true } });
+      if (error) throw error;
     },
     async login(email) {
       const redirectTo = location.origin + "/login";
