@@ -8,7 +8,7 @@ Cloudflare Workers Free 계정에서 workers.dev 하위 도메인을 선택한�
 
 ## 2. GitHub 및 Worker 설정 · 사람
 
-GitHub 저장소 Settings → Environments에서 `production`을 만들고 배포 브랜치를 `main`으로 제한한다. 아래 이름으로 등록한다.
+GitHub 저장소 Settings → Environments에서 `production`을 만들고 배포 브랜치를 `main`으로 제한한다. Deployment protection rules의 **Required reviewers**에 운영 승인을 담당하는 사용자 본인을 지정한다. 본인이 수동 실행과 승인을 모두 담당하면 **Prevent self-review**를 해제한다. 아래 이름으로 등록한다.
 
 | 저장 위치 | 이름 | 용도 |
 |---|---|---|
@@ -22,7 +22,7 @@ GitHub 저장소 Settings → Environments에서 `production`을 만들고 배�
 | Worker 비밀 이름 | 가져올 곳 |
 |---|---|
 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | 운영 프로젝트 URL과 서버 전용 Secret API key |
-| `RESEND_API_KEY`, `MAIL_FROM` | Resend 발송 키와 인증된 도메인의 발신 주소 |
+| `RESEND_API_KEY`, `MAIL_FROM` | Resend 발송 키와 테스트 발신 주소 `onboarding@resend.dev`. 수신자는 Resend 계정 소유자 메일로 제한된다 |
 | `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` | Slack 앱 OAuth 자격 증명. Incoming Webhooks를 켜고 콜백에 Worker 원점의 `/v1/slack/callback`을 정확히 등록 |
 | `WEB_ORIGIN` | 회원 화면의 운영 Pages HTTPS 원점 |
 
@@ -38,15 +38,18 @@ GitHub 저장소 Settings → Environments에서 `production`을 만들고 배�
 
 Authentication → URL Configuration의 **Site URL**에 운영 Pages 원점을 넣는다. Redirect URLs에는 같은 원점의 정확한 `/login`과 `/reset-password`를 등록한다. Google 제공자를 사용할 때는 Google OAuth 클라이언트에도 Supabase 콘솔에 표시된 콜백 URI를 등록한다.
 
-이메일 제공자를 활성화하고 Custom SMTP에 인증된 발신자와 SMTP 자격 증명을 설정한다. Email Templates에서 Confirm signup과 Magic link의 버튼을 `<a href="{{ .ConfirmationURL }}">쉽앤핑 로그인</a>`로 설정한다. 확인 링크가 Supabase에서 검증된 후 앱이 요청한 `/login`으로 돌아온다. Reset password 양식도 복구 요청의 리디렉트를 보존하는 `{{ .ConfirmationURL }}`을 쓴다. 이 브랜치의 로그인 화면은 Google과 이메일 링크를 지원한다. 비밀번호 복구는 해당 화면과 복구 세션 처리가 출시된 뒤 시험한다.
+이메일 제공자를 활성화하고 Custom SMTP에 Resend SMTP 자격 증명과 테스트 발신 주소 `onboarding@resend.dev`를 설정한다. Email Templates에서 `supabase/templates/`의 `confirmation.html`, `magic-link.html`, `recovery.html`을 각각 Confirm signup, Magic link, Reset password에 적용한다. 세 양식의 `{{ .ConfirmationURL }}`은 앱이 요청한 복귀 경로를 보존한다.
 
-T22가 포함된 릴리스에서는 `supabase/templates/`의 `confirmation.html`, `magic-link.html`, `recovery.html` 전문을 각각 Confirm signup, Magic link, Reset password에 붙여 넣는다. 시험 회원으로 가입 확인과 비밀번호 재설정 메일을 각각 열어 올바른 화면으로 돌아오고 새 비밀번호로 로그인되는지 확인한다.
+### 실제 사용자에게 메일을 보내기 전 · 사람
+
+2026-11-26 결정에 따라 자체 도메인 연결은 나중에 진행한다. 실제 사용자에게 발송할 때는 Resend에 자체 도메인을 추가하고 Resend가 제시한 DNS 기록을 등록한다. 도메인 인증이 완료되면 Supabase Custom SMTP의 발신 주소와 Worker의 `MAIL_FROM`을 인증된 도메인의 발신 주소로 변경하고 별도 시험 수신함에서 Auth 메일과 알림 메일을 확인한다.
 
 ## 5. 운영 확인 · 사람
 
+- [ ] 테스트 발신 주소를 쓰는 동안 가입 확인·비밀번호 재설정 메일은 **Resend 계정 소유자 메일로만** 확인할 수 있다. 그 주소로 시험 가입한 뒤 확인 링크가 `/login`으로, 재설정 링크가 `/reset-password`로 돌아오는지 확인하고 새 비밀번호로 로그인한다.
 - [ ] Pages에서 `/login`과 로그인 후 앱 상세를 직접 새로고침한다. 문서 응답이 200이고 CSP의 `connect-src`에는 실제 Supabase·Worker 원점만 있는지 확인한다. 시험 계정으로 이메일 링크와 Google 로그인을 각각 마친다.
 - [ ] 시험 앱을 연결해 요청을 한 번 보낸 뒤 첫 기록 도착 시각과 기능 이름이 표시되는지 확인한다.
-- [ ] 알림 설정에서 시험 Slack 채널을 연결하고 시험 알림 수신을 확인한다. 메일 경로도 시험해 실제 수신함에 한 통이 도착하는지 확인한다.
+- [ ] 알림 설정에서 시험 Slack 채널을 연결하고 시험 알림 수신을 확인한다. 메일 알림은 Resend 계정 소유자 수신함에서 확인한다.
 - [ ] **C5**. 회원 트래픽과 분리한 시험 구간에서 T10의 `batch()` 형식으로 현재 시각·새 묶음 ID를 사용한다. 요청 100건을 담은 ASCII JSON을 공백으로 채워 정확히 65,536바이트로 만든다. 시험 앱의 수집 키로 `POST /v1/ingest`를 두 번 보내고 매번 202, accepted 100, dropped 0을 확인한다. Worker 대시보드의 Metrics에서 같은 UTC 구간의 HTTP CPU Time과 CPU 초과 오류를 확인한다. 다른 호출과 섞이거나 두 호출의 CPU를 판별할 수 없으면 C5를 보류한다. 두 요청 각각 10ms 이내인지 확인하고 배포 버전·UTC 시각·측정치만 기록한다. 로컬 HTTP 왕복 시간에는 DB 대기가 포함된다. [T10 시험 입력](../scripts/t10-scenario.mjs) · [기존 측정 결과](verification/2026-11-26-T10.md)
 - [ ] 마지막으로 폐기 가능한 시험 계정의 회원 설정에서 이메일을 확인하고 탈퇴한다. 로그인 세션 종료, 기존 수집 키의 401, Auth 계정 및 소유 앱 삭제를 확인한다.
 

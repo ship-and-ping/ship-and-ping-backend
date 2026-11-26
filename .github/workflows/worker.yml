@@ -16,6 +16,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
       - run: rustup toolchain install
       - run: cargo fmt --check
       - run: cargo clippy --locked -- -D warnings
@@ -26,4 +29,5 @@ jobs:
       - run: cargo test --locked --test http -- --ignored
       - run: cargo run --locked --release --example bench
       - run: npm install --prefix target/wrangler --no-save wrangler@4.168.0
+      - run: target/wrangler/node_modules/.bin/wrangler deploy --dry-run --env production
       - run: python3 bench_http.py --start-local
