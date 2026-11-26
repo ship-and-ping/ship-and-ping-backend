@@ -11,17 +11,6 @@
     "issues": []
   },
   {
-    "title": "로그인",
-    "state": "normal",
-    "width": 1440,
-    "colorScheme": "light",
-    "scale": 1,
-    "reduced": false,
-    "file": "01-normal-1440-light.jpg",
-    "overflow": 0,
-    "issues": []
-  },
-  {
     "title": "내 앱",
     "state": "normal",
     "width": 1440,
@@ -227,17 +216,6 @@
     "scale": 1,
     "reduced": false,
     "file": "00-normal-1280-dark.jpg",
-    "overflow": 0,
-    "issues": []
-  },
-  {
-    "title": "로그인",
-    "state": "normal",
-    "width": 1280,
-    "colorScheme": "dark",
-    "scale": 1,
-    "reduced": false,
-    "file": "01-normal-1280-dark.jpg",
     "overflow": 0,
     "issues": []
   },
@@ -451,17 +429,6 @@
     "issues": []
   },
   {
-    "title": "로그인",
-    "state": "normal",
-    "width": 390,
-    "colorScheme": "light",
-    "scale": 1,
-    "reduced": false,
-    "file": "01-normal-390-light.jpg",
-    "overflow": 0,
-    "issues": []
-  },
-  {
     "title": "내 앱",
     "state": "normal",
     "width": 390,
@@ -667,17 +634,6 @@
     "scale": 2,
     "reduced": true,
     "file": "00-normal-390-dark.jpg",
-    "overflow": 0,
-    "issues": []
-  },
-  {
-    "title": "로그인",
-    "state": "normal",
-    "width": 390,
-    "colorScheme": "dark",
-    "scale": 2,
-    "reduced": true,
-    "file": "01-normal-390-dark.jpg",
     "overflow": 0,
     "issues": []
   },
@@ -891,17 +847,6 @@
     "issues": []
   },
   {
-    "title": "내 계정",
-    "state": "normal",
-    "width": 1440,
-    "colorScheme": "light",
-    "scale": 1,
-    "reduced": false,
-    "file": "21-normal-1440-light.jpg",
-    "overflow": 0,
-    "issues": []
-  },
-  {
     "title": "앱 설정",
     "state": "normal",
     "width": 1280,
@@ -909,17 +854,6 @@
     "scale": 1,
     "reduced": false,
     "file": "20-normal-1280-dark.jpg",
-    "overflow": 0,
-    "issues": []
-  },
-  {
-    "title": "내 계정",
-    "state": "normal",
-    "width": 1280,
-    "colorScheme": "dark",
-    "scale": 1,
-    "reduced": false,
-    "file": "21-normal-1280-dark.jpg",
     "overflow": 0,
     "issues": []
   },
@@ -935,17 +869,6 @@
     "issues": []
   },
   {
-    "title": "내 계정",
-    "state": "normal",
-    "width": 390,
-    "colorScheme": "light",
-    "scale": 1,
-    "reduced": false,
-    "file": "21-normal-390-light.jpg",
-    "overflow": 0,
-    "issues": []
-  },
-  {
     "title": "앱 설정",
     "state": "normal",
     "width": 390,
@@ -957,6 +880,182 @@
     "issues": []
   },
   {
+    "title": "로그인",
+    "state": "normal",
+    "width": 1440,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "01-normal-1440-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "내 계정",
+    "state": "normal",
+    "width": 1440,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "21-normal-1440-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "회원 가입",
+    "state": "normal",
+    "width": 1440,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "22-normal-1440-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "새 비밀번호",
+    "state": "normal",
+    "width": 1440,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "23-normal-1440-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "비밀번호 찾기",
+    "state": "normal",
+    "width": 1440,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "24-normal-1440-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "로그인",
+    "state": "normal",
+    "width": 1280,
+    "colorScheme": "dark",
+    "scale": 1,
+    "reduced": false,
+    "file": "01-normal-1280-dark.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "내 계정",
+    "state": "normal",
+    "width": 1280,
+    "colorScheme": "dark",
+    "scale": 1,
+    "reduced": false,
+    "file": "21-normal-1280-dark.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "회원 가입",
+    "state": "normal",
+    "width": 1280,
+    "colorScheme": "dark",
+    "scale": 1,
+    "reduced": false,
+    "file": "22-normal-1280-dark.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "새 비밀번호",
+    "state": "normal",
+    "width": 1280,
+    "colorScheme": "dark",
+    "scale": 1,
+    "reduced": false,
+    "file": "23-normal-1280-dark.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "비밀번호 찾기",
+    "state": "normal",
+    "width": 1280,
+    "colorScheme": "dark",
+    "scale": 1,
+    "reduced": false,
+    "file": "24-normal-1280-dark.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "로그인",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "01-normal-390-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "내 계정",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "21-normal-390-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "회원 가입",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "22-normal-390-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "새 비밀번호",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "23-normal-390-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "비밀번호 찾기",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "24-normal-390-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "로그인",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "dark",
+    "scale": 2,
+    "reduced": true,
+    "file": "01-normal-390-dark.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
     "title": "내 계정",
     "state": "normal",
     "width": 390,
@@ -964,6 +1063,39 @@
     "scale": 2,
     "reduced": true,
     "file": "21-normal-390-dark.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "회원 가입",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "dark",
+    "scale": 2,
+    "reduced": true,
+    "file": "22-normal-390-dark.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "새 비밀번호",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "dark",
+    "scale": 2,
+    "reduced": true,
+    "file": "23-normal-390-dark.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "비밀번호 찾기",
+    "state": "normal",
+    "width": 390,
+    "colorScheme": "dark",
+    "scale": 2,
+    "reduced": true,
+    "file": "24-normal-390-dark.jpg",
     "overflow": 0,
     "issues": []
   }
