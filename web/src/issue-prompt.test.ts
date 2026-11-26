@@ -5,6 +5,9 @@ import { buildIssuePrompt, displayVersion } from "./issue-prompt";
 import vectors from "../../docs/specs/sanitize-vectors.json";
 
 const base = { feature: "결제", route: "/buy", versions: ["v1"], errors: [] };
+it("오류 예시가 없으면 화면과 같은 안내를 복사한다", () => {
+  expect(buildIssuePrompt(base).text).toContain("오류 예시가 없어요.");
+});
 it.each(vectors.version)("빌드 버전을 화면과 요청문에 보존한다 · $input", ({ input, expected }) => {
   expect(displayVersion(input)).toBe(expected);
   const prompt = buildIssuePrompt({ ...base, versions: [input], mode: "again" });

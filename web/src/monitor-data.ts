@@ -60,7 +60,7 @@ export interface Monitor {
   stats: Stat[];
   versions: { version: string; first_seen_at: string; last_seen_at: string }[];
   samples: { at: string; error_kind: string | null; message: string | null }[];
-  errorKinds: { error_kind: string | null; at: string }[];
+  errorKinds: Monitor["samples"];
   step?: string;
   now: number;
 }
@@ -183,10 +183,10 @@ export async function loadMonitor(
     : null;
   if (incident) sampleQuery?.gte("at", cutoff).lte("at", incident.closed_at ?? new Date(now).toISOString());
   const kindRows = featureId
-    ? pages<{ error_kind: string | null; at: string }>((a, b) =>
+    ? pages<Monitor["samples"][number]>((a, b) =>
         client
           .from("error_samples")
-          .select("at,error_kind")
+          .select("at,error_kind,message")
           .eq("app_id", app)
           .eq("feature_id", featureId)
           .gte("at", cutoff)

@@ -174,6 +174,7 @@ const uuid = "[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}";
 const uuidSegment = new RegExp("^(?:" + uuid + "|\\{" + uuid + "\\}|urn:uuid:" + uuid + ")$", "i");
 
 function opaqueSegment(part: string): boolean {
+  if (/\d{9}/.test(part)) return true;
   return part.length >= 16 && /^[a-z0-9_-]+={0,2}$/i.test(part) && (
     part.endsWith("=") || /^[a-z0-9]+$/i.test(part) || /\d/.test(part) ||
     (/[A-Z]/.test(part) && /[a-z]/.test(part))
@@ -183,7 +184,7 @@ function opaqueSegment(part: string): boolean {
 export function sanitizeRoute(value: string): string {
   return normalizeText(value).split(/[?#]/, 1)[0].split("/").map(segment => {
     const part = segment.split(";", 1)[0];
-    return /^\d+$|\d{9}/.test(part) || uuidSegment.test(part) ||
+    return /^\d+$/.test(part) || uuidSegment.test(part) ||
       [...privatePatterns, credentialName, numeric].some(pattern => part.search(pattern) >= 0) || opaqueSegment(part) ? ":id" : part;
   }).join("/");
 }
@@ -199,7 +200,12 @@ export function displayText(
 }
 
 function safeDiagnostic(value: string) {
-  return privatePatterns.every(pattern => value.search(pattern) < 0)
+  const prefixedToken = /(?:^|[._ -])(?:(?:gh[pos]_|AKIA|ASIA|AIza)[A-Za-z0-9_-]{12}|github_pat_[A-Za-z0-9_-]{5}|xox[abpr]-[A-Za-z0-9_-]{11}|sk-[A-Za-z0-9_-]{13}|glpat-[A-Za-z0-9_-]{10})/;
+  const opaque = value.split(/[._ -]/).some(part => part.length >= 16 && (
+    /[0-9]/.test(part) || (/[A-Z]/.test(part) && /[a-z]/.test(part) &&
+      (!/^[a-z]*([A-Z]+[a-z]+)+[A-Z]*$/.test(part) || /(?:[A-Z][a-z]){3}/.test(part)))
+  ));
+  return !opaque && !prefixedToken.test(value) && privatePatterns.every(pattern => value.search(pattern) < 0)
     && [...value.matchAll(numeric)].every(match => isTimestamp(match[0]));
 }
 

@@ -6,7 +6,7 @@ import { status, StatusBadge, Timeline, IssueListItem } from "./IncidentSummary"
 import type { Gateway } from "./data";
 import { Hero, CurrentAppName } from "./Layout";
 import { displayText, sanitizeRoute } from "./normalize";
-import { buildIssuePrompt, displayVersion } from "./issue-prompt";
+import { buildIssuePrompt, displayVersion, noErrorSamples } from "./issue-prompt";
 import {
   summarize,
   type Monitor,
@@ -406,7 +406,7 @@ function FeaturePage({
   data.errorKinds
     .filter((s) => Date.parse(s.at) >= data.now - days * day)
     .forEach((s) => {
-      const kind = errorKind(s.error_kind) ?? "종류 미상";
+      const kind = errorKind(s.error_kind) ?? errorName(s.message) ?? "종류 미상";
       kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
     });
   return (
@@ -510,7 +510,7 @@ function Samples({ data }: { data: Monitor }) {
       ))}
     </ul>
   ) : (
-    <p>오류 예시가 없어요.</p>
+    <p>{noErrorSamples}</p>
   );
 }
 function Issue({

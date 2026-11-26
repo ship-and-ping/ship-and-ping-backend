@@ -27,7 +27,7 @@ export function buildConnectPrompt(publicKey: string, endpoint: string) {
   return `[쉽앤핑 연결 요청]
 내 웹앱에 쉽앤핑 모니터링을 연결해 줘. 앱 기능은 그대로 두고 기록 전송만 추가해.
 
-1. 서버가 있으면 API 요청마다, 없으면 브라우저의 저장·조회 요청마다 주소 형태, method, status, 걸린 시간(ms), 정제한 오류 종류와 메시지를 기록해.
+1. 서버가 있으면 API 요청마다, 없으면 브라우저의 저장·조회 요청마다 주소 형태, method, status, 걸린 시간(ms)을 기록해. error_kind에는 오류 종류 코드만 넣어. error_message에는 오류 클래스 이름만 보내.
 2. 30초마다 또는 50건이 모이면 POST "${base}/v1/ingest" 로 비동기 전송해. Content-Type은 application/json, Authorization은 Bearer 인증이야. 브라우저용 수집 키는 "${publicKey}"야. 서버 키는 서버에서만 환경변수 SHIPPING_SERVER_KEY에서 읽어라.
 3. 묶음 예시의 자리표시자를 실제 UUID·현재 ISO 시각·배포마다 바뀌는 커밋 해시 또는 빌드 시각으로 채워. 서버에서 보내면 platform을 server로 바꿔.
 {"spec":"sp-1","batch_id":"<UUID>","app_version":"<빌드 버전>","platform":"browser","sent_at":"<ISO 시각>","records":[{"type":"request","route":"/meetings/:id","method":"GET","status":200,"duration_ms":80,"ts":"<ISO 시각>"}]}

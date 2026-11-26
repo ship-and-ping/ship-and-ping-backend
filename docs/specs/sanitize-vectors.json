@@ -304,6 +304,168 @@
   },
   "diagnostics": [
     {
+      "input": "NullPointerException",
+      "message": "NullPointerException",
+      "kind": "NullPointerException",
+      "step": "NullPointerException"
+    },
+    {
+      "input": "QuotaExceededError",
+      "message": "QuotaExceededError",
+      "kind": "QuotaExceededError",
+      "step": "QuotaExceededError"
+    },
+    {
+      "input": "upstream_http_502",
+      "message": null,
+      "kind": "upstream_http_502",
+      "step": null
+    },
+    {
+      "input": "ERR_HTTP2_PROTOCOL_ERROR",
+      "message": null,
+      "kind": "ERR_HTTP2_PROTOCOL_ERROR",
+      "step": "ERR_HTTP2_PROTOCOL_ERROR"
+    },
+    {
+      "input": "submitPaymentForm",
+      "message": null,
+      "kind": "submitPaymentForm",
+      "step": "submitPaymentForm"
+    },
+    {
+      "input": "x.aB2cD3eF4gH5iJ6k",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "pkg.aB2cD3eF4gH5iJ6kError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "한글 aB2cD3eF4gH5iJ6k",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "pkg.aBcDeFgHiJkLmNoPError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.ghp_aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.gho_aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.ghs_aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.github_pat_aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.AKIAaaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.ASIAaaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.xoxa-aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.xoxb-aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.xoxp-aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.xoxr-aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.AIzaaaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.sk-aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.glpat-aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "AKIAfixtureA2B3C4",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "ghp_aB2cD3eF4gH5iJ6kError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "abc123def456ghi",
+      "message": null,
+      "kind": "abc123def456ghi",
+      "step": null
+    },
+    {
+      "input": "abc123def456ghij",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "ghp_aB2cD3eF4gH5iJ6k",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
       "input": "TypeError: secret",
       "message": "TypeError",
       "kind": null,

@@ -55,7 +55,7 @@ export function monitor(config, platform) {
       duration_ms: Math.round(performance.now() - start),
       ts: new Date().toISOString(),
       ...(status >= 500 && {
-        error_kind: "StorageError",
+        error_kind: "storage_failed",
         error_message: "StorageError",
       }),
     });

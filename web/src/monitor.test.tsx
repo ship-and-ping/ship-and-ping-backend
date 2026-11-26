@@ -15,6 +15,14 @@ import { gateway } from "./data";
 import vectors from "../../docs/specs/sanitize-vectors.json";
 
 afterEach(cleanup);
+it("오류 코드가 비면 클래스 이름으로 종류를 집계한다", async () => {
+  const { requests } = setup("/apps/a/features/f", ["WriteError"], rows => {
+    Object.assign((rows.error_samples as object[])[0], { error_kind: null });
+  });
+  expect(await screen.findByText("WriteError 1건")).toBeTruthy();
+  const query = requests.find(url => url.pathname.endsWith("/error_samples") && url.searchParams.has("at"));
+  expect(query?.searchParams.get("select")?.split(",")).toContain("message");
+});
 it.each(vectors.version)("해결 버전을 화면에 그대로 표시한다 · $input", async ({ input, expected }) => {
   setup("/apps/a/issues/i", [], rows => {
     Object.assign((rows.incidents as object[])[0], { status: "resolved", resolved_version: input });

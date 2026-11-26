@@ -308,6 +308,168 @@ create temporary table vectors as select $vectors${
   },
   "diagnostics": [
     {
+      "input": "NullPointerException",
+      "message": "NullPointerException",
+      "kind": "NullPointerException",
+      "step": "NullPointerException"
+    },
+    {
+      "input": "QuotaExceededError",
+      "message": "QuotaExceededError",
+      "kind": "QuotaExceededError",
+      "step": "QuotaExceededError"
+    },
+    {
+      "input": "upstream_http_502",
+      "message": null,
+      "kind": "upstream_http_502",
+      "step": null
+    },
+    {
+      "input": "ERR_HTTP2_PROTOCOL_ERROR",
+      "message": null,
+      "kind": "ERR_HTTP2_PROTOCOL_ERROR",
+      "step": "ERR_HTTP2_PROTOCOL_ERROR"
+    },
+    {
+      "input": "submitPaymentForm",
+      "message": null,
+      "kind": "submitPaymentForm",
+      "step": "submitPaymentForm"
+    },
+    {
+      "input": "x.aB2cD3eF4gH5iJ6k",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "pkg.aB2cD3eF4gH5iJ6kError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "한글 aB2cD3eF4gH5iJ6k",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "pkg.aBcDeFgHiJkLmNoPError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.ghp_aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.gho_aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.ghs_aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.github_pat_aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.AKIAaaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.ASIAaaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.xoxa-aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.xoxb-aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.xoxp-aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.xoxr-aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.AIzaaaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.sk-aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "x.glpat-aaaaaaaaaaaaaaError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "AKIAfixtureA2B3C4",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "ghp_aB2cD3eF4gH5iJ6kError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "abc123def456ghi",
+      "message": null,
+      "kind": "abc123def456ghi",
+      "step": null
+    },
+    {
+      "input": "abc123def456ghij",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "ghp_aB2cD3eF4gH5iJ6k",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
       "input": "TypeError: secret",
       "message": "TypeError",
       "kind": null,
@@ -607,5 +769,28 @@ begin
 end $$;
 select is(pg_temp.stored_version(d->>'input'),d->>'expected','version '||idx)
 from vectors, jsonb_array_elements(v->'version') with ordinality cases(d,idx);
+insert into public.features(app_id, kind, feature_key, name)
+select id, 'deep', 'backfill', 'backfill' from public.apps where name = 'version fixture';
+insert into public.app_versions(app_id, version)
+select app_id, 'backfill' from public.features where feature_key = 'backfill';
+insert into public.error_samples(app_id, feature_id, version, at, error_kind, message)
+select app_id, id, 'backfill', now(), kind_value, msg from public.features
+cross join (values ('NullPointerException', 'pkg.ghp_aaaaaaaaaaaaError'),
+                   ('x.aB2cD3eF4gH5iJ6k', 'QuotaExceededError')) samples(kind_value,msg)
+where feature_key = 'backfill';
+insert into public.attempts(app_id, attempt_id, feature_id, version, started_at, status, error_kind, step)
+select app_id, gen_random_uuid(), id, 'backfill', now(), 'pending', kind_value, label from public.features
+cross join (values ('upstream_http_502', '한글 aB2cD3eF4gH5iJ6k'),
+                   ('x.aB2cD3eF4gH5iJ6k', 'submitPaymentForm')) attempts(kind_value,label)
+where feature_key = 'backfill';
+select private.backfill_opaque_diagnostics();
+select results_eq(
+  $$select error_kind,message from public.error_samples where version='backfill' order by error_kind$$,
+  $$values ('NullPointerException'::text,null::text),(null,'QuotaExceededError')$$,
+  'backfill preserves sample names and clears only token columns');
+select results_eq(
+  $$select error_kind,step from public.attempts where version='backfill' order by error_kind$$,
+  $$values ('upstream_http_502'::text,null::text),(null,'submitPaymentForm')$$,
+  'backfill preserves attempt names and clears only token columns');
 select * from finish();
 rollback;
