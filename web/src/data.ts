@@ -108,8 +108,9 @@ export function gateway(client: SupabaseClient): Gateway {
         ].join(", ") };
     },
     async withdraw(origin) {
+      const missingSessionResult = withdrawalToken ? "unauthorized" : "login_required";
       const { data } = await client.auth.getSession();
-      if (!data.session) return "login_required";
+      if (!data.session) return missingSessionResult;
       withdrawalToken = data.session.access_token;
       try {
         const response = await fetch(origin + "/v1/account/delete", {
@@ -125,7 +126,7 @@ export function gateway(client: SupabaseClient): Gateway {
           const invalidSession = ["refresh_token_not_found", "refresh_token_already_used", "session_not_found", "session_expired"];
           const missingSession = refreshed.error?.name === "AuthSessionMissingError"
             || invalidSession.includes(refreshed.error?.code ?? "");
-          return missingSession ? "unauthorized" : "unknown";
+          return missingSession ? missingSessionResult : "unknown";
         }
         if (response.status === 429) return "limited";
         if ([502,504].includes(response.status)) return "unknown";

@@ -19,7 +19,7 @@ it.each([
   [502, undefined, "unknown"],
   [429, undefined, "limited"],
   [503, undefined, "failed"],
-  [401, "bad_jwt", "unauthorized"],
+  [401, "bad_jwt", "login_required"],
   [401, "user_not_found", "done"],
 ] as const)("withdrawal maps HTTP %s and Auth %s to %s", async (status, code, expected) => {
   const auth = {
@@ -41,7 +41,7 @@ it.each([
 it.each([
   [{data:{user:{id:"member"}},error:null}, "failed"],
   [{data:{user:null},error:{code:"user_not_found"}}, "done"],
-  [{data:{user:null},error:{name:"AuthSessionMissingError"}}, "unauthorized"],
+  [{data:{user:null},error:{name:"AuthSessionMissingError"}}, "login_required"],
   [{data:{user:null},error:{status:503}}, "unknown"],
 ] as const)("구 세션의 401 뒤 갱신 결과를 반영한다", async (refresh, expected) => {
   const auth = {
@@ -53,6 +53,24 @@ it.each([
   try {
     expect(await gateway({auth} as unknown as SupabaseClient).withdraw("http://localhost")).toBe(expected);
     expect(auth.refreshSession).toHaveBeenCalledTimes(1);
+  } finally { vi.unstubAllGlobals(); }
+});
+it.each([true, false])("이전 탈퇴 결과가 불명확하면 세션 소실을 재시도로 안내한다 (로컬 세션 %s)", async (hasSession) => {
+  const session = {access_token:"fixture"};
+  const auth = {
+    getSession: vi.fn().mockResolvedValueOnce({data:{session}})
+      .mockResolvedValueOnce({data:{session:hasSession ? session : null}}),
+    refreshSession: vi.fn().mockResolvedValue({data:{user:null},error:{name:"AuthSessionMissingError"}}),
+    getUser: vi.fn().mockResolvedValue({error:{code:"bad_jwt"}}),
+  };
+  const request = vi.fn().mockRejectedValueOnce(new TypeError("offline"))
+    .mockResolvedValueOnce(new Response(null,{status:401}));
+  vi.stubGlobal("fetch", request);
+  const api = gateway({auth} as unknown as SupabaseClient);
+  try {
+    expect(await api.withdraw("http://localhost")).toBe("unknown");
+    expect(await api.withdraw("http://localhost")).toBe("unauthorized");
+    expect(request).toHaveBeenCalledTimes(hasSession ? 2 : 1);
   } finally { vi.unstubAllGlobals(); }
 });
 it("탈퇴 요청 전 세션이 없으면 요청을 보내지 않는다", async () => {

@@ -564,11 +564,17 @@ it("재인증 번호 오류와 만료 후 재전송하고, 재조회 실패에�
   const field = await screen.findByLabelText("메일 인증번호");
   expect(api.reauthenticate).toHaveBeenCalledTimes(1);
   fireEvent.change(field,{target:{value:"123123"}});
+  save.focus();
+  expect(document.activeElement).toBe(save);
   fireEvent.click(save);
   await screen.findByText(/번호를 다시 확인/);
+  expect(field.getAttribute("aria-invalid")).toBe("true");
   expect(document.activeElement).toBe(field);
+  save.focus();
+  expect(document.activeElement).toBe(save);
   fireEvent.click(save);
   await screen.findByText(/번호가 만료/);
+  expect(field.getAttribute("aria-invalid")).toBe("true");
   expect(document.activeElement).toBe(field);
   fireEvent.click(screen.getByRole("button",{name:"번호 다시 받기"}));
   await waitFor(() => expect(api.reauthenticate).toHaveBeenCalledTimes(2));
