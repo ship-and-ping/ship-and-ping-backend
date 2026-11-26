@@ -10,7 +10,7 @@ date: 2026-11-24
 - 회원이 읽는 테이블은 모두 **행 수준 권한(RLS)**: `apps.owner_id = auth.uid()`인 앱과 그 하위 행만.
 - 회원은 직접 쓰기를 최소로: 앱·기능 이름·알림 설정만. 기록·문제 테이블은 RPC(Worker의 `sb_secret_` 키)만 쓴다.
 - 키·슬랙 webhook 같은 비밀값은 해시 또는 암호화(pgsodium/Vault)로만.
-- 무료 500MB를 지키려고 요청 원본은 저장하지 않고 5분 요약만.
+- 무료 500MB를 지키려고 요청 원본은 저장하지 않고 5분·시간·하루 단위로 요약한다.
 
 ## 테이블
 
@@ -146,6 +146,8 @@ stats_1h와 같은 집계 열·기본 키·조회 인덱스를 쓴다. 30일이 
 | 열 | 형식 |
 |---|---|
 | id, app_id, method, route, name, received_at, applied bool | |
+
+앱 등록은 회원당 3개로 제한한다. [20261126000000](supabase/migrations/20261126000000_feature_admission_settings_row.sql)은 자동 기능을 새로 수용할 때 설정 갱신 대상을 단일 정원 행으로 한정한다. [20261126100000](supabase/migrations/20261126100000_revoke_app_key.sql)은 아래 단일 키 폐기 RPC를 추가한다.
 
 ## 깊게 보기·앱 설정 회원 RPC
 
