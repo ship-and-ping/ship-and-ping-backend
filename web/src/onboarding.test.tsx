@@ -57,6 +57,7 @@ function fake(user: string | null = "member"): Gateway {
     signup: vi.fn(),
     requestReset: vi.fn(),
     updatePassword: vi.fn(),
+    reauthenticate: vi.fn(),
     logout: vi.fn(async () => {}),
     firstVisit: vi.fn(async () => true),
     apps: vi.fn(async () => [app]),
@@ -123,6 +124,18 @@ it("S10 requires a replacement for a masked label before saving", async () => {
   fireEvent.change(field,{target:{value:"신청"}});
   fireEvent.click(screen.getByRole("button",{name:"이름 저장"}));
   expect(api.save).toHaveBeenCalledWith("a",[expect.objectContaining({name:"신청"})]);
+});
+it("탈퇴 재시도가 제한되면 확인 대기 없이 다시 시도할 수 있다", async () => {
+  const api = fake();
+  vi.mocked(api.withdraw).mockResolvedValueOnce("failed").mockResolvedValueOnce("limited");
+  open("/account",api);
+  fireEvent.click(await screen.findByRole("button",{name:"회원 탈퇴"}));
+  fireEvent.change(screen.getByLabelText("로그인 이메일 다시 입력"),{target:{value:"<me>@example.invalid"}});
+  fireEvent.click(screen.getByRole("button",{name:"모든 앱과 기록을 지우고 탈퇴"}));
+  fireEvent.click(await screen.findByRole("button",{name:"다시 시도"}));
+  await screen.findByText("잠시 뒤 다시 시도해 주세요.");
+  expect(document.activeElement).toBe(screen.getByRole("button",{name:"다시 시도"}));
+  expect(api.checkAccount).not.toHaveBeenCalled();
 });
 it("S11 lets the member log out after a failed withdrawal", async () => {
   const api = fake();
@@ -512,6 +525,46 @@ it("복구 세션에서 저장하면 내 앱으로 이동한다", async () => {
   fireEvent.click(screen.getByRole("button",{name:"새 비밀번호 정하기"}));
   await screen.findByRole("heading",{name:"내 앱"});
   expect(api.updatePassword).toHaveBeenCalledWith("example phrase");
+});
+it.each(["weak_password","same_password"])("복구 중 %s는 비밀번호 칸에서 고친다", async code => {
+  const api = fake();
+  api.listen = listener => { listener("member", true); return () => {}; };
+  vi.mocked(api.updatePassword).mockRejectedValue({code});
+  open("/reset-password", api);
+  const field = await screen.findByLabelText("새 비밀번호");
+  fireEvent.change(field,{target:{value:"example phrase"}});
+  fireEvent.change(screen.getByLabelText("비밀번호 확인"),{target:{value:"example phrase"}});
+  fireEvent.click(screen.getByRole("button",{name:"새 비밀번호 정하기"}));
+  await screen.findByRole("alert");
+  expect(field.getAttribute("aria-invalid")).toBe("true");
+  expect(document.activeElement).toBe(field);
+});
+it("재인증 번호 오류와 만료 후 재전송하고, 재조회 실패에도 저장 안내와 초점을 유지한다", async () => {
+  const api = fake();
+  vi.mocked(api.account).mockResolvedValueOnce({email:"member@example.invalid",joined:app.created_at,method:"메일 링크"})
+    .mockRejectedValue(new Error("offline"));
+  vi.mocked(api.updatePassword).mockRejectedValueOnce({code:"reauthentication_needed"})
+    .mockRejectedValueOnce({code:"reauthentication_not_valid"}).mockRejectedValueOnce({code:"otp_expired"});
+  open("/account",api);
+  fireEvent.click(await screen.findByRole("button",{name:"비밀번호 만들기"}));
+  fireEvent.change(screen.getByLabelText("새 비밀번호"),{target:{value:"example phrase"}});
+  fireEvent.change(screen.getByLabelText("비밀번호 확인"),{target:{value:"example phrase"}});
+  const save = screen.getByRole("button",{name:"비밀번호 저장"});
+  fireEvent.click(save);
+  const field = await screen.findByLabelText("메일 인증번호");
+  expect(api.reauthenticate).toHaveBeenCalledTimes(1);
+  fireEvent.change(field,{target:{value:"123123"}});
+  fireEvent.click(save);
+  await screen.findByText(/번호를 다시 확인/);
+  fireEvent.click(save);
+  await screen.findByText(/번호가 만료/);
+  fireEvent.click(screen.getByRole("button",{name:"번호 다시 받기"}));
+  await waitFor(() => expect(api.reauthenticate).toHaveBeenCalledTimes(2));
+  fireEvent.change(field,{target:{value:"456456"}});
+  fireEvent.click(save);
+  await screen.findByText("비밀번호를 저장했어요.");
+  expect(api.updatePassword).toHaveBeenLastCalledWith("example phrase","456456");
+  expect(document.activeElement).toBe(screen.getByRole("button",{name:"비밀번호 바꾸기"}));
 });
 it("메일 링크 회원이 비밀번호를 만들면 방법과 변경 단추가 갱신된다", async () => {
   const api = fake();
