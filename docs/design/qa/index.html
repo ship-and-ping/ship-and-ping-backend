@@ -12,13 +12,13 @@ figure{margin:0;flex:1;min-width:0}figcaption{font-weight:700}img{width:100%;hei
 @media(max-width:640px){main{display:grid}}
 </style>
 <header><h1>쉽앤핑 화면 전후 비교</h1><form>
-<label>화면과 상태<select id="scene"></select></label>
+<label>화면과 상태<select id="scene"><optgroup label="3차 · T37" id="qa3"></optgroup><optgroup label="D6" id="d6"></optgroup></select></label>
 <label>보기 조건<select id="profile">
 <option value="1440-light" selected>PC · 1440 · 밝게</option>
 <option value="1280-dark">노트북 · 1280 · 어둡게</option>
 <option value="390-light">휴대폰 · 390 · 밝게</option>
 <option value="390-dark">휴대폰 · 390 · 어둡게 · 글자 200% · 동작 줄이기</option>
-</select></label></form><p>교차 검수 후 소개 화면과 문제 상세 네 상태의 캡처를 갱신했습니다. <a href="motion/landing.webm">소개 페이지 움직임 보기</a></p></header>
+</select></label></form><p><a href="2026-11-26-qa3.md">3차 QA 기록</a> · <a href="motion/landing.webm">소개 페이지 움직임 보기</a></p></header>
 <main><figure><figcaption>수정 전</figcaption><a id="old"><img alt="수정 전 원본 열기"></a></figure>
 <figure><figcaption>수정 후</figcaption><a id="updated"><img alt="수정 후 원본 열기"></a></figure></main>
 <script>
@@ -31,12 +31,22 @@ const scenes = [
   ["알림 목록 오류","error"],["기록 로딩","loading"],["기록 오류","error"]
 ];
 const scene = document.querySelector("#scene"), profile = document.querySelector("#profile");
-scenes.forEach(([label,state],i)=>scene.add(new Option(label,String(i).padStart(2,"0")+"-"+state)));
+const currentScenes = [
+  ["PC 승인 대기","02-mail"],["휴대폰 숫자 입력","31-approval"],["PC 요청 만료","32-expired"],
+  ["PC 요청 거절","33-denied"],["휴대폰 승인 완료","34-approval-ok"],["휴대폰 거절 완료","35-approval-deny"],
+  ["연결 요청문","36-prompt"],["복사 실패 · 키 가림","37-masked"],["새 키로 교체","38-replacement"],["슬랙 미설정","39-unconfigured"]
+];
+currentScenes.forEach(([label,file])=>document.querySelector("#qa3").append(new Option(label,file)));
+scenes.forEach(([label,state],i)=>document.querySelector("#d6").append(new Option(label,String(i).padStart(2,"0")+"-"+state)));
 scene.selectedIndex=0;
 function compare(){
+  const current = scene.selectedOptions[0].parentElement.id === "qa3";
+  profile.options[1].value = current ? "1440-dark" : "1280-dark";
+  profile.options[1].text = current ? "PC · 1440 · 어둡게" : "노트북 · 1280 · 어둡게";
+  profile.options[3].text = current ? "휴대폰 · 390 · 어둡게 · 동작 줄이기" : "휴대폰 · 390 · 어둡게 · 글자 200% · 동작 줄이기";
   for(const [id,phase] of [["old","before"],["updated","after"]]){
     const link=document.getElementById(id);
-    link.href=phase+"/"+scene.value+"-"+profile.value+".jpg";
+    link.href=(current ? "qa3-" : "")+phase+"/"+scene.value+"-"+profile.value+".jpg";
     link.firstElementChild.src=link.href;
   }
 }

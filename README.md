@@ -151,6 +151,17 @@ Q1~Q11은 PRD 8장의 제품 결정이고, D1~D4는 조사 후 확정한 구현 
 | **29. 탈퇴 진행**<br>계정과 앱의 기록을 지우는 동안 기다려요. | [<img src="docs/design/screens/29-1440.jpg" width="240" alt="탈퇴 진행 PC 화면">](docs/design/screens/29-1440.jpg) | [탈퇴 진행 보기](docs/design/screens/29-390.jpg) |
 | **30. 탈퇴 실패**<br>계정이 남아 있다는 안내를 읽고 다시 시도할 수 있어요. | [<img src="docs/design/screens/30-1440.jpg" width="240" alt="탈퇴 실패 PC 화면">](docs/design/screens/30-1440.jpg) | [탈퇴 실패 보기](docs/design/screens/30-390.jpg) |
 | **31. 탈퇴 완료**<br>탈퇴를 마쳤다는 안내를 확인해요. | [<img src="docs/design/screens/31-1440.jpg" width="240" alt="탈퇴 완료 PC 화면">](docs/design/screens/31-1440.jpg) | [탈퇴 완료 보기](docs/design/screens/31-390.jpg) |
+| **32. PC 로그인 승인** | [<img src="docs/design/screens/32-1440.jpg" width="240" alt="PC 로그인 승인 PC 화면">](docs/design/screens/32-1440.jpg) | [PC 로그인 승인 보기](docs/design/screens/32-390.jpg) |
+| **33. PC 요청 만료** | [<img src="docs/design/screens/33-1440.jpg" width="240" alt="PC 요청 만료 PC 화면">](docs/design/screens/33-1440.jpg) | [PC 요청 만료 보기](docs/design/screens/33-390.jpg) |
+| **34. PC 요청 거절** | [<img src="docs/design/screens/34-1440.jpg" width="240" alt="PC 요청 거절 PC 화면">](docs/design/screens/34-1440.jpg) | [PC 요청 거절 보기](docs/design/screens/34-390.jpg) |
+| **35. 휴대폰 승인 완료** | [<img src="docs/design/screens/35-1440.jpg" width="240" alt="휴대폰 승인 완료 PC 화면">](docs/design/screens/35-1440.jpg) | [휴대폰 승인 완료 보기](docs/design/screens/35-390.jpg) |
+| **36. 휴대폰 거절 완료** | [<img src="docs/design/screens/36-1440.jpg" width="240" alt="휴대폰 거절 완료 PC 화면">](docs/design/screens/36-1440.jpg) | [휴대폰 거절 완료 보기](docs/design/screens/36-390.jpg) |
+| **37. 키가 든 연결 요청문** | [<img src="docs/design/screens/37-1440.jpg" width="240" alt="키가 든 연결 요청문 PC 화면">](docs/design/screens/37-1440.jpg) | [키가 든 연결 요청문 보기](docs/design/screens/37-390.jpg) |
+| **38. 복사 실패 후 키 가림** | [<img src="docs/design/screens/38-1440.jpg" width="240" alt="복사 실패 후 키 가림 PC 화면">](docs/design/screens/38-1440.jpg) | [복사 실패 후 키 가림 보기](docs/design/screens/38-390.jpg) |
+| **39. 새 키로 교체** | [<img src="docs/design/screens/39-1440.jpg" width="240" alt="새 키로 교체 PC 화면">](docs/design/screens/39-1440.jpg) | [새 키로 교체 보기](docs/design/screens/39-390.jpg) |
+| **40. 슬랙 미설정** | [<img src="docs/design/screens/40-1440.jpg" width="240" alt="슬랙 미설정 PC 화면">](docs/design/screens/40-1440.jpg) | [슬랙 미설정 보기](docs/design/screens/40-390.jpg) |
+
+밝은 화면과 어두운 화면의 수정 전후는 [3차 비교 페이지](docs/design/qa/index.html)에서 볼 수 있어요.
 
 ## 문서 지도
 
