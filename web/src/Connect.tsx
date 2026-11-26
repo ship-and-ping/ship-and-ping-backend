@@ -39,13 +39,15 @@ export function Copy({
   onCopy?: () => void;
   compact?: boolean;
 }) {
-  const [state, setState] = useState<"ready" | "busy" | "done" | "fail">(
+  const [state, setState] = useState<"ready" | "busy" | "done" | "fail" | "revealed">(
     "ready",
   );
   const area = useRef<HTMLTextAreaElement>(null);
+  const copyButton = useRef<HTMLButtonElement>(null);
+  const fallbackOpen = state === "fail" || state === "revealed";
   const locked = useRef(false);
   const preview = previewKey
-    ? text.replace(previewKey, previewKey.slice(0, 8) + "••••")
+    ? text.replaceAll(previewKey, "••••")
     : text;
   useEffect(() => {
     if (state !== "done") return;
@@ -56,11 +58,11 @@ export function Copy({
     return () => clearTimeout(timer);
   }, [state]);
   useEffect(() => {
-    if (state === "fail") {
+    if (state === "revealed" || (state === "fail" && !previewKey)) {
       area.current?.focus();
       area.current?.select();
     }
-  }, [state]);
+  }, [state, previewKey]);
   async function copy() {
     if (locked.current) return;
     locked.current = true;
@@ -80,6 +82,7 @@ export function Copy({
   return (
     <div className="sp-copy">
       <button
+        ref={copyButton}
         data-state={state}
         aria-busy={state === "busy"}
         aria-disabled={state === "busy" || state === "done"}
@@ -87,7 +90,7 @@ export function Copy({
       >
         {state === "done"
           ? "복사했어요"
-          : state === "fail"
+          : fallbackOpen
             ? "다시 복사"
             : state === "busy" ? "복사하는 중" : title}
       </button>
@@ -96,24 +99,34 @@ export function Copy({
           ? secret
             ? "복사했어요. 배포 설정에 넣으세요."
             : "복사했어요. 코딩 AI 대화창에 붙여넣으세요."
-          : state === "fail"
-            ? secret
-              ? "자동 복사가 막혔어요. 브라우저의 복사 권한을 허용하고 다시 복사하세요."
-              : "자동 복사가 막혔어요. 아래 상자를 누르면 전부 선택돼요."
+          : fallbackOpen
+            ? "자동 복사가 막혔어요. 주소창 옆 사이트 설정에서 클립보드 권한을 허용한 뒤 다시 복사해 주세요."
             : ""}
       </span>
-      {!secret && (!compact || state === "fail") && (
+      {fallbackOpen && previewKey && (
+        <>
+          <p>화면을 공유 중이라면 먼저 공유를 멈춰 주세요. 이 글에는 앱 키가 들어 있어요.</p>
+          {state === "fail" && (
+            <button type="button" onClick={() => setState("revealed")}>키 포함해서 보기</button>
+          )}
+          <button type="button" onClick={() => {
+            setState("ready");
+            copyButton.current?.focus();
+          }}>닫기</button>
+        </>
+      )}
+      {!secret && (!compact || fallbackOpen) && (
         <textarea
           aria-label={title + " 전문"}
           ref={area}
           className="preview"
           readOnly
-          value={state === "fail" ? text : preview}
+          value={state === "revealed" ? text : preview}
           onFocus={(e) => {
-            if (state === "fail") e.target.select();
+            if (fallbackOpen) e.target.select();
           }}
           onClick={(e) => {
-            if (state === "fail") e.currentTarget.select();
+            if (fallbackOpen) e.currentTarget.select();
           }}
         />
       )}

@@ -19,6 +19,7 @@ afterEach(() => {
 });
 const pub = "sp_pub_" + "0".repeat(64);
 const secret = "sp_srv_" + "1".repeat(64);
+const renderedDocument = () => new XMLSerializer().serializeToString(document.body);
 const base = "https://ingest.example.invalid";
 const app = {
   id: "a",
@@ -433,9 +434,41 @@ it("클립보드가 막히면 직접 복사할 전문을 선택한다", async ()
   const field = screen.getByLabelText(
     "연결 요청문 복사(키 포함) 전문",
   ) as HTMLTextAreaElement;
+  expect(field.value).toContain("••••");
+  expect(renderedDocument()).not.toContain(pub);
+  expect(screen.getByText("화면을 공유 중이라면 먼저 공유를 멈춰 주세요. 이 글에는 앱 키가 들어 있어요.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "키 포함해서 보기" }));
   expect(document.activeElement).toBe(field);
   expect(field.selectionEnd - field.selectionStart).toBe(field.value.length);
   expect(field.value).toBe(buildConnectPrompt(pub, base));
+  fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+  expect(renderedDocument()).not.toContain(pub);
+  expect(field.value).not.toContain(pub);
+});
+it("설정에서 닫은 키 교체 요청문은 복사를 다시 시도해도 가려진다", async () => {
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+  });
+  try {
+    open("/apps/a/settings");
+    fireEvent.click(await screen.findByRole("button", { name: "서버 키 재발급" }));
+    const copyTitle = "키 교체 요청문 복사(새 키 포함)";
+    fireEvent.click(await screen.findByRole("button", { name: copyTitle }));
+    const reveal = await screen.findByRole("button", { name: "키 포함해서 보기" });
+    const field = screen.getByLabelText(copyTitle + " 전문") as HTMLTextAreaElement;
+    expect(renderedDocument()).not.toContain(secret);
+    fireEvent.click(reveal);
+    expect(field.value).toContain("이 앱의 새 쉽앤핑 키: " + secret);
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+    fireEvent.click(screen.getByRole("button", { name: copyTitle }));
+    await screen.findByRole("button", { name: "키 포함해서 보기" });
+    expect(field.value).toContain("••••");
+    expect(renderedDocument()).not.toContain(secret);
+  } finally {
+    confirm.mockRestore();
+  }
 });
 it("베타 정원이 차면 앱 등록 화면에 이유를 표시한다", async () => {
   const api = fake();
@@ -503,7 +536,7 @@ it("선택한 제안만 저장하고 이름 없는 주소에 늦게 온 제안�
   });
   expect(screen.getByDisplayValue("예약")).toBeTruthy();
 });
-it("서버 키 복사가 거절되어도 DOM에 원문을 남기지 않는다", async () => {
+it("서버 키 단독 복사는 가리고 요청문은 키 포함해서 보기를 눌러야 공개한다", async () => {
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
@@ -512,11 +545,19 @@ it("서버 키 복사가 거절되어도 DOM에 원문을 남기지 않는다", 
   fireEvent.click(await screen.findByRole("button", { name: "서버 있음" }));
   fireEvent.click(await screen.findByRole("button", { name: "서버 키 재발급" }));
   fireEvent.click(await screen.findByRole("button", { name: "서버 키 복사" }));
-  expect(await screen.findByText(/브라우저의 복사 권한/)).toBeTruthy();
+  expect(await screen.findByText(/클립보드 권한/)).toBeTruthy();
   expect(new XMLSerializer().serializeToString(document.body)).not.toContain(
     secret,
   );
   expect(screen.queryByLabelText("서버 키 복사 전문")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "연결 요청문 복사(키 포함)" }));
+  const reveal = await screen.findByRole("button", { name: "키 포함해서 보기" });
+  expect(renderedDocument()).not.toContain(secret);
+  fireEvent.click(reveal);
+  expect(screen.getByDisplayValue(buildConnectPrompt(secret, base), { normalizer: value => value })).toBeTruthy();
+  fireEvent.click(screen.getByRole("link", { name: "내 앱" }));
+  await screen.findByRole("link", { name: /모임모아/ });
+  expect(renderedDocument()).not.toContain(secret);
 });
 it("회원 앱 카드·연결 안내·이름표·주소는 가린 글자로 보인다", async () => {
   const api = fake();
