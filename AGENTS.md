@@ -1,4 +1,4 @@
-# 쉽앤핑 작업 규칙
+﻿# 쉽앤핑 작업 규칙
 
 제품 결정을 확인할 때는 [PRD.md](PRD.md) → [기능명세서](docs/specs/2026-11-24-ship-and-ping-feature-spec.md) → [db.md](db.md) 순서로 읽는다. PRD 본문과 맨 위 v1.1 변경표가 다르면 변경표를 따른다.
 
@@ -15,13 +15,13 @@
 
 ## 명령
 
-| 대상 | 명령 또는 추가 시점 |
+| 대상 | 실행 명령 |
 |---|---|
 | 제출 산출물 | 레포 루트에서 `bash scripts/check-deliverables.sh` |
 | 비밀값 | Gitleaks CLI 설치 시 `gitleaks git --redact --no-banner`. PR의 `ci`에서도 검사한다. |
 | Worker 빌드·실행·테스트 | `worker/`에서 `worker-build --release`, `npx --yes wrangler@4.168.0 dev --local --var INGEST_DRY_RUN:true`, `cargo test --locked`. HTTP 통합 테스트는 [Worker README](worker/README.md) 참고 |
-| Supabase 로컬 실행·테스트 | T3에서 추가 |
-| 웹 실행·빌드·테스트 | T5에서 추가 |
+| Supabase 로컬 실행·테스트 | Docker 실행 후 레포 루트에서 `npx supabase@2.75.0 start`, `npx supabase@2.75.0 migration up --local`, `npx supabase@2.75.0 test db --local` |
+| 웹 실행·빌드·테스트 | `web/`에서 `npm ci` 후 `npm run dev`, `npm run build`, `npm test`. 화면 검사는 `npm run qa:shots` |
 
 ## 보안과 개인정보
 

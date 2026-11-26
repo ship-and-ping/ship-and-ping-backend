@@ -24,6 +24,9 @@ const cases = [
   ["알림 목록 오류","/apps/notifications","error","[role=alert]"],
   ["기록 로딩","/apps/demo","loading",".monitor-loading"], ["기록 오류","/apps/demo","error","[role=alert]"],
   ["앱 설정","/apps/demo/settings","normal",".settings-sections"], ["내 계정","/account","normal",".sp-kv"],
+  ["회원 가입","/signup","normal","input[name=confirm]"],
+  ["새 비밀번호","/reset-password#type=recovery&access_token=qa-local-only&refresh_token=qa-local-only&expires_in=3600&token_type=bearer","normal","input[name=confirm]"],
+  ["비밀번호 찾기","/forgot-password","normal","input[type=email]"],
 ];
 const profiles = [
   [1440,"light",1,false], [1280,"dark",1,false], [390,"light",1,false], [390,"dark",2,true],

@@ -1,4 +1,4 @@
-# 프롬프트 기록
+﻿# 프롬프트 기록
 
 | 위치 | 무엇을 기록하나 |
 |---|---|
@@ -27,7 +27,7 @@ v1은 제작자가 고른 기능 하나의 성공 여부를 추적했다. 제출
 | [T10](tasks/T10.md) | 예제 통합 검증 |
 | [T11](tasks/T11.md) | 제출 문서 |
 | [T21](tasks/T21.md) | 앱 설정·내 계정 |
-| [T22](https://github.com/ship-and-ping/ship-and-ping-backend/pull/20) | 이메일·비밀번호 로그인 (PR에서 진행 중) |
+| [T22](tasks/T22.md) | 이메일·비밀번호 로그인 완료 ([PR #20](https://github.com/ship-and-ping/ship-and-ping-backend/pull/20)) |
 | [D1](tasks/D1.md) | 흐름과 시안 |
 | [D2](tasks/D2.md) | 디자인 시스템 |
 | [D3](tasks/D3.md) | 디자인 검수·내 계정 |

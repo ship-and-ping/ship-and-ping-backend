@@ -14,7 +14,7 @@ npm run dev --prefix web
 | VITE_SUPABASE_PUBLISHABLE_KEY | 브라우저에 공개할 수 있는 sb_publishable_ 키 |
 | VITE_INGEST_URL | 기록 수집 Worker의 HTTPS 기본 주소. /v1/ingest 경로는 요청문이 붙인다. |
 
-환경값이 없으면 개발 설정 안내가 열린다. 로그인 리디렉션은 웹의 `/login` 경로이다. Google 및 이메일 링크는 Supabase Auth의 제공자 설정과 리디렉션 허용 목록이 필요하다.
+환경값이 없으면 개발 설정 안내가 열린다. 로그인 리디렉션은 웹의 `/login` 경로이다. Google 및 이메일 링크는 Supabase Auth의 제공자 설정과 리디렉션 허용 목록이 필요하다. Supabase Auth의 URL Configuration → Redirect URLs에 웹 사이트의 전체 `/login` 주소와 비밀번호 재설정 메일이 돌아올 전체 `/reset-password` 주소를 등록한다.
 
 ```sh
 npm run lint --prefix web

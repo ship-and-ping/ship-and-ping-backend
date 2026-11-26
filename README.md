@@ -1,4 +1,4 @@
-# Ship & Ping · 쉽앤핑
+﻿# Ship & Ping · 쉽앤핑
 
 쉽앤핑은 비전공 제작자의 웹앱 전체를 지켜보고, 문제가 생긴 기능을 쉬운 한국어로 알려 주고, 업데이트 후 실제 사용 결과로 해결 여부를 확인하는 관리형 모니터링 서비스다.
 
@@ -35,7 +35,7 @@ DB만 필요한 CI는 첫 명령으로 `npx --yes supabase@2.75.0 db start`를 �
 
 ### React 웹 화면
 
-Node.js 24에서 `web/.env.local`을 만든다. 아래 값은 형식 설명용이다. 로그인하려면 두 주소를 각각 접근 가능한 Supabase와 Worker의 HTTPS 기본 주소로, 키를 해당 프로젝트의 브라우저용 공개 키로 바꾼 뒤 개발 서버를 다시 시작한다. 예시 그대로 실행하면 설정 안내가 표시된다.
+Node.js 24에서 `web/.env.local`을 만든다. 아래 값은 형식 설명용이다. `VITE_SUPABASE_URL`과 `VITE_INGEST_URL`에는 각각 Supabase와 Worker의 HTTPS 기본 주소를 넣는다. 로컬 Supabase의 기본 HTTP 주소나 HTTP Worker 주소를 넣으면 설정 안내가 표시된다. 로컬 서비스를 웹에 연결할 때도 HTTPS 주소가 필요하다. `VITE_SUPABASE_PUBLISHABLE_KEY`에는 `sb_publishable_`로 시작하는 해당 프로젝트의 브라우저용 공개 키를 넣고 개발 서버를 다시 시작한다. 아래 키는 자리표시자다.
 
 ```dotenv
 VITE_SUPABASE_URL=https://database.example.invalid
@@ -79,8 +79,8 @@ Q1~Q11은 PRD 8장의 제품 결정이고, D1~D4는 조사 후 확정한 구현 
 | Q11. Rust + Cloudflare Workers 무료 플랜 | Supabase Edge Functions | 제작자가 Rust를 선택했고 무료 베타 배포 환경을 Workers로 정했다. |
 | D1. 수집·평소 속도·경보·해결 판정은 쉽앤핑이 담당 | Grafana의 서면 허용을 기다리거나 오픈소스 Grafana를 직접 운영 | 외부 허용 여부에 개발 일정이 달리지 않고 별도 서버 관리 비용도 줄인다. |
 | D2. 전용 JSON으로 최대 100건씩 묶어 전송 | OpenTelemetry 표준 형식 | Rust Worker에서 검사·합산하기 쉬우며 무료 CPU 예산(요청당 10ms)에 맞는지 T2에서 실측할 수 있다. |
-| D3. Resend 무료 플랜으로 알림·가입 이메일 발송(하루 100건) | 이메일 없이 슬랙·화면 알림만 제공 | 슬랙이 없는 회원에게 알림과 로그인 링크를 보낼 수 있다. |
-| D4. 이메일·비밀번호 추가, 기존 메일 링크 유지, Google 로그인 예정 | Google과 메일 링크만 제공 | 2026-11-26 사용자가 “아이디·비밀번호 추가”를 선택했다. 현재 Resend 테스트 발신은 Resend 가입 메일 주소로만 전달되며 사용자 결정으로 도메인 연결은 나중에 한다. [T22 PR #20](https://github.com/ship-and-ping/ship-and-ping-backend/pull/20) |
+| D3. Resend 무료 플랜으로 알림·가입 이메일 발송(하루 100건) | 이메일 없이 슬랙·화면 알림만 제공 | 슬랙이 없는 회원을 위한 발송 채널이다. 현재 테스트 발신은 Resend 가입 메일 주소로만 전달된다. 도메인 연결은 나중에 하기로 했다(2026-11-26 사용자 결정). |
+| D4. 이메일·비밀번호를 기본으로 하고 메일 링크를 유지한다. | Google과 메일 링크만 제공 | 2026-11-26 사용자가 “아이디·비밀번호 추가”를 선택했다. Google 로그인은 운영 제공 예정이다. 웹에는 Google OAuth 호출 코드가 있고 운영 Google 설정은 아직 남아 있다. [웹 인증 코드](web/src/data.ts) [T22 PR #20](https://github.com/ship-and-ping/ship-and-ping-backend/pull/20) |
 
 ## AI 사용 지도
 
@@ -99,8 +99,8 @@ Q1~Q11은 PRD 8장의 제품 결정이고, D1~D4는 조사 후 확정한 구현 
 | [T8](https://github.com/ship-and-ping/ship-and-ping-backend/pull/15) | Codex Astra 6.2 | Slack·메일 발송과 설정 | Slack 우선, 메일 대체 |
 | [T9](https://github.com/ship-and-ping/ship-and-ping-backend/pull/16) | Codex Astra 6.2 | 시작·저장 결과를 짝짓는 깊게 보기 | 중요 기능 최대 5개 |
 | [T10](https://github.com/ship-and-ping/ship-and-ping-backend/pull/18) | Codex Astra 6.2 | 예제 2종 통합 검증. 교차 검수에서 빌드 시각 버전까지 가린 문제를 찾아 수정 | 서버형과 브라우저형 모두 검증 |
-| [T21](https://github.com/ship-and-ping/ship-and-ping-backend/pull/19) | Codex Astra 6.2 | 앱 설정·탈퇴. 응답 유실 때 탈퇴 결과를 오판해 계정 상태 재확인을 추가 | 내 계정과 회원 탈퇴 포함 |
-| [T22 (진행 중)](https://github.com/ship-and-ping/ship-and-ping-backend/pull/20) | Codex Astra 6.2 | 이메일·비밀번호 가입·로그인 추가 | 11월 26일 비밀번호 추가, 메일 링크 유지 |
+| [T21 완료](https://github.com/ship-and-ping/ship-and-ping-backend/pull/19) | Codex Astra 6.2 | 앱 설정·탈퇴. 응답 유실 때 탈퇴 결과를 오판해 계정 상태 재확인을 추가 | 내 계정과 회원 탈퇴 포함 |
+| [T22 완료](https://github.com/ship-and-ping/ship-and-ping-backend/pull/20) | Codex Astra 6.2 | 이메일·비밀번호 가입·로그인·복구 구현. 1차 검수에서 인증 오류 안내와 복구 상태 처리 미통과. 수정 후 웹 테스트 208건·빌드·린트 및 재검증 통과 | 11월 26일 비밀번호 추가, 메일 링크 유지 |
 | [S1](https://github.com/ship-and-ping/ship-and-ping-backend/pull/10) | Codex Astra 6.2 | 웹·SQL 정제 공통 사례 검증. 후속 변경은 T5·T4에 반영 | 개인정보·키 수집 금지 |
 | [S2](https://github.com/ship-and-ping/ship-and-ping-backend/pull/14) | Codex Astra 6.2 | DB 용량 실측, 장기 요약과 정원 적용 | 무료 베타 용량 제한 |
 | [D1](https://github.com/ship-and-ping/ship-and-ping-backend/pull/4) | Claude Code 디자인 작업자 | 사용 흐름과 시안 세 가지 | C안과 B안의 양 선택 |
@@ -108,8 +108,8 @@ Q1~Q11은 PRD 8장의 제품 결정이고, D1~D4는 조사 후 확정한 구현 
 | [D3](https://github.com/ship-and-ping/ship-and-ping-backend/pull/5) | Claude Code 디자인 작업자 · Codex 검수 | 대비·상태 검수 수정과 내 계정 시안 | 마이페이지 추가 |
 | [D4](https://github.com/ship-and-ping/ship-and-ping-backend/pull/6) | Claude Code 디자인 작업자 · Codex 검수 | PC 레이아웃과 소개 페이지 | PC 우선 방향 선택 |
 | [D5](https://github.com/ship-and-ping/ship-and-ping-backend/pull/7) | Claude Code 디자인 작업자 · Codex 검수 | 요청문에서 서버 키 분리, 앱 입력 가림·경고 | 요청문 안전 보강 승인 |
-| [D6](https://github.com/ship-and-ping/ship-and-ping-backend/pull/17) | Codex Astra 6.2 | 1차 QA 뒤 2차로 정보 순서·상태 전환 모션 재작업, 키보드와 전후 화면 검증 | 1차 수정이 얕다고 판단해 2차 요청 |
-| 운영 설정 | Claude Code 매니저 | 원격 Supabase 마이그레이션 적용, 브라우저에서 Resend SMTP·인증 메일 양식 설정 | Resend 테스트 발신을 유지하고 도메인 연결은 보류했다. |
+| [D6](https://github.com/ship-and-ping/ship-and-ping-backend/pull/17) | Codex Astra 6.2 · Claude Code 매니저 | 매니저가 1차 수정이 얕다고 판단해 2차를 요청했다. Codex가 정보 순서와 상태 전환 모션을 고치고 키보드 조작과 전후 화면을 검증했다. | 추천한 레퍼런스 3곳을 선택하고 쉽앤핑 색을 쓰기로 했다. 비교 페이지를 보고 병합을 결정했다. |
+| 운영 설정 | Claude Code 매니저 | 원격 Supabase 마이그레이션 적용, 브라우저에서 Resend SMTP·인증 메일 양식 설정. 관련 산출물은 [로컬 검증 기록](docs/verification/), [인증 메일 양식](supabase/templates/), [설정 항목을 기록한 PR #20](https://github.com/ship-and-ping/ship-and-ping-backend/pull/20)에 있다. | Resend 테스트 발신을 유지하고 도메인 연결은 보류했다. |
 
 구현 작업은 Claude Code 매니저가 분배하고 Claude reviewflow로 교차 검증했다. 위 표의 마지막 열은 각 작업에 적용한 사용자 결정이다. 작업별 검증 결과와 재작업은 [개인 위임 로그](docs/위임로그/김태형.md)에 기록했다.
 
