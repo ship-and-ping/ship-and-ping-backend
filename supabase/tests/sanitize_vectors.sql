@@ -308,6 +308,36 @@ create temporary table vectors as select $vectors${
   },
   "diagnostics": [
     {
+      "input": "AKIAfixtureA2B3C4",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "ghp_aB2cD3eF4gH5iJ6kError",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "abc123def456ghi",
+      "message": null,
+      "kind": "abc123def456ghi",
+      "step": null
+    },
+    {
+      "input": "abc123def456ghij",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
+      "input": "ghp_aB2cD3eF4gH5iJ6k",
+      "message": null,
+      "kind": null,
+      "step": null
+    },
+    {
       "input": "TypeError: secret",
       "message": "TypeError",
       "kind": null,
@@ -368,21 +398,21 @@ create temporary table vectors as select $vectors${
       "step": null
     },
     {
-      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
-      "message": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
-      "kind": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
+      "input": "a.a.a.a.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
+      "message": "a.a.a.a.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
+      "kind": "a.a.a.a.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
       "step": null
     },
     {
-      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
+      "input": "a.a.a.a.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
       "message": null,
-      "kind": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
+      "kind": "a.a.a.a.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaError",
       "step": null
     },
     {
-      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "input": "a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_",
       "message": null,
-      "kind": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "kind": "a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_a_",
       "step": null
     },
     {

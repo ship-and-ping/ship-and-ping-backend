@@ -276,8 +276,8 @@ try {
   for (const member of owners) {
     const sample = batch();
     Object.assign(sample.records[0], {
-      error_kind: "WriteError",
-      error_message: "test-user@example.invalid",
+      error_kind: "write_failed",
+      error_message: "WriteError: test-user@example.invalid",
       body: "ignored-body-marker",
       route: "/benchmark?ignored-query-marker",
     });
@@ -304,14 +304,14 @@ try {
         .select("*")
         .eq("app_id", member.id),
     );
-    assert.ok(samples.some((s) => s.error_kind === "WriteError" && s.message === null));
+    assert.ok(samples.some((s) => s.error_kind === "write_failed" && s.message === "WriteError"));
     const prompt = buildIssuePrompt({
       feature: "시험",
       route: "/benchmark",
       versions: [version],
       errors: samples,
     });
-    assert.match(prompt.text, /WriteError/);
+    assert.match(prompt.text, /write_failed/);
     assert.doesNotMatch(
       JSON.stringify([samples, prompt.text]),
       /test-user|ignored-body-marker|ignored-query-marker/,

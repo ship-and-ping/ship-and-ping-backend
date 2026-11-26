@@ -47,6 +47,8 @@ export interface IssueInput {
   p50?: number;
   baseline?: number;
 }
+export const noErrorSamples = "오류 예시가 없어요.";
+
 export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
   const records = input.errors.slice(0, 5);
   const clock = (at: string) => new Date(at).toLocaleTimeString("en-GB", {
@@ -117,7 +119,7 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
       ")",
     ...(stepName(input.step) ? ["실패한 단계: " + stepName(input.step)] : []),
     "오류 종류 (최근 5개):",
-    ...(lines.length ? [] : [omitted]),
+    ...(lines.length ? [] : [noErrorSamples]),
     ...lines.flatMap((s, i) =>
       includeStrong || levels[i] !== "strong" ? ["- " + s] : [],
     ),
