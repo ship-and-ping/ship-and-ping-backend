@@ -113,6 +113,44 @@ Q1~Q11은 PRD 8장의 제품 결정이고, D1~D4는 조사 후 확정한 구현 
 
 구현 작업은 Claude Code 매니저가 분배하고 Claude reviewflow로 교차 검증했다. 위 표의 마지막 열은 각 작업에 적용한 사용자 결정이다. 작업별 검증 결과와 재작업은 [개인 위임 로그](docs/위임로그/김태형.md)에 기록했다.
 
+## 화면 모음
+
+예시 앱 ‘모임모아’로 살펴본 화면이에요. PC 사진을 누르면 전체 크기로 볼 수 있어요.
+
+| 화면 | PC · 1440px | 휴대폰 · 390px |
+|---|---|---|
+| **01. 서비스 소개**<br>쉽앤핑이 앱에서 생긴 문제를 어떻게 알려 주는지 살펴봐요. | [<img src="docs/design/screens/01-1440.jpg" width="240" alt="서비스 소개 PC 화면">](docs/design/screens/01-1440.jpg) | [서비스 소개 보기](docs/design/screens/01-390.jpg) |
+| **02. 로그인**<br>이메일과 비밀번호로 로그인해요. | [<img src="docs/design/screens/02-1440.jpg" width="240" alt="로그인 PC 화면">](docs/design/screens/02-1440.jpg) | [로그인 보기](docs/design/screens/02-390.jpg) |
+| **03. 메일 링크 로그인**<br>비밀번호 없이 로그인할 링크를 메일로 받아요. | [<img src="docs/design/screens/03-1440.jpg" width="240" alt="메일 링크 로그인 PC 화면">](docs/design/screens/03-1440.jpg) | [메일 링크 로그인 보기](docs/design/screens/03-390.jpg) |
+| **04. 회원 가입**<br>이메일과 새 비밀번호로 계정을 만들어요. | [<img src="docs/design/screens/04-1440.jpg" width="240" alt="회원 가입 PC 화면">](docs/design/screens/04-1440.jpg) | [회원 가입 보기](docs/design/screens/04-390.jpg) |
+| **05. 비밀번호 찾기**<br>가입할 때 쓴 이메일로 재설정 메일을 요청해요. | [<img src="docs/design/screens/05-1440.jpg" width="240" alt="비밀번호 찾기 PC 화면">](docs/design/screens/05-1440.jpg) | [비밀번호 찾기 보기](docs/design/screens/05-390.jpg) |
+| **06. 새 비밀번호**<br>메일 링크를 열고 새 비밀번호를 두 번 적어요. | [<img src="docs/design/screens/06-1440.jpg" width="240" alt="새 비밀번호 PC 화면">](docs/design/screens/06-1440.jpg) | [새 비밀번호 보기](docs/design/screens/06-390.jpg) |
+| **07. 앱이 없을 때**<br>첫 앱을 등록하는 곳을 확인해요. | [<img src="docs/design/screens/07-1440.jpg" width="240" alt="앱이 없을 때 PC 화면">](docs/design/screens/07-1440.jpg) | [앱이 없을 때 보기](docs/design/screens/07-390.jpg) |
+| **08. 내 앱**<br>등록한 앱과 앱별 상태를 한눈에 봐요. | [<img src="docs/design/screens/08-1440.jpg" width="240" alt="내 앱 PC 화면">](docs/design/screens/08-1440.jpg) | [내 앱 보기](docs/design/screens/08-390.jpg) |
+| **09. 앱 등록**<br>지켜볼 앱의 이름과 주소를 적어요. | [<img src="docs/design/screens/09-1440.jpg" width="240" alt="앱 등록 PC 화면">](docs/design/screens/09-1440.jpg) | [앱 등록 보기](docs/design/screens/09-390.jpg) |
+| **10. 앱 연결**<br>앱을 연결하는 순서와 수집 키 발급 방법을 확인해요. | [<img src="docs/design/screens/10-1440.jpg" width="240" alt="앱 연결 PC 화면">](docs/design/screens/10-1440.jpg) | [앱 연결 보기](docs/design/screens/10-390.jpg) |
+| **11. 첫 기록 대기**<br>연결한 앱에서 첫 기록이 올 때까지 기다려요. | [<img src="docs/design/screens/11-1440.jpg" width="240" alt="첫 기록 대기 PC 화면">](docs/design/screens/11-1440.jpg) | [첫 기록 대기 보기](docs/design/screens/11-390.jpg) |
+| **12. 앱 홈**<br>앱이 정상인지, 각 기능이 잘 작동하는지 살펴봐요. | [<img src="docs/design/screens/12-1440.jpg" width="240" alt="앱 홈 PC 화면">](docs/design/screens/12-1440.jpg) | [앱 홈 보기](docs/design/screens/12-390.jpg) |
+| **13. 기능 상세**<br>한 기능의 실행 결과와 걸린 시간을 살펴봐요. | [<img src="docs/design/screens/13-1440.jpg" width="240" alt="기능 상세 PC 화면">](docs/design/screens/13-1440.jpg) | [기능 상세 보기](docs/design/screens/13-390.jpg) |
+| **14. 문제가 생긴 앱**<br>어느 기능에 문제가 생겼는지 확인해요. | [<img src="docs/design/screens/14-1440.jpg" width="240" alt="문제가 생긴 앱 PC 화면">](docs/design/screens/14-1440.jpg) | [문제가 생긴 앱 보기](docs/design/screens/14-390.jpg) |
+| **15. 실패 문제**<br>모임 신청이 몇 번 실패했는지 확인해요. | [<img src="docs/design/screens/15-1440.jpg" width="240" alt="실패 문제 PC 화면">](docs/design/screens/15-1440.jpg) | [실패 문제 보기](docs/design/screens/15-390.jpg) |
+| **16. 느림 문제**<br>평소보다 처리가 얼마나 느려졌는지 확인해요. | [<img src="docs/design/screens/16-1440.jpg" width="240" alt="느림 문제 PC 화면">](docs/design/screens/16-1440.jpg) | [느림 문제 보기](docs/design/screens/16-390.jpg) |
+| **17. 결과 미확인**<br>시작한 뒤 결과가 확인되지 않은 요청을 살펴봐요. | [<img src="docs/design/screens/17-1440.jpg" width="240" alt="결과 미확인 PC 화면">](docs/design/screens/17-1440.jpg) | [결과 미확인 보기](docs/design/screens/17-390.jpg) |
+| **18. 해결된 문제**<br>업데이트 뒤 문제가 해결됐는지 확인해요. | [<img src="docs/design/screens/18-1440.jpg" width="240" alt="해결된 문제 PC 화면">](docs/design/screens/18-1440.jpg) | [해결된 문제 보기](docs/design/screens/18-390.jpg) |
+| **19. 기록 불러오기**<br>앱의 기록을 불러오는 동안 보이는 화면이에요. | [<img src="docs/design/screens/19-1440.jpg" width="240" alt="기록 불러오기 PC 화면">](docs/design/screens/19-1440.jpg) | [기록 불러오기 보기](docs/design/screens/19-390.jpg) |
+| **20. 기록 조회 실패**<br>기록을 가져오지 못하면 다시 시도할 수 있어요. | [<img src="docs/design/screens/20-1440.jpg" width="240" alt="기록 조회 실패 PC 화면">](docs/design/screens/20-1440.jpg) | [기록 조회 실패 보기](docs/design/screens/20-390.jpg) |
+| **21. 깊게 보기**<br>중요한 기능을 골라 시작부터 성공까지 살펴봐요. | [<img src="docs/design/screens/21-1440.jpg" width="240" alt="깊게 보기 PC 화면">](docs/design/screens/21-1440.jpg) | [깊게 보기 보기](docs/design/screens/21-390.jpg) |
+| **22. 알림 불러오기**<br>앱들의 알림 정보를 불러와요. | [<img src="docs/design/screens/22-1440.jpg" width="240" alt="알림 불러오기 PC 화면">](docs/design/screens/22-1440.jpg) | [알림 불러오기 보기](docs/design/screens/22-390.jpg) |
+| **23. 알림 조회 실패**<br>알림 정보를 가져오지 못했을 때 안내를 확인해요. | [<img src="docs/design/screens/23-1440.jpg" width="240" alt="알림 조회 실패 PC 화면">](docs/design/screens/23-1440.jpg) | [알림 조회 실패 보기](docs/design/screens/23-390.jpg) |
+| **24. 알림 설정**<br>문제가 생겼을 때 알림을 받을 곳을 정해요. | [<img src="docs/design/screens/24-1440.jpg" width="240" alt="알림 설정 PC 화면">](docs/design/screens/24-1440.jpg) | [알림 설정 보기](docs/design/screens/24-390.jpg) |
+| **25. 앱 설정**<br>앱 정보와 기능 이름표, 수집 키를 관리해요. | [<img src="docs/design/screens/25-1440.jpg" width="240" alt="앱 설정 PC 화면">](docs/design/screens/25-1440.jpg) | [앱 설정 보기](docs/design/screens/25-390.jpg) |
+| **26. 내 계정**<br>로그인 방법과 등록한 앱, 알림 받을 곳을 확인해요. | [<img src="docs/design/screens/26-1440.jpg" width="240" alt="내 계정 PC 화면">](docs/design/screens/26-1440.jpg) | [내 계정 보기](docs/design/screens/26-390.jpg) |
+| **27. 비밀번호 변경 본인 확인**<br>메일로 받은 인증번호를 입력해 비밀번호 변경을 계속해요. | [<img src="docs/design/screens/27-1440.jpg" width="240" alt="비밀번호 변경 본인 확인 PC 화면">](docs/design/screens/27-1440.jpg) | [비밀번호 변경 본인 확인 보기](docs/design/screens/27-390.jpg) |
+| **28. 탈퇴 확인**<br>탈퇴하면 지워지는 내용을 읽고 로그인 이메일을 다시 적어요. | [<img src="docs/design/screens/28-1440.jpg" width="240" alt="탈퇴 확인 PC 화면">](docs/design/screens/28-1440.jpg) | [탈퇴 확인 보기](docs/design/screens/28-390.jpg) |
+| **29. 탈퇴 진행**<br>계정과 앱의 기록을 지우는 동안 기다려요. | [<img src="docs/design/screens/29-1440.jpg" width="240" alt="탈퇴 진행 PC 화면">](docs/design/screens/29-1440.jpg) | [탈퇴 진행 보기](docs/design/screens/29-390.jpg) |
+| **30. 탈퇴 실패**<br>계정이 남아 있다는 안내를 읽고 다시 시도할 수 있어요. | [<img src="docs/design/screens/30-1440.jpg" width="240" alt="탈퇴 실패 PC 화면">](docs/design/screens/30-1440.jpg) | [탈퇴 실패 보기](docs/design/screens/30-390.jpg) |
+| **31. 탈퇴 완료**<br>탈퇴를 마쳤다는 안내를 확인해요. | [<img src="docs/design/screens/31-1440.jpg" width="240" alt="탈퇴 완료 PC 화면">](docs/design/screens/31-1440.jpg) | [탈퇴 완료 보기](docs/design/screens/31-390.jpg) |
+
 ## 문서 지도
 
 - 서비스 범위와 제품 결정은 [PRD](PRD.md)에 있다.
