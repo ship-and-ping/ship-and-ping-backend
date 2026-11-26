@@ -32,7 +32,7 @@ pub async fn route(mut req: Request, env: &Env) -> Result<Response> {
         setting(env, "SLACK_CLIENT_SECRET"),
         setting(env, "WEB_ORIGIN"),
     ) else {
-        return problem(503, "슬랙 설정 필요");
+        return problem(503, "슬랙 연결이 아직 준비되지 않았어요.");
     };
     let url = req.url()?;
     let redirect = url.join("/v1/slack/callback")?.to_string();

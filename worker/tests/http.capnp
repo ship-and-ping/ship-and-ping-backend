@@ -24,7 +24,8 @@ const config :Workerd.Config = (
     (name = "no-origin", worker = (compatibilityDate = "2026-11-24", modules = .ingestModules,
       bindings = [(name = "SUPABASE_URL", text = "https://rpc.test"),
                   (name = "SUPABASE_SECRET_KEY", text = "fixture")], globalOutbound = "rpc")),
-    (name = "unconfigured", worker = (compatibilityDate = "2026-11-24", modules = .ingestModules)),
+    (name = "unconfigured", worker = (compatibilityDate = "2026-11-24", modules = .ingestModules,
+      bindings = [(name = "WEB_ORIGIN", text = "https://web.test")])),
     (name = "local", worker = (compatibilityDate = "2026-11-24", modules = .ingestModules,
       bindings = [(name = "INGEST_DRY_RUN", text = "true")])),
     (name = "rpc", worker = (

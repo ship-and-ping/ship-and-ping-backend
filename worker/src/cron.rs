@@ -49,6 +49,28 @@ mod tests {
     use std::collections::BTreeMap;
 
     #[test]
+    fn production_requires_only_core_secrets() {
+        let config: toml::Table = toml::from_str(include_str!("../wrangler.toml")).unwrap();
+        let mut required: Vec<_> = config["env"]["production"]["secrets"]["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|name| name.as_str().unwrap())
+            .collect();
+        required.sort_unstable();
+        assert_eq!(
+            required,
+            [
+                "MAIL_FROM",
+                "RESEND_API_KEY",
+                "SUPABASE_SECRET_KEY",
+                "SUPABASE_URL",
+                "WEB_ORIGIN"
+            ]
+        );
+    }
+
+    #[test]
     fn configured_schedules_dispatch_the_expected_rpcs() {
         let config: toml::Table = toml::from_str(include_str!("../wrangler.toml")).unwrap();
         for triggers in [

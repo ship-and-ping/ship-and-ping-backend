@@ -23,4 +23,4 @@ command = ""
 crons = ["* * * * *", "15 0 * * *"]
 
 [env.production.secrets]
-required = ["SUPABASE_URL", "SUPABASE_SECRET_KEY", "RESEND_API_KEY", "MAIL_FROM", "SLACK_CLIENT_ID", "SLACK_CLIENT_SECRET", "WEB_ORIGIN"]
+required = ["SUPABASE_URL", "SUPABASE_SECRET_KEY", "RESEND_API_KEY", "MAIL_FROM", "WEB_ORIGIN"]
