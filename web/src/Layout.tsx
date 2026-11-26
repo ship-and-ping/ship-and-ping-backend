@@ -310,8 +310,7 @@ export function Landing() {
           <div className="section-heading" data-mood="relieved"><Sheep /><h2>지금은 무료 베타예요</h2></div>
           <p>
             회원당 앱 3개까지 등록할 수 있어요. 입력값, 요청 내용, 쿠키, 토큰
-            같은 개인정보는 받지 않아요. Google 또는 이메일 링크로 로그인해요.
-            비밀번호를 만들지 않아도 돼요.
+            같은 개인정보는 받지 않아요. 이메일과 비밀번호, 또는 메일 링크로 로그인해요.
           </p>
           {acts}
         </section>

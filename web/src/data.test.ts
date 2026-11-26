@@ -2,6 +2,18 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { expect, it, vi } from "vitest";
 import { gateway } from "./data";
 
+it("가입 여부와 관계없이 같은 응답을 주고 복구 메일을 현재 사이트로 연결한다", async () => {
+  const auth = {
+    signUp: vi.fn().mockResolvedValueOnce({error:null}).mockResolvedValueOnce({error:{code:"user_already_exists"}}),
+    resetPasswordForEmail: vi.fn().mockResolvedValue({error:null}),
+  };
+  const api = gateway({auth} as unknown as SupabaseClient);
+  const email = "member@example.invalid";
+  await expect(api.signup(email, "example phrase")).resolves.toBeUndefined();
+  await expect(api.signup(email, "example phrase")).resolves.toBeUndefined();
+  await api.requestReset(email);
+  expect(auth.resetPasswordForEmail).toHaveBeenCalledWith(email,{redirectTo:location.origin + "/reset-password"});
+});
 it.each([
   [504, undefined, "unknown"],
   [502, undefined, "unknown"],

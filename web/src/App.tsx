@@ -11,7 +11,8 @@ import {
 import type { AppSummary, Gateway } from "./data";
 import { validateApp } from "./domain";
 import { displayText } from "./normalize";
-import { Hero, Landing, PublicBar, Shell } from "./Layout";
+import { Hero, Landing, Shell } from "./Layout";
+import { AuthPage } from "./AuthPage";
 import { MonitorRoute } from "./Monitor";
 import { DeepPage } from "./DeepPage";
 import { Notifications } from "./Notifications";
@@ -40,81 +41,7 @@ function useApps(api: Gateway) {
   }, [api, attempt]);
   return { apps, error, retry: () => setAttempt((n) => n + 1) };
 }
-function Login({ api }: { api: Gateway }) {
-  const [email, setEmail] = useState("");
-  const [busy, setBusy] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState(() =>
-    /error(_code)?=/.test(location.hash + location.search)
-      ? "로그인 링크를 확인할 수 없어요. 새 링크를 받아 주세요."
-      : "",
-  );
-  async function submit(method: "Google" | "이메일") {
-    setError("");
-    setMessage("");
-    setBusy(method);
-    try {
-      await api.login(method === "이메일" ? email.trim() : undefined);
-      if (method === "이메일") {
-        setMessage(
-          "로그인 링크를 보냈어요. 메일이 안 오면 스팸함을 확인해 주세요.",
-        );
-        setBusy("");
-      }
-    } catch {
-      setError(
-        "로그인하지 못했어요. 다시 시도하거나 새 이메일 링크를 받아 주세요.",
-      );
-      setBusy("");
-    }
-  }
-  return (
-    <>
-      <a className="skip" href="#main">
-        본문으로 가기
-      </a>
-      <PublicBar />
-      <main id="main" className="public">
-        <h1 tabIndex={-1}>쉽앤핑 시작하기</h1>
-        <div className="even">
-          <Hero
-            title="내 앱, 지금도 괜찮을까요?"
-            detail="앱이 어디서 막혔는지 쉽앤핑이 지켜보고 알려 드려요."
-          />
-          <section className="panel">
-            <h2>로그인</h2>
-            <button disabled={!!busy} onClick={() => submit("Google")}>
-              {busy === "Google" ? "Google로 이동하는 중" : "Google로 시작하기"}
-            </button>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void submit("이메일");
-              }}
-            >
-              <label>
-                이메일 주소
-                <input
-                  required
-                  type="email"
-                  autoComplete="email"
-                  value={displayText(email, "login-email")}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </label>
-              <button className="secondary" disabled={!!busy}>
-                {busy === "이메일" ? "보내는 중" : "이메일 링크 받기"}
-              </button>
-            </form>
-            <p role="status">{message}</p>
-            {error && <p role="alert">{error}</p>}
-            <Link to="/">쉽앤핑 소개로 돌아가기</Link>
-          </section>
-        </div>
-      </main>
-    </>
-  );
-}
+
 function LoadError({ retry }: { retry: () => void }) {
   return (
     <div role="alert">
@@ -349,6 +276,7 @@ function Connection({
 }
 export function App({ api, ingest }: { api: Gateway; ingest: string }) {
   const [user, setUser] = useState<string | null>();
+  const [recoveryUser, setRecoveryUser] = useState<string | null>(null);
   const deleting = useRef(false);
   const [notice,setNotice] = useState("");
   const [error, setError] = useState(false);
@@ -361,7 +289,8 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
   useEffect(() => {
     let active = true,
       notified = false;
-    const unsubscribe = api.listen((id) => {
+    const unsubscribe = api.listen((id, recovery) => {
+      setRecoveryUser(previous => recovery ? id : previous === id ? previous : null);
       notified = true;
       if (active) {
         if (id || !deleting.current) setUser(id);
@@ -404,6 +333,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     )
       issued.current = null;
     if (prev.current !== pathname) {
+      if (prev.current === "/reset-password") setRecoveryUser(null);
       if (prev.current === "/login") setNotice("");
       document.querySelector<HTMLElement>("main h1")?.focus();
       prev.current = pathname;
@@ -420,6 +350,9 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     return <main role="status">로그인 상태를 확인하는 중</main>;
   return (
     <Routes>
+      <Route path="/signup" element={user ? <AfterLogin api={api}/> : <AuthPage api={api} mode="signup"/>}/>
+      <Route path="/forgot-password" element={<AuthPage api={api} mode="forgot"/>}/>
+      <Route path="/reset-password" element={<AuthPage api={api} mode="reset" recovery={!!user && recoveryUser === user}/>}/>
       <Route path="/account" element={user ? <Shell key={user} onLogout={logout}>
         <Account api={api} origin={ingest} pending={markPending} logout={logout} done={finishWithdrawal}/>
       </Shell> : <Navigate to="/login" replace/>}/>
@@ -433,7 +366,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
           {notice && <p className="panel" role="status">
             <strong>{notice}</strong>{notice === "로그아웃했어요" && " 이 기기에서 로그아웃했어요. 문제가 생기면 알림은 계속 보내 드려요."}
           </p>}
-          <Login api={api} />
+          <AuthPage api={api} mode="login" />
         </>}
       />
       <Route
