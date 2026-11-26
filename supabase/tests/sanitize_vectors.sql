@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(104);
+select plan(155);
 
 select is(private.mask(input), expected, 'mask ' || id)
 from (values
@@ -49,14 +49,14 @@ from (values
   (42, E'client_secret=one', E'client_secret=[가림]'),
   (43, E'X-Api-Key: two', E'X-Api-Key: [가림]'),
   (44, E'db-PASSWD : one Pwd=two password=three', E'db-PASSWD : [가림] Pwd=[가림] password=[가림]'),
-  (45, E'monkey=banana', E'monkey=[가림]'),
-  (46, E'tokenizer=one secret_hint: two', E'tokenizer=one secret_hint: two'),
+  (45, E'monkey=banana', E'monkey=banana'),
+  (46, E'tokenizer=one secret_hint: two', E'tokenizer=[가림] secret_hint: [가림]'),
   (47, E'token: Bearer abc; next', E'token: [가림]; next'),
   (48, E'{\"api_key\":\"abc\",\"id\":1}', E'{\"api_key\":\"[가림]\",\"id\":1}'),
   (49, E'\"password\": \"x\"', E'\"password\": \"[가림]\"'),
   (50, E'\u0027secret\u0027:\u0027y\u0027', E'\u0027secret\u0027:\u0027[가림]\u0027'),
   (51, E'{\"MY-ACCESS_TOKEN\":\"Bearer abc def\",\"db_passwd\":\"a\\\"b\",\"pwd\":\"x,y\"}', E'{\"MY-ACCESS_TOKEN\":\"[가림]\",\"db_passwd\":\"[가림]\",\"pwd\":\"[가림]\"}'),
-  (52, E'\"secret_hint\":\"ok\"', E'\"secret_hint\":\"ok\"'),
+  (52, E'\"secret_hint\":\"ok\"', E'\"secret_hint\":\"[가림]\"'),
   (53, E'1764120000 1764120000123', E'[가림]'),
   (54, E'0111234567 010-123-4567', E'[가림]'),
   (55, E'02-1234-5678 0311234567', E'[가림]'),
@@ -79,10 +79,10 @@ from (values
   (72, E'12345678', E'12345678'),
   (73, E'1764120000', E'1764120000'),
   (74, E'1764120000123', E'1764120000123'),
-  (75, E'1000000000', E'1000000000'),
-  (76, E'2147483647', E'2147483647'),
-  (77, E'1000000000000', E'1000000000000'),
-  (78, E'2147483647999', E'2147483647999'),
+  (75, E'1000000000', E'[가림]'),
+  (76, E'2147483647', E'[가림]'),
+  (77, E'1000000000000', E'[가림]'),
+  (78, E'2147483647999', E'[가림]'),
   (79, E'{\\\"api_key\\\":\\\"abc\\\"}', E'{\\\"api_key\\\":\\\"[가림]\\\"}'),
   (80, E'\"pin_password\": 1234', E'\"pin_password\": [가림]'),
   (81, E'\u0027secret\u0027 => \u0027x\u0027', E'\u0027secret\u0027 => \u0027[가림]\u0027'),
@@ -93,10 +93,57 @@ from (values
   (86, E'{\"sp' || E'_srv_demo_token\":\"Basic YWJjZGVmZ2hpamts\"}', E'{\"[가림]\":\"[가림]\"}'),
   (87, E'token=\"Bearer abc\"', E'token=\"[가림]\"'),
   (88, E'password=\u0027Basic YWJjZGVmZ2hpamts\u0027', E'password=\u0027[가림]\u0027'),
-  (89, E'sp' || E'_srv_demo_token=value', E'[가림][가림]'),
+  (89, E'sp' || E'_srv_demo_token=value', E'[가림]'),
   (90, E'token=abc}def', E'token=[가림]'),
   (91, E'\"token\": [가림]', E'\"token\": [가림]'),
-  (92, E'token=\\opaque', E'token=[가림]')
+  (92, E'token=\\opaque', E'token=[가림]'),
+  (93, E'010/1234/5678', E'[가림]'),
+  (94, E'010_1234_5678', E'[가림]'),
+  (95, E'010\t1234\t5678', E'[가림]'),
+  (96, E'010–1234–5678', E'[가림]'),
+  (97, E'010‐1234‐5678', E'[가림]'),
+  (98, E'010‒1234‒5678', E'[가림]'),
+  (99, E'010—1234—5678', E'[가림]'),
+  (100, E'010‑1234‑5678', E'[가림]'),
+  (101, E'010―1234―5678', E'[가림]'),
+  (102, E'010−1234−5678', E'[가림]'),
+  (103, E'1501013234567', E'[가림]'),
+  (104, E'1801013234567', E'[가림]'),
+  (105, E'2002294234567', E'[가림]'),
+  (106, E'2125550100', E'[가림]'),
+  (107, E'1234567890', E'[가림]'),
+  (108, E'1002123456789', E'[가림]'),
+  (109, E'1577836799', E'[가림]'),
+  (110, E'2082758400', E'[가림]'),
+  (111, E'1577836799999', E'[가림]'),
+  (112, E'2082758400000', E'[가림]'),
+  (113, E'0101234 5678@x.co', E'[가림]'),
+  (114, E'Authorization: Token abc', E'[가림]'),
+  (115, E'1902293234567', E'1902293234567'),
+  (116, E'1801015234567', E'1801015234567'),
+  (117, E'1577836800', E'1577836800'),
+  (118, E'2082758399', E'2082758399'),
+  (119, E'1577836800000', E'1577836800000'),
+  (120, E'2082758399999', E'2082758399999'),
+  (121, E'keyboard=abc', E'keyboard=abc'),
+  (122, E'tokens=abc', E'tokens=[가림]'),
+  (123, E'api_keys=abc', E'api_keys=[가림]'),
+  (124, E'secrets=abc', E'secrets=[가림]'),
+  (125, E'password_confirmation=abc', E'password_confirmation=[가림]'),
+  (126, E'token_value=abc', E'token_value=[가림]'),
+  (127, E'token%3Dabc', E'token%3D[가림]'),
+  (128, E'api_key%3Dabc', E'api_key%3D[가림]'),
+  (129, E'{\\\\\\\"token\\\\\\\":\\\\\\\"abc\\\\\\\"}', E'{\\\\\\\"token\\\\\\\":\\\\\\\"[가림]\\\\\\\"}'),
+  (130, E'\"token\": [\"abc\",\"def\"],\u0020ok', E'\"token\": [가림],\u0020ok'),
+  (131, E'\"token\": [[\"a]\"],\u0020\"b\"]', E'\"token\": [가림]'),
+  (132, E'5555 5555 5555 4444', E'[가림]'),
+  (133, E'378282246310005', E'[가림]'),
+  (134, E'1764120000120', E'[가림]'),
+  (135, E'accessTokenValue=example', E'accessTokenValue=[가림]'),
+  (136, E'010֊1234֊5678', E'[가림]'),
+  (137, E'sp' || E'_srv_demo@example.test', E'[가림]'),
+  (138, E'token=\"\"', E'token=\"\"'),
+  (139, E'\"tokens\": [\"a\",\n[\"b\"', E'\"tokens\": [가림]')
 ) as cases(id, input, expected);
 
 select is(private.route(input), expected, 'route ' || id)
@@ -112,7 +159,32 @@ from (values
   (9, E'/a/１２３', E'/a/:id'),
   (10, E'/a/my_api_key=one', E'/a/:id'),
   (11, E'/short/123456789abcdef', E'/short/:id'),
-  (12, E'/a/\u0027secret\u0027:\u0027y\u0027', E'/a/:id')
+  (12, E'/a/\u0027secret\u0027:\u0027y\u0027', E'/a/:id'),
+  (13, E'/a/api_key%3Dabc', E'/a/:id')
+) as cases(id, input, expected);
+
+-- The database receives Worker-sanitized versions through the aggregate RPC.
+insert into auth.users(id) values ('00000000-0000-0000-0000-000000000024');
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000024',true);
+insert into public.apps(name) values ('version fixture');
+set local role authenticated;
+select set_config('test.version_hash',
+  encode(sha256(convert_to(public.issue_key((select id from public.apps),'pub'),'UTF8')),'hex'),true);
+reset role;
+
+create function pg_temp.stored_version(input text) returns text
+language plpgsql as $$
+begin
+  perform public.ingest_batch(current_setting('test.version_hash'),
+    jsonb_build_object('app_version',input,'batch_id',gen_random_uuid(),'stats','[]'::jsonb));
+  return (select v.version from public.app_versions v join public.app_keys k using(app_id)
+    where k.key_hash=current_setting('test.version_hash') and v.version=input);
+end $$;
+select is(pg_temp.stored_version(input), expected, 'version ' || id)
+from (values
+  (1, E'2026.11.26.1530', E'2026.11.26.1530'),
+  (2, E'v20261126-1530', E'v20261126-1530'),
+  (3, E'2026.02.1530.0001', E'2026.02.1530.0001')
 ) as cases(id, input, expected);
 
 select * from finish();

@@ -178,11 +178,11 @@
     },
     {
       "input": "monkey=banana",
-      "expected": "monkey=[가림]"
+      "expected": "monkey=banana"
     },
     {
       "input": "tokenizer=one secret_hint: two",
-      "expected": "tokenizer=one secret_hint: two"
+      "expected": "tokenizer=[가림] secret_hint: [가림]"
     },
     {
       "input": "token: Bearer abc; next",
@@ -206,7 +206,7 @@
     },
     {
       "input": "\"secret_hint\":\"ok\"",
-      "expected": "\"secret_hint\":\"ok\""
+      "expected": "\"secret_hint\":\"[가림]\""
     },
     {
       "input": "1764120000 1764120000123",
@@ -298,19 +298,19 @@
     },
     {
       "input": "1000000000",
-      "expected": "1000000000"
+      "expected": "[가림]"
     },
     {
       "input": "2147483647",
-      "expected": "2147483647"
+      "expected": "[가림]"
     },
     {
       "input": "1000000000000",
-      "expected": "1000000000000"
+      "expected": "[가림]"
     },
     {
       "input": "2147483647999",
-      "expected": "2147483647999"
+      "expected": "[가림]"
     },
     {
       "input": "{\\\"api_key\\\":\\\"abc\\\"}",
@@ -354,7 +354,7 @@
     },
     {
       "input": "sp_srv_demo_token=value",
-      "expected": "[가림][가림]"
+      "expected": "[가림]"
     },
     {
       "input": "token=abc}def",
@@ -367,6 +367,194 @@
     {
       "input": "token=\\opaque",
       "expected": "token=[가림]"
+    },
+    {
+      "input": "010/1234/5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "010_1234_5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "010\t1234\t5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "010–1234–5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "010‐1234‐5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "010‒1234‒5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "010—1234—5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "010‑1234‑5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "010―1234―5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "010−1234−5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "1501013234567",
+      "expected": "[가림]"
+    },
+    {
+      "input": "1801013234567",
+      "expected": "[가림]"
+    },
+    {
+      "input": "2002294234567",
+      "expected": "[가림]"
+    },
+    {
+      "input": "2125550100",
+      "expected": "[가림]"
+    },
+    {
+      "input": "1234567890",
+      "expected": "[가림]"
+    },
+    {
+      "input": "1002123456789",
+      "expected": "[가림]"
+    },
+    {
+      "input": "1577836799",
+      "expected": "[가림]"
+    },
+    {
+      "input": "2082758400",
+      "expected": "[가림]"
+    },
+    {
+      "input": "1577836799999",
+      "expected": "[가림]"
+    },
+    {
+      "input": "2082758400000",
+      "expected": "[가림]"
+    },
+    {
+      "input": "0101234 5678@x.co",
+      "expected": "[가림]"
+    },
+    {
+      "input": "Authorization: Token abc",
+      "expected": "[가림]"
+    },
+    {
+      "input": "1902293234567",
+      "expected": "1902293234567"
+    },
+    {
+      "input": "1801015234567",
+      "expected": "1801015234567"
+    },
+    {
+      "input": "1577836800",
+      "expected": "1577836800"
+    },
+    {
+      "input": "2082758399",
+      "expected": "2082758399"
+    },
+    {
+      "input": "1577836800000",
+      "expected": "1577836800000"
+    },
+    {
+      "input": "2082758399999",
+      "expected": "2082758399999"
+    },
+    {
+      "input": "keyboard=abc",
+      "expected": "keyboard=abc"
+    },
+    {
+      "input": "tokens=abc",
+      "expected": "tokens=[가림]"
+    },
+    {
+      "input": "api_keys=abc",
+      "expected": "api_keys=[가림]"
+    },
+    {
+      "input": "secrets=abc",
+      "expected": "secrets=[가림]"
+    },
+    {
+      "input": "password_confirmation=abc",
+      "expected": "password_confirmation=[가림]"
+    },
+    {
+      "input": "token_value=abc",
+      "expected": "token_value=[가림]"
+    },
+    {
+      "input": "token%3Dabc",
+      "expected": "token%3D[가림]"
+    },
+    {
+      "input": "api_key%3Dabc",
+      "expected": "api_key%3D[가림]"
+    },
+    {
+      "input": "{\\\\\\\"token\\\\\\\":\\\\\\\"abc\\\\\\\"}",
+      "expected": "{\\\\\\\"token\\\\\\\":\\\\\\\"[가림]\\\\\\\"}"
+    },
+    {
+      "input": "\"token\": [\"abc\",\"def\"], ok",
+      "expected": "\"token\": [가림], ok"
+    },
+    {
+      "input": "\"token\": [[\"a]\"], \"b\"]",
+      "expected": "\"token\": [가림]"
+    },
+    {
+      "input": "5555 5555 5555 4444",
+      "expected": "[가림]"
+    },
+    {
+      "input": "378282246310005",
+      "expected": "[가림]"
+    },
+    {
+      "input": "1764120000120",
+      "expected": "[가림]"
+    },
+    {
+      "input": "accessTokenValue=example",
+      "expected": "accessTokenValue=[가림]"
+    },
+    {
+      "input": "010֊1234֊5678",
+      "expected": "[가림]"
+    },
+    {
+      "input": "sp_srv_demo@example.test",
+      "expected": "[가림]"
+    },
+    {
+      "input": "token=\"\"",
+      "expected": "token=\"\""
+    },
+    {
+      "input": "\"tokens\": [\"a\",\n[\"b\"",
+      "expected": "\"tokens\": [가림]"
     }
   ],
   "route": [
@@ -417,6 +605,24 @@
     {
       "input": "/a/'secret':'y'",
       "expected": "/a/:id"
+    },
+    {
+      "input": "/a/api_key%3Dabc",
+      "expected": "/a/:id"
+    }
+  ],
+  "version": [
+    {
+      "input": "2026.11.26.1530",
+      "expected": "2026.11.26.1530"
+    },
+    {
+      "input": "v20261126-1530",
+      "expected": "v20261126-1530"
+    },
+    {
+      "input": "2026.02.1530.0001",
+      "expected": "2026.02.1530.0001"
     }
   ]
 }

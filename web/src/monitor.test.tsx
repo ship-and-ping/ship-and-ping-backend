@@ -12,7 +12,15 @@ import { MonitorRoute } from "./Monitor";
 import { Hero } from "./Layout";
 import { gateway } from "./data";
 
+import vectors from "../../docs/specs/sanitize-vectors.json";
+
 afterEach(cleanup);
+it.each(vectors.version)("해결 버전을 화면에 그대로 표시한다 · $input", async ({ input, expected }) => {
+  setup("/apps/a/issues/i", [], rows => {
+    Object.assign((rows.incidents as object[])[0], { status: "resolved", resolved_version: input });
+  });
+  expect(await screen.findByText("해결 버전 · " + expected)).toBeTruthy();
+});
 it("첫 기록 대기 화면은 안내와 배지를 하나씩 표시한다", async () => {
   const { container } = setup("/apps/a", [], rows => {
     rows.incidents = [];

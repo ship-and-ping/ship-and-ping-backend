@@ -340,10 +340,15 @@ fn shared_sanitize_vectors() {
     struct Cases {
         mask: Vec<Case>,
         route: Vec<Case>,
+        version: Vec<Case>,
     }
     let cases: Cases =
         serde_json::from_str(include_str!("../../docs/specs/sanitize-vectors.json")).unwrap();
-    assert_eq!((cases.mask.len(), cases.route.len()), (92, 12));
+    for case in cases.version {
+        let mut row = batch(vec![request()]);
+        row["app_version"] = json!(case.input);
+        assert_eq!(run(row).unwrap()["payload"]["app_version"], case.expected);
+    }
     for case in cases.mask {
         let mut row = request();
         row["status"] = json!(500);

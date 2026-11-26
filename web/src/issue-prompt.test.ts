@@ -1,7 +1,16 @@
 import { expect, it } from "vitest";
 import { buildIssuePrompt, displayVersion } from "./issue-prompt";
 
+import vectors from "../../docs/specs/sanitize-vectors.json";
+
 const base = { feature: "결제", route: "/buy", versions: ["v1"], errors: [] };
+it.each(vectors.version)("빌드 버전을 화면과 요청문에 보존한다 · $input", ({ input, expected }) => {
+  expect(displayVersion(input)).toBe(expected);
+  const prompt = buildIssuePrompt({ ...base, versions: [input], mode: "again" });
+  expect(prompt.invalid).toBe(false);
+  expect(prompt.text).toContain("앱 버전: " + expected);
+  expect(prompt.text).toContain("이전 수정(" + expected + ")");
+});
 const outside = (s: string) =>
   s.replace(/===== 데이터 시작 =====[\s\S]*?===== 데이터 끝 =====/, "");
 it.each([

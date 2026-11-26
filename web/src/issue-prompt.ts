@@ -1,14 +1,14 @@
-import { displayText, maskText, sanitizeRoute } from "./normalize";
+import { displayText, maskVersion, sanitizeRoute } from "./normalize";
 
+function hasVersionFormat(raw: string) {
+  return /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(raw) && !/[^A-Za-z0-9._+-]/.test(raw);
+}
 export function validVersion(raw: string) {
-  return (
-    /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(raw) &&
-    !/[^A-Za-z0-9._+-]/.test(raw) &&
-    maskText(raw) === raw
-  );
+  return hasVersionFormat(raw) && maskVersion(raw) === raw;
 }
 export function displayVersion(raw: string) {
-  return displayText(raw) + (validVersion(raw) ? "" : " (형식 확인 필요)");
+  const text = hasVersionFormat(raw) ? maskVersion(raw) : displayText(raw);
+  return text + (validVersion(raw) ? "" : " (형식 확인 필요)");
 }
 function line(value: string) {
   return displayText(
@@ -73,7 +73,7 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
   const weakCount = levels.filter((l) => l === "weak").length;
   const invalid = !input.versions.every(validVersion);
   const versionLine =
-    "앱 버전: " + (input.versions.map(line).join(" / 이전 버전: ") || "미확인");
+    "앱 버전: " + (input.versions.map(v => hasVersionFormat(v) ? maskVersion(v) : line(v)).join(" / 이전 버전: ") || "미확인");
   const status =
     input.mode === "again"
       ? "업데이트 뒤에도 문제가 있어요"
@@ -128,7 +128,7 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
           "이전 수정(" +
             (invalid
               ? "버전은 데이터 블록 안"
-              : line(input.versions[0] ?? "미확인")) +
+              : (input.versions[0] ?? "미확인")) +
             ") 뒤에도 문제가 이어져. 이전 수정과 다른 원인도 조사해 줘.",
         ]
       : []),
