@@ -19,17 +19,31 @@ export async function mockPage(page, state, member, origin) {
     status: state === "resolved" ? "resolved" : "open", opened_at: at, opened_version: "1.0",
     closed_at: state === "resolved" ? now : null, resolved_version: state === "resolved" ? "1.1" : null,
     metric_at_open: metric, metric_worst: metric, notifications: [] };
+  const matchCode = "07";
+  let loginStatus = ["expired","denied"].includes(state) ? state : "pending";
   await page.route("**/*", async route => {
     const url = new URL(route.request().url());
     if (url.origin === origin) return route.continue();
     if (url.origin === "https://ingest.ship-and-ping.invalid" && url.pathname.startsWith("/v1/login-requests")) {
-      const reply = url.pathname === "/v1/login-requests"
-        ? {request_id:"qa-request",poll_secret:"fixture-only",match_code:"07",expires_at:"2026-11-25T09:20:00Z"}
-        : url.pathname.endsWith("/approve") ? {status:route.request().postDataJSON().action === "deny" ? "denied" : "approved"}
-        : ["expired","denied"].includes(state) ? {status:state}
-        : state.startsWith("approval") ? {status:"pending",created_at:now,client_info:{browser:"Edge",place:"KR"}}
-        : {status:"pending"};
-      return route.fulfill({json:reply});
+      if (url.pathname === "/v1/login-requests") {
+        loginStatus = ["expired","denied"].includes(state) ? state : "pending";
+        return route.fulfill({json:{request_id:"qa-request",poll_secret:"fixture-only",match_code:matchCode,expires_at:"2026-11-25T09:20:00Z"}});
+      }
+      if (route.request().headers()["x-poll-secret"] && route.request().method() === "GET")
+        return route.fulfill({json:{status:loginStatus}});
+      if (loginStatus !== "pending")
+        return route.fulfill({json:{status:loginStatus === "expired" ? "expired" : "used"}});
+      if (url.pathname.endsWith("/approve")) {
+        const {action, match_code} = route.request().postDataJSON();
+        switch (action) {
+          case "approve": loginStatus = match_code === matchCode ? "approved" : "mismatch"; break;
+          case "deny": loginStatus = "denied"; break;
+          case "local": loginStatus = "used"; break;
+          default: throw Error("Unknown QA login action: " + action);
+        }
+        return route.fulfill({json:{status:loginStatus}});
+      }
+      return route.fulfill({json:{status:"pending",created_at:now,client_info:{browser:"Edge",place:"KR"}}});
     }
     if (url.href === "https://ingest.ship-and-ping.invalid/v1/account/delete") {
       if (state === "deleting") return;

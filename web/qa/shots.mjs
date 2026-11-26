@@ -69,6 +69,7 @@ const flow = [
   [25,"휴대폰 승인 완료","approval-ok"], [25,"휴대폰 거절 완료","approval-deny"],
   [5,"키가 든 연결 요청문","prompt"], [5,"복사 실패 후 가린 요청문","masked"],
   [20,"새 키로 교체","replacement"], [15,"슬랙 미설정","unconfigured"],
+  [25,"휴대폰 확인 숫자 불일치","approval-mismatch"],
 ].map(([index,title,variant]) => {
   const [,path,state,ready] = cases[index];
   return [title,path,variant ?? state,ready];
@@ -150,7 +151,7 @@ try {
           throw Error("Reduced-motion animation on "+path);
         const file = gallery ? String(index+1).padStart(2,"0")+"-"+width+".jpg"
           : String(index).padStart(2,"0")+"-"+state+"-"+width+"-"+colorScheme+".jpg";
-        const capture = phase !== "qa3-after" || existsSync(resolve(dir,"../qa3-before",file));
+        const capture = phase !== "qa3-after" || state === "approval-mismatch" || existsSync(resolve(dir,"../qa3-before",file));
         if (capture) {
           const bytes = await page.screenshot({path:resolve(dir,file),type:"jpeg",quality:80,fullPage:true,animations:"disabled"});
           if (gallery && bytes.length > 500000) throw Error(file+" exceeds 500 KB");
@@ -161,6 +162,10 @@ try {
             return rect.height < 44 || rect.width < 44;
           }).map(el=>el.getAttribute("aria-label") || el.textContent.trim() || el.name)) : [];
         entries.push({title,state,width,colorScheme,scale,reduced,file,overflow,issues,...(qa3 ? {capture,smallTargets} : {})});
+        if (state === "approval-mismatch") {
+          await page.reload();
+          await page.getByRole("status").filter({hasText:"이미 처리한 요청이에요."}).waitFor();
+        }
         if (overflow>1) console.warn("Overflow",file,overflow);
         if (phase === "after" && state === "failure" && path === "/apps/demo") {
           const link = page.locator("#issues a").first();
@@ -218,10 +223,11 @@ async function prepareScene(page,state) {
     await button("비밀번호 없이 메일 링크로 받기").click();
     await page.getByText("메일을 확인해 주세요",{exact:true}).waitFor();
     if (state !== "mail") await page.getByText(state === "expired" ? /요청 시간이 지났어요/ : /휴대폰에서 거절했어요/).waitFor();
-  } else if (["approval-ok","approval-deny"].includes(state)) {
-    if (state === "approval-ok") await page.getByRole("textbox").fill("07");
-    await button(state === "approval-ok" ? "이 PC 로그인 승인" : "거절").click();
-    await page.getByRole("status").filter({hasText:state === "approval-ok" ? /승인했어요/ : /거절했어요/}).waitFor();
+  } else if (["approval-ok","approval-deny","approval-mismatch"].includes(state)) {
+    if (state !== "approval-deny") await page.getByRole("textbox").fill(state === "approval-ok" ? "07" : "70");
+    await button(state === "approval-deny" ? "거절" : "이 PC 로그인 승인").click();
+    const expected = {"approval-ok":"승인했어요", "approval-deny":"거절했어요", "approval-mismatch":"숫자가 맞지 않아 요청을 취소했어요"};
+    await page.getByRole("status").filter({hasText:expected[state]}).waitFor();
   } else if (["prompt","masked","replacement"].includes(state)) {
     page.once("dialog", dialog => dialog.accept());
     await button("수집 키 재발급").click();

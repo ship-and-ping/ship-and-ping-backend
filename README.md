@@ -160,6 +160,7 @@ Q1~Q11은 PRD 8장의 제품 결정이고, D1~D4는 조사 후 확정한 구현 
 | **38. 복사 실패 후 키 가림** | [<img src="docs/design/screens/38-1440.jpg" width="240" alt="복사 실패 후 키 가림 PC 화면">](docs/design/screens/38-1440.jpg) | [복사 실패 후 키 가림 보기](docs/design/screens/38-390.jpg) |
 | **39. 새 키로 교체** | [<img src="docs/design/screens/39-1440.jpg" width="240" alt="새 키로 교체 PC 화면">](docs/design/screens/39-1440.jpg) | [새 키로 교체 보기](docs/design/screens/39-390.jpg) |
 | **40. 슬랙 미설정** | [<img src="docs/design/screens/40-1440.jpg" width="240" alt="슬랙 미설정 PC 화면">](docs/design/screens/40-1440.jpg) | [슬랙 미설정 보기](docs/design/screens/40-390.jpg) |
+| **41. 휴대폰 확인 숫자 불일치**<br>숫자가 다르면 PC 로그인 요청이 취소돼요. | [<img src="docs/design/screens/41-1440.jpg" width="240" alt="확인 숫자 불일치 PC 화면">](docs/design/screens/41-1440.jpg) | [확인 숫자 불일치 보기](docs/design/screens/41-390.jpg) |
 
 밝은 화면과 어두운 화면의 수정 전후는 [3차 비교 페이지](docs/design/qa/index.html)에서 볼 수 있어요.
 

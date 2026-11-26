@@ -37,7 +37,7 @@ export function LoginWaiting({api,request,restart}: {api:Gateway; request:LoginR
       <h2>메일을 확인해 주세요</h2>
       <p>휴대폰에서 메일 링크를 열고 아래 숫자를 입력한 뒤 승인해 주세요.</p>
       <p className="match-code">PC 확인 숫자 <strong className="login-number">{request.match_code}</strong></p>
-      <p>이 PC에서 메일을 열면 바로 로그인돼요. 링크는 요청 후 10분 동안 쓸 수 있어요.</p>
+      <p>이 PC에서 메일을 열면 바로 로그인돼요. PC의 로그인 요청은 10분 동안만 승인할 수 있어요.</p>
     </> : <p>{messages[status] ?? messages.failed}</p>}
     {status!=="approved" && <button className={status==="pending" ? "secondary" : undefined}
       onClick={()=>{forget(request.request_id);restart();}}>이메일 입력으로 돌아가기</button>}

@@ -10,6 +10,7 @@ import {
 import { Link, MemoryRouter } from "react-router-dom";
 import { axe } from "vitest-axe";
 import { App } from "./App";
+import { LoginWaiting } from "./LoginApproval";
 import { buildConnectPrompt, validateApp } from "./domain";
 import type { Gateway, Snapshot } from "./data";
 
@@ -71,6 +72,11 @@ function fake(user: string | null = "member"): Gateway {
     save: vi.fn(async () => []),
   };
 }
+it("PC 로그인 요청을 승인할 수 있는 시간을 대기 화면에 안내한다", () => {
+  const request = {request_id:"sample", poll_secret:"fixture", match_code:"07", expires_at:new Date(Date.now()+600000).toISOString()};
+  render(<LoginWaiting api={fake(null)} request={request} restart={vi.fn()}/>);
+  expect(screen.getByText(/PC의 로그인 요청은 10분 동안만 승인할 수 있어요/)).toBeTruthy();
+});
 it("requires a PC number before mobile approval and allows immediate refusal", async () => {
   const api = fake();
   api.requests = {create:vi.fn(),poll:vi.fn(),decide:vi.fn()
