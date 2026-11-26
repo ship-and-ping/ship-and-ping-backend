@@ -272,13 +272,11 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
             Ok(r) => r,
             Err(SinkError(status, msg)) => return error(status, msg),
         };
-        if !feature_map {
-            let Ok(mut stored) = response.json::<Counts>().await else {
-                return error(503, "invalid storage response");
-            };
-            stored.dropped += result.dropped;
-            result = stored;
-        }
+        let Ok(mut stored) = response.json::<Counts>().await else {
+            return error(503, "invalid storage response");
+        };
+        stored.dropped += result.dropped;
+        result = stored;
     }
     Ok(Response::from_json(&result)?.with_status(202))
 }

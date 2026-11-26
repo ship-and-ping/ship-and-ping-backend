@@ -1,7 +1,14 @@
-alter table public.features drop constraint features_name_source_check;
-update public.features set name_source='route' where name_source='suggested';
-alter table public.features add constraint features_name_source_check
-  check(name_source in ('route','ai','confirmed'));
+-- Keep the legacy source intact. Validate the expanded constraint and backfill
+-- in a separate migration, after the short-lived DDL lock has been released.
+alter table public.features drop constraint features_name_source_check,
+  add constraint features_name_source_check check(name_source in ('route','suggested','ai','confirmed')) not valid;
+
+create table private.feature_map_name_backup (
+  feature_id uuid primary key references public.features(id) on delete cascade,
+  previous_name text not null, previous_source text not null, applied_name text not null,
+  backed_up_at timestamptz not null default clock_timestamp()
+);
+revoke all on private.feature_map_name_backup from public,anon,authenticated,service_role;
 
 -- Direct member updates only have privileges on name, hidden and slow_threshold_ms.
 -- The owner RPC below explicitly marks renames, while service writes specify ai.
@@ -17,17 +24,15 @@ exception when invalid_parameter_value then
   return null;
 end $$;
 
--- With no target, upgrade only route-sourced rows. With a target, also refresh
--- earlier AI names. Neither path creates features or changes activity timestamps.
-create function private.apply_feature_map_names(target_app uuid default null, verb text default null, path text default null)
+create function private.apply_feature_map_names(target_app uuid, verb text, path text)
 returns void language sql set search_path='' as $$
   with named as (
     update public.features f set name=private.feature_map_name(s.name),name_source='ai'
     from public.feature_map_suggestions s
     where f.app_id=s.app_id and f.method=s.method and f.route=s.route
       and f.kind='auto' and f.method<>'*' and private.feature_map_name(s.name) is not null
-      and (f.name_source='route' or (target_app is not null and f.name_source='ai'))
-      and (target_app is null or (s.app_id=target_app and s.method=verb and s.route=path))
+      and f.name_source in ('route','ai')
+      and s.app_id=target_app and s.method=verb and s.route=path
     returning s.id
   )
   update public.feature_map_suggestions s set applied=true from named where named.id=s.id
@@ -50,13 +55,24 @@ create trigger name_new_auto_feature before insert on public.features for each r
   when (new.kind='auto' and new.method<>'*' and new.name_source='route')
   execute function private.name_new_auto_feature();
 
-create or replace function public.suggest_feature_map(app_key_hash text,items jsonb) returns void
+-- The caller holds the same app row lock as ingestion and key rotation.
+create function private.prune_feature_map(target_app uuid) returns void
+language sql set search_path='' as $$
+  delete from public.feature_map_suggestions where id in (
+    select id from public.feature_map_suggestions where app_id=target_app
+    order by received_at desc,id desc offset 300
+  )
+$$;
+
+drop function public.suggest_feature_map(text,jsonb);
+create function public.suggest_feature_map(app_key_hash text,items jsonb) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare
   k public.app_keys := private.lock_key(app_key_hash);
   item jsonb;
   path text;
   title text;
+  accepted integer:=0;
 begin
   if jsonb_typeof(items) is distinct from 'array' or jsonb_array_length(items)>200 then
     raise exception 'invalid feature map' using errcode='22023';
@@ -70,12 +86,18 @@ begin
     title:=private.feature_map_name(item->>'name');
     if title is null then continue; end if;
     path:=private.route(item->>'route');
-    insert into public.feature_map_suggestions(app_id,method,route,name)
-      values(k.app_id,item->>'method',path,title)
-      on conflict(app_id,method,route) do update set name=excluded.name,received_at=now(),applied=false;
+    if length(path) not between 1 and 200 then continue; end if;
+    insert into public.feature_map_suggestions(app_id,method,route,name,received_at)
+      values(k.app_id,item->>'method',path,title,clock_timestamp())
+      on conflict(app_id,method,route) do update set name=excluded.name,received_at=excluded.received_at,applied=false;
     perform private.apply_feature_map_names(k.app_id,item->>'method',path);
+    accepted:=accepted+1;
   end loop;
+  perform private.prune_feature_map(k.app_id);
+  return jsonb_build_object('accepted',accepted,'dropped',jsonb_array_length(items)-accepted);
 end $$;
+revoke all on function public.suggest_feature_map(text,jsonb) from public,anon,authenticated;
+grant execute on function public.suggest_feature_map(text,jsonb) to service_role;
 
 create or replace function public.confirm_feature_names(p_app_id uuid,p_items jsonb) returns jsonb
 language plpgsql security definer set search_path='' as $$
@@ -137,6 +159,4 @@ begin
 end $$;
 
 revoke all on function private.name_new_auto_feature(), private.feature_map_name(text),
-  private.apply_feature_map_names(uuid,text,text) from public,anon,authenticated,service_role;
-
-select private.apply_feature_map_names();
+  private.apply_feature_map_names(uuid,text,text),private.prune_feature_map(uuid) from public,anon,authenticated,service_role;

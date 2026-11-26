@@ -78,5 +78,8 @@ select is(suggest_feature_map(repeat('a',64),jsonb_build_array(jsonb_build_objec
   'method','GET','route','/long','name',repeat('가',41)))), '{"accepted":0,"dropped":1}'::jsonb,
   'overlength display name is dropped');
 select is_empty($$select id from feature_map_suggestions where route='/long'$$,'overlength name never stored');
+select throws_ok($$insert into feature_map_suggestions(app_id,method,route,name)
+  select id,'GET','/long',repeat('가',41) from apps where name='Mine'$$,'23514',null,
+  'stored suggestions enforce the same 40-character limit');
 select * from finish();
 rollback;

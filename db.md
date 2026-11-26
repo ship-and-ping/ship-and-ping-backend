@@ -47,7 +47,7 @@ date: 2026-11-24
 | feature_key | text null | deep: 전송에 쓰는 키 |
 | create_request_id | uuid null | 깊게 보기 등록을 재시도할 때 같은 기능을 찾는 클라이언트 요청 ID. 앱 안에서 유일 |
 | name | text | 화면 이름 |
-| name_source | text (`route` / `ai` / `confirmed`) | 이름 없음 / 기능 지도 자동 적용 / 회원이 직접 수정 |
+| name_source | text (`route` / `ai` / `confirmed` / 기존 `suggested`) | 이름 없음 / 기능 지도 자동 적용 / 회원이 직접 수정 / 이전 스키마의 제안 출처. 기존 `suggested` 값은 그대로 보존한다. |
 | start_definition, success_definition | text null | deep만 |
 | slow_threshold_ms | int default 5000 | 평소 속도 없을 때 기준 |
 | hidden | bool default false | |
@@ -149,6 +149,10 @@ stats_1h와 같은 집계 열·기본 키·조회 인덱스를 쓴다. 30일이 
 |---|---|
 | id, app_id, method, route, name, received_at, applied bool | |
 
+메서드 32자, 정제된 주소 200자, 이름 40자까지 보관한다. 같은 앱·메서드·주소를 다시 받으면 수신 시각을 갱신한다. 앱별로 최근 300건을 보관하며 자리가 차면 가장 오래된 제안부터 정리한다.
+
+`private.feature_map_name_backup`은 T38 백필에서 실제로 이름을 바꾼 기능의 ID, 이전 이름·출처, 적용한 이름, 백업 시각을 보관한다. 복구와 7일 후 정리 절차는 [Supabase 운영 문서](supabase/README.md#t38-기능-지도-적용)에 있다.
+
 앱 등록은 회원당 3개로 제한한다. [20261126000000](supabase/migrations/20261126000000_feature_admission_settings_row.sql)은 자동 기능을 새로 수용할 때 설정 갱신 대상을 단일 정원 행으로 한정한다. [20261126100000](supabase/migrations/20261126100000_revoke_app_key.sql)은 아래 단일 키 폐기 RPC를 추가한다.
 
 ## 깊게 보기·앱 설정 회원 RPC
@@ -171,7 +175,7 @@ S11은 Worker의 `POST /v1/account/delete`를 호출한다. Worker는 Supabase A
 | 함수 | 하는 일 |
 |---|---|
 | `ingest_batch(app_key_hash, payload jsonb)` | 키 확인, 중복 묶음 무시, 버전·기능 등록, stats_5m upsert, 시도·오류 예시 저장. 결과 `{accepted, dropped}` |
-| `suggest_feature_map(app_key_hash, items jsonb)` | 기능 지도 이름을 보관하고 일치하는 자동 기능에 즉시 적용 |
+| `suggest_feature_map(app_key_hash, items jsonb)` | 기능 지도 이름을 보관하고 일치하는 자동 기능에 즉시 적용한다. 수락·제외한 항목 수를 `{accepted, dropped}`로 반환한다. |
 | `evaluate_all()` | 미확인 처리, 평소 속도 갱신(6시간마다), 문제 열기·다시 알림·해결·잠잠 판정 → 알림 보낼 목록 반환 |
 | `record_notification(...)` | 알림 결과 기록 |
 | `claim_notifications(limit)` | 등록 순으로 대기 행 선점. 잠긴 행은 건너뛰며 10분 지난 선점은 재시도 가능 |
