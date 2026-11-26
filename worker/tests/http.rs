@@ -364,7 +364,10 @@ fn ingest_http_statuses() {
     let item = json!({"route":"/a/42?q=x","method":"GET","name":"token=example"});
     assert_eq!(feature(&json!([item.clone()]).to_string()), "202");
     let invisible = json!({"route":"/empty","method":"GET","name":"\u{200b}"});
-    assert_eq!(feature(&json!([invisible, item.clone()]).to_string()), "202");
+    assert_eq!(
+        feature(&json!([invisible, item.clone()]).to_string()),
+        "202"
+    );
     assert_eq!(feature("[{}]"), "400");
     assert_eq!(feature(&json!(vec![item.clone(); 200]).to_string()), "202");
     for (field, value) in [("route", "relative"), ("method", "get"), ("name", " ")] {
