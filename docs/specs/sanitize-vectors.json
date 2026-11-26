@@ -695,6 +695,38 @@
     {
       "input": "whiskey=x donkey=y",
       "expected": "whiskey=x donkey=y"
+    },
+    {
+      "input": "Cookie=a=1; sid=abc\nok",
+      "expected": "Cookie=[가림]\nok"
+    },
+    {
+      "input": "cookie=sid=abc;token=x",
+      "expected": "cookie=[가림]"
+    },
+    {
+      "input": "GET https://example.test/a/42/550e8400-e29b-41d4-a716-446655440000/abcdefghijklmnop?q=one&b=two failed",
+      "expected": "GET https://example.test/a/:id/:id/:id?[가림] failed"
+    },
+    {
+      "input": "failed /users/1234567890123?unlisted=raw",
+      "expected": "failed /users/:id?[가림]"
+    },
+    {
+      "input": "name=Jane Doe",
+      "expected": "name=[가림]"
+    },
+    {
+      "input": "배송 라벨",
+      "expected": "배송 라벨"
+    },
+    {
+      "input": "GET https://node2.example2/42?sort=a'b&next=c failed",
+      "expected": "GET https://node2.example2/:id?[가림] failed"
+    },
+    {
+      "input": "token=Cookie=a; sid=x\nok",
+      "expected": "token=[가림]\nok"
     }
   ],
   "route": [
@@ -704,7 +736,7 @@
     },
     {
       "input": "/notificationpreferences",
-      "expected": "/notificationpreferences"
+      "expected": "/:id"
     },
     {
       "input": "/a/abc123-def456_789",
@@ -806,7 +838,30 @@
       "DB-PASSWD",
       "userPwd",
       "PrivateKey",
-      "api_key"
+      "api_key",
+      "user_id",
+      "userId",
+      "uid",
+      "account_id",
+      "accountId",
+      "member_id",
+      "memberId",
+      "customer_id",
+      "customerId",
+      "session_id",
+      "sessionId",
+      "name",
+      "full_name",
+      "fullName",
+      "username",
+      "email",
+      "phone",
+      "mobile",
+      "tel",
+      "address",
+      "addr",
+      "birth",
+      "birthday"
     ],
     "forms": [
       {
@@ -863,19 +918,19 @@
       },
       {
         "input": "?{N}=opaque,tail&next=y",
-        "expected": "?{N}=[가림]&next=y"
+        "expected": "?[가림]"
       },
       {
         "input": "?{N}=opaque,tail; next=y",
-        "expected": "?{N}=[가림]; next=y"
+        "expected": "?[가림]"
       },
       {
         "input": "?{N}=opaque,tail next=y",
-        "expected": "?{N}=[가림] next=y"
+        "expected": "?[가림]"
       },
       {
         "input": "?{N}=opaque,tail",
-        "expected": "?{N}=[가림]"
+        "expected": "?[가림]"
       },
       {
         "input": "{\"{N}\":\"one, two\"}",
@@ -955,7 +1010,8 @@
       },
       {
         "input": "{N}=Token demo,tail; ok=y",
-        "expected": "{N}=[가림]; ok=y"
+        "expected": "{N}=[가림]; ok=y",
+        "fullLineExpected": "{N}=[가림]"
       },
       {
         "input": "{\\\"{N}\\\":[\\\"a]b\\\",\\\"hidden\\\"],\\\"ok\\\":1}",

@@ -1,14 +1,17 @@
 create or replace function private.credential_value_pattern() returns text
 language sql immutable set search_path = '' as $$
   select format($pat$(?:\\*["']%1$s\\*["']|(?<![A-Za-z0-9_])%1$s)\s*(?:=>|->|,|:|=|%%3[aAdD])\s*$pat$,
-    '(?:[A-Za-z0-9_-]*(?:' || words || '|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)')
+    '(?:' || fields || '|[A-Za-z0-9_-]*(?:' || words || '|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)')
   from (
     select string_agg(case when c = '|' then c else '[' || c || upper(c collate "C") || ']' end,
                       '' order by pos) as words
     from regexp_split_to_table(
       'token|secret|password|passwd|pwd|credential|authorization|cookie|privatekey|accesskey|secretkey|apikey|clientkey|authkey|sessionkey|signingkey|encryptionkey|masterkey', ''
     ) with ordinality as letters(c,pos)
-  ) folded
+  ) folded cross join (
+    select string_agg(case when c collate "C" between 'a' and 'z' then '[' || c || upper(c collate "C") || ']' else c end, '' order by pos) as fields
+    from regexp_split_to_table('user[_-]?id|account[_-]?id|member[_-]?id|customer[_-]?id|session[_-]?id|uid|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday', '') with ordinality as letters(c,pos)
+  ) personal
 $$;
 
 create or replace function private.numeric_pattern() returns text
@@ -116,14 +119,21 @@ begin
       if lower(right(prefix,3)) = '%3a' then
         stop := after_pos + length(substring(tail from '^[^&\n]*'));
         span := int4range(after_pos,greatest(stop,upper(span)));
-      elsif header or tail collate "C" ~* '^digest\s' or (plain_name and (right(prefix,2) in ('=>','->') or right(prefix,1) = ',')) then
+      elsif header or prefix collate "C" ~* '^(set-cookie|cookie|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday)\s*=$' or tail collate "C" ~* '^digest\s' or (plain_name and (right(prefix,2) in ('=>','->') or right(prefix,1) = ',')) then
         stop := after_pos + length(split_part(tail,E'\n',1));
         span := int4range(case when header then first_pos else after_pos end, greatest(stop,upper(span)));
       elsif plain_name and left(tail,1) not in ('\', '"', '''', '[', '{') then
         stop := after_pos + length(substring(tail collate "C" from '^[^\s&;]*'));
         span := int4range(after_pos,greatest(stop,upper(span)));
       end if;
-      if span is not null then return next span; end if;
+      if span is not null and not isempty(span) then
+        cursor_pos := greatest(after_pos, upper(span));
+        return next span;
+      end if;
+    elsif kind = 'line_value' then
+      stop := after_pos + length(split_part(substr(t,after_pos),E'\n',1));
+      return next int4range(after_pos,stop);
+      cursor_pos := stop;
     elsif kind <> 'number' or not private.safe_timestamp(substr(t,first_pos,after_pos-first_pos)) then
       return next int4range(first_pos,after_pos);
     end if;
@@ -133,10 +143,35 @@ end $$;
 create or replace function private.mask(s text) returns text
 language plpgsql immutable strict set search_path = '' as $$
 declare
-  t text := private.normalize_text(s); result text := ''; cursor_pos int := 1; span int4range;
+  truncated boolean := length(left(s,2001)) > 2000;
+  path_pattern constant text := '[A-Za-z0-9_.:-]*(?:/[A-Za-z0-9_.{}:=-]+)+';
+  first_pos int; after_pos int; path text; prefix text;
+  t text := private.normalize_text(left(s,2000)); result text := ''; cursor_pos int := 1; span int4range;
 begin
+  loop
+    first_pos := regexp_instr(t collate "C", path_pattern, cursor_pos);
+    exit when first_pos = 0;
+    after_pos := regexp_instr(t collate "C", path_pattern, first_pos,1,1);
+    path := substr(t,first_pos,after_pos-first_pos);
+    prefix := split_part(path,'/',1);
+    path := substr(path,length(prefix)+1);
+    if prefix !~ '^[0-9._-]+$' or path !~ '^[0-9/]+$' then
+      select string_agg(case when part collate "C" ~* '^[0-9]+$|^[a-z0-9]{16,}$'
+        or (part collate "C" ~* '^(urn:uuid:|\{)?[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}\}?$'
+            and (left(part,1) = '{') = (right(part,1) = '}'))
+        then ':id' else part end, '/' order by idx) into path
+      from unnest(string_to_array(path,'/')) with ordinality parts(part,idx);
+    end if;
+    result := result || substr(t,cursor_pos,first_pos-cursor_pos) || prefix || path;
+    cursor_pos := after_pos;
+  end loop;
+  t := result || substr(t,cursor_pos);
+  cursor_pos := 1;
+  result := '';
   for span in select r from (
     select r from private.mask_spans(t, private.credential_value_pattern(), 'credential') r
+    union all select r from private.mask_spans(t,
+      '(?i)(?<![A-Za-z0-9_])(?:set-cookie|cookie|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday)[ \t]*=(?!>)', 'line_value') r
     union all select r from unnest(private.mask_patterns()) p,
       private.mask_spans(t, '(?i)' || p, 'private') r
     union all select r from private.mask_spans(t, private.numeric_pattern(), 'number') r
@@ -146,7 +181,9 @@ begin
     end if;
     cursor_pos := greatest(cursor_pos,upper(span));
   end loop;
-  return left(result || substr(t,cursor_pos),300);
+  result := regexp_replace(result || substr(t,cursor_pos), $q$(?n)^\?[^\n]+|\?\S+$q$, '?[가림]', 'g');
+  if truncated then return left(result,295) || '…[잘림]'; end if;
+  return left(result,300);
 end $$;
 
 revoke all on function private.safe_timestamp(text), private.value_span(text,int,int),
@@ -167,7 +204,7 @@ language sql immutable strict set search_path = '' as $$
     or part ~ private.mask_pattern() or part ~ private.credential_value_pattern()
     or part ~ private.numeric_pattern()
     or (length(part) >= 16 and part ~ '^[A-Za-z0-9_-]+={0,2}$'
-        and (right(part,1) = '=' or part ~* '^[a-f0-9]+$' or part ~ '[0-9]'
+        and (right(part,1) = '=' or part ~* '^[a-z0-9]+$' or part ~ '[0-9]'
              or (part ~ '[A-Z]' and part ~ '[a-z]')))
     then ':id' else part end, '/' order by pos), '')
   from segments

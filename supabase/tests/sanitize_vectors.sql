@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(1313);
+select plan(2243);
 
 select is(private.mask(input), expected, 'mask ' || id)
 from (values
@@ -178,13 +178,21 @@ from (values
   (171, E'-keyring=x', E'-keyring=[가림]'),
   (172, E'Cookie: a=1; sid=abc; token=x', E'[가림]'),
   (173, E'Set-Cookie: sid=abc; Path=/; HttpOnly', E'[가림]'),
-  (174, E'whiskey=x donkey=y', E'whiskey=x donkey=y')
+  (174, E'whiskey=x donkey=y', E'whiskey=x donkey=y'),
+  (175, E'Cookie=a=1; sid=abc\nok', E'Cookie=[가림]\nok'),
+  (176, E'cookie=sid=abc;token=x', E'cookie=[가림]'),
+  (177, E'GET https://example.test/a/42/550e8400-e29b-41d4-a716-446655440000/abcdefghijklmnop?q=one&b=two failed', E'GET https://example.test/a/:id/:id/:id?[가림] failed'),
+  (178, E'failed /users/1234567890123?unlisted=raw', E'failed /users/:id?[가림]'),
+  (179, E'name=Jane Doe', E'name=[가림]'),
+  (180, E'배송 라벨', E'배송 라벨'),
+  (181, E'GET https://node2.example2/42?sort=a\u0027b&next=c failed', E'GET https://node2.example2/:id?[가림] failed'),
+  (182, E'token=Cookie=a; sid=x\nok', E'token=[가림]\nok')
 ) as cases(id, input, expected);
 
 select is(private.route(input), expected, 'route ' || id)
 from (values
   (1, E'/notification-preferences/account_settings_panel', E'/notification-preferences/account_settings_panel'),
-  (2, E'/notificationpreferences', E'/notificationpreferences'),
+  (2, E'/notificationpreferences', E'/:id'),
   (3, E'/a/abc123-def456_789', E'/a/:id'),
   (4, E'/a/deadbeefcafebabe', E'/a/:id'),
   (5, E'/a/QUJDREVGR0hJSktMTU4=', E'/a/:id'),
@@ -254,7 +262,30 @@ with matrix as (select $matrix${
     "DB-PASSWD",
     "userPwd",
     "PrivateKey",
-    "api_key"
+    "api_key",
+    "user_id",
+    "userId",
+    "uid",
+    "account_id",
+    "accountId",
+    "member_id",
+    "memberId",
+    "customer_id",
+    "customerId",
+    "session_id",
+    "sessionId",
+    "name",
+    "full_name",
+    "fullName",
+    "username",
+    "email",
+    "phone",
+    "mobile",
+    "tel",
+    "address",
+    "addr",
+    "birth",
+    "birthday"
   ],
   "forms": [
     {
@@ -311,19 +342,19 @@ with matrix as (select $matrix${
     },
     {
       "input": "?{N}=opaque,tail&next=y",
-      "expected": "?{N}=[가림]&next=y"
+      "expected": "?[가림]"
     },
     {
       "input": "?{N}=opaque,tail; next=y",
-      "expected": "?{N}=[가림]; next=y"
+      "expected": "?[가림]"
     },
     {
       "input": "?{N}=opaque,tail next=y",
-      "expected": "?{N}=[가림] next=y"
+      "expected": "?[가림]"
     },
     {
       "input": "?{N}=opaque,tail",
-      "expected": "?{N}=[가림]"
+      "expected": "?[가림]"
     },
     {
       "input": "{\"{N}\":\"one, two\"}",
@@ -403,7 +434,8 @@ with matrix as (select $matrix${
     },
     {
       "input": "{N}=Token demo,tail; ok=y",
-      "expected": "{N}=[가림]; ok=y"
+      "expected": "{N}=[가림]; ok=y",
+      "fullLineExpected": "{N}=[가림]"
     },
     {
       "input": "{\\\"{N}\\\":[\\\"a]b\\\",\\\"hidden\\\"],\\\"ok\\\":1}",
@@ -420,9 +452,11 @@ with matrix as (select $matrix${
   ]
 }$matrix$::jsonb as spec)
 select is(private.mask(replace(form->>'input','{N}',name)),
-          replace(form->>'expected','{N}',name), name || ' form ' || idx)
+          replace(case when lower(name) in ('cookie','set-cookie','name','full_name','fullname','username','email','phone','mobile','tel','address','addr','birth','birthday') then coalesce(form->>'fullLineExpected',form->>'expected') else form->>'expected' end,'{N}',name), name || ' form ' || idx)
 from matrix, jsonb_array_elements_text(spec->'names') names(name),
   jsonb_array_elements(spec->'forms') with ordinality forms(form,idx);
 
+select is(private.mask(repeat('🔒',295)||repeat('가',1706)), repeat('🔒',295)||'…[잘림]', 'Unicode output budget');
+select is(private.mask('Cookie='||repeat('a',1994)), 'Cookie=[가림]…[잘림]', 'mask prefix before marking truncation');
 select * from finish();
 rollback;

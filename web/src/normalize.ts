@@ -18,7 +18,8 @@ const start = "(?<![A-Za-z0-9_])";
 // Fold the credential words independently so lowercase "key" can retain its word boundaries.
 const words = "token|secret|password|passwd|pwd|credential|authorization|cookie|privatekey|accesskey|secretkey|apikey|clientkey|authkey|sessionkey|signingkey|encryptionkey|masterkey"
   .replace(/[a-z]/g, letter => `[${letter}${letter.toUpperCase()}]`);
-const name = `(?:[A-Za-z0-9_-]*(?:${words}|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)`;
+const fields = "(?:user|account|member|customer|session)[_-]?id|uid|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday".replace(/[a-z]/g, letter => `[${letter}${letter.toUpperCase()}]`);
+const name = `(?:${fields}|[A-Za-z0-9_-]*(?:${words}|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)`;
 const credentialName = new RegExp(String.raw`(?:\\*["']${name}\\*["']|${start}${name})\s*(?:=>|->|,|:|=|%3[aAdD])\s*`, "g");
 const bareValue = /^(?:(?:bearer|basic|token|apikey|digest)(?:[ \t]*:[ \t]*|[ \t]+)[^\s;&]+|(?:\[가림\]|\\[^"\s]|[^"'\\\s,;&#])(?:[^\s,;}\]&#]|[}\]]+[^\s,;}\]&#])*)/i;
 const numeric = /\+?\(?[0-9](?:[ ().\/_\t֊־᐀᠆‐‑‒–—―⸗⸚⸺⸻⹀⹝〜〰゠︱︲﹘﹣－𐵮𐺭−-]*[0-9]){8,}\)?/g;
@@ -77,7 +78,8 @@ function credentialSpan(text: string, hit: RegExpMatchArray & { index: number })
   }
   const plainName = !/^[\\"']/.test(prefix);
   const header = plainName && prefix.endsWith(":");
-  if (header || /^digest\s/i.test(tail) || (plainName && /(?:=>|->|,)$/.test(prefix))) {
+  const lineValue = /^(?:set-cookie|cookie|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday)\s*=$/i.test(prefix);
+  if (header || lineValue || /^digest\s/i.test(tail) || (plainName && /(?:=>|->|,)$/.test(prefix))) {
     const newline = text.indexOf("\n", start);
     return [header ? hit.index : start, Math.max(newline < 0 ? text.length : newline, span?.[1] ?? start)];
   }
@@ -121,18 +123,38 @@ export function maskVersion(raw: string) {
 }
 
 export function maskText(value: string): string {
-  const text = normalizeText(value);
+  let end = 0, count = 0;
+  for (const ch of value) {
+    if (count++ === 2000) break;
+    end += ch.length;
+  }
+  const truncated = end < value.length;
+  const text = normalizeText(value.slice(0, end)).replace(/(?<![A-Za-z0-9_.:-])([A-Za-z0-9_.:-]*)((?:\/[A-Za-z0-9_.{}:=-]+)+)/g, (match: string, prefix: string, path: string) => {
+    if (/^[0-9._-]+$/.test(prefix) && /^[0-9/]+$/.test(path)) return match;
+    return prefix + path.split("/").map(part => /^[0-9]+$|^[a-z0-9]{16,}$/i.test(part) || uuidSegment.test(part) ? ":id" : part).join("/");
+  });
   const spans: Span[] = [];
+  const lineValues = /(?<![A-Za-z0-9_])(?:set-cookie|cookie|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday)[ \t]*=([^>\n][^\n]*)/gi;
+  for (const hit of text.matchAll(lineValues)) {
+    const end = hit.index + hit[0].length;
+    spans.push([end - hit[1].length, end]);
+  }
+  let cursor = 0;
   for (const match of text.matchAll(credentialName)) {
+    if (match.index < cursor) continue;
     const span = credentialSpan(text, match);
-    if (span && span[1] > span[0]) spans.push(span);
+    if (span && span[1] > span[0]) {
+      cursor = span[1];
+      spans.push(span);
+    }
   }
   for (const pattern of [...privatePatterns, numeric]) {
     for (const m of text.matchAll(pattern)) {
       if (pattern !== numeric || !isTimestamp(m[0])) spans.push([m.index, m.index + m[0].length]);
     }
   }
-  return [...redact(text, spans)].slice(0, 300).join("");
+  const result = redact(text, spans).replace(/^\?[^\n]+|\?\S+/gm, "?[가림]");
+  return [...result].slice(0, truncated ? 295 : 300).join("") + (truncated ? "…[잘림]" : "");
 }
 
 const uuid = "[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}";
@@ -140,7 +162,7 @@ const uuidSegment = new RegExp("^(?:" + uuid + "|\\{" + uuid + "\\}|urn:uuid:" +
 
 function opaqueSegment(part: string): boolean {
   return part.length >= 16 && /^[a-z0-9_-]+={0,2}$/i.test(part) && (
-    part.endsWith("=") || /^[a-f0-9]+$/i.test(part) || /\d/.test(part) ||
+    part.endsWith("=") || /^[a-z0-9]+$/i.test(part) || /\d/.test(part) ||
     (/[A-Z]/.test(part) && /[a-z]/.test(part))
   );
 }

@@ -26,7 +26,7 @@ static SHORT_KEY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i-u:sk_|pk_|rk_)[A-Za-z0-9_]{16,}").expect("short key pattern")
 });
 static CREDENTIAL_NAME: LazyLock<Regex> = LazyLock::new(|| {
-    let name = r"(?:[A-Za-z0-9_-]*(?:(?i:token|secret|password|passwd|pwd|credential|authorization|cookie|privatekey|accesskey|secretkey|apikey|clientkey|authkey|sessionkey|signingkey|encryptionkey|masterkey)|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)";
+    let name = r"(?:(?i-u:(?:user|account|member|customer|session)[_-]?id|uid|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday)|[A-Za-z0-9_-]*(?:(?i:token|secret|password|passwd|pwd|credential|authorization|cookie|privatekey|accesskey|secretkey|apikey|clientkey|authkey|sessionkey|signingkey|encryptionkey|masterkey)|K[eE][yY]|kE[yY]|keY|[A-Z0-9_-]key)[A-Za-z0-9_-]*|keys?(?:[_-][A-Za-z0-9_-]+)?|key[A-Z0-9][A-Za-z0-9_-]*)";
     Regex::new(&format!(
         r#"(?:\\*["']{name}\\*["']|{name})\s*(?:=>|->|,|:|=|%3[aAdD])\s*"#
     ))
@@ -46,6 +46,44 @@ pub enum ApiError {
 pub struct Counts {
     pub accepted: usize,
     pub dropped: usize,
+}
+
+#[cfg(test)]
+mod sanitize_budget {
+    use super::mask;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn adversarial_64k_lines() {
+        let _ = mask("Cookie: warm up all patterns");
+        for unit in [
+            "token=x ",
+            "Cookie: a=b ",
+            "1234567890 ",
+            "token=inside ",
+            "가",
+        ] {
+            let input: String = unit
+                .chars()
+                .cycle()
+                .take(65536 / unit.chars().next().unwrap().len_utf8())
+                .collect();
+            let input = if unit == "token=inside " {
+                format!("token=\"{}", &input[..65529])
+            } else {
+                input
+            };
+            let start = Instant::now();
+            let output = mask(&input);
+            let elapsed = start.elapsed();
+            eprintln!("{unit:?} {elapsed:?}");
+            assert!(output.ends_with("…[잘림]") && output.chars().count() <= 300);
+            assert!(
+                elapsed < Duration::from_millis(if cfg!(debug_assertions) { 100 } else { 10 }),
+                "{elapsed:?}"
+            );
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -145,7 +183,7 @@ fn opaque_segment(part: &str) -> bool {
         return false;
     }
     part != token
-        || token.bytes().all(|b| b.is_ascii_hexdigit())
+        || token.bytes().all(|b| b.is_ascii_alphanumeric())
         || token.bytes().any(|b| b.is_ascii_digit())
         || (token.bytes().any(|b| b.is_ascii_uppercase())
             && token.bytes().any(|b| b.is_ascii_lowercase()))
@@ -317,7 +355,28 @@ fn credential_span(text: &str, hit: regex::Match<'_>) -> Option<std::ops::Range<
         .get(..6)
         .is_some_and(|s| s.eq_ignore_ascii_case("digest"))
         && tail.as_bytes().get(6).is_some_and(u8::is_ascii_whitespace);
+    let line_value = prefix.strip_suffix('=').is_some_and(|key| {
+        matches!(
+            key.trim_end().to_ascii_lowercase().as_str(),
+            "cookie"
+                | "set-cookie"
+                | "name"
+                | "full_name"
+                | "full-name"
+                | "fullname"
+                | "username"
+                | "email"
+                | "phone"
+                | "mobile"
+                | "tel"
+                | "address"
+                | "addr"
+                | "birth"
+                | "birthday"
+        )
+    });
     if header
+        || line_value
         || digest
         || (!prefix.starts_with(['\\', '"', '\''])
             && (prefix.ends_with("=>") || prefix.ends_with("->") || prefix.ends_with(',')))
@@ -337,15 +396,71 @@ fn credential_span(text: &str, hit: regex::Match<'_>) -> Option<std::ops::Range<
     span
 }
 
+fn message_paths(text: &str) -> Cow<'_, str> {
+    static PATH: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"[A-Za-z0-9_.:-]*(?:/[A-Za-z0-9_.{}:=-]+)+").unwrap());
+    PATH.replace_all(text, |caps: &regex::Captures<'_>| {
+        let hit = caps.get(0).unwrap();
+        // Leave slash-separated phones to the numeric pass.
+        let (prefix, path) = hit.as_str().split_once('/').unwrap();
+        if !prefix.is_empty()
+            && prefix
+                .bytes()
+                .all(|b| b.is_ascii_digit() || matches!(b, b'.' | b'-' | b'_'))
+            && path.bytes().all(|b| b.is_ascii_digit() || b == b'/')
+        {
+            return hit.as_str().to_owned();
+        }
+        let path = path
+            .split('/')
+            .map(|part| {
+                if !part.is_empty()
+                    && (part.bytes().all(|b| b.is_ascii_digit())
+                        || Uuid::try_parse(part).is_ok()
+                        || (part.len() >= 16 && part.bytes().all(|b| b.is_ascii_alphanumeric())))
+                {
+                    ":id"
+                } else {
+                    part
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("/");
+        format!("{prefix}/{path}")
+    })
+}
+
 pub(crate) fn mask(text: &str) -> String {
-    let text = normalize(text);
+    static QUERY: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?m)^\?[^\n]+|\?\S+"#).unwrap());
+    let cutoff = text.char_indices().nth(2000).map(|(pos, _)| pos);
+    let normalized = normalize(&text[..cutoff.unwrap_or(text.len())]);
+    let text = message_paths(&normalized);
     let mut spans: Vec<_> = PRIVATE
         .iter()
         .flat_map(|p| p.find_iter(&text).map(|m| m.range()))
         .chain(short_keys(&text))
         .chain(phones(&text))
-        .chain(credential_names(&text).filter_map(|m| credential_span(&text, m)))
         .collect();
+    // An assignment inside another bare value can outlive that value's semicolon.
+    static LINE_VALUE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+        r"(?i-u:\b(?:set-cookie|cookie|name|full[_-]?name|username|email|phone|mobile|tel|address|addr|birth|birthday))[ \t]*=([^>\n][^\n]*)"
+    ).unwrap()
+    });
+    spans.extend(
+        LINE_VALUE
+            .captures_iter(&text)
+            .map(|hit| hit.get(1).unwrap().range()),
+    );
+    let mut cursor = 0;
+    for hit in credential_names(&text) {
+        if hit.start() >= cursor
+            && let Some(span) = credential_span(&text, hit)
+        {
+            cursor = span.end;
+            spans.push(span);
+        }
+    }
     spans.sort_by_key(|r| r.start);
     let mut result = String::new();
     let mut end = 0;
@@ -360,7 +475,12 @@ pub(crate) fn mask(text: &str) -> String {
         end = end.max(span.end);
     }
     result.push_str(&text[end..]);
-    result.chars().take(300).collect()
+    let result = QUERY.replace_all(&result, "?[가림]");
+    if cutoff.is_some() {
+        result.chars().take(295).chain("…[잘림]".chars()).collect()
+    } else {
+        result.chars().take(300).collect()
+    }
 }
 pub fn credential(header: &str) -> Result<&str, ApiError> {
     let key = header

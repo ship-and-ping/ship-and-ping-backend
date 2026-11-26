@@ -335,6 +335,8 @@ fn shared_sanitize_vectors() {
     struct Case {
         input: String,
         expected: String,
+        #[serde(rename = "fullLineExpected")]
+        full_line_expected: Option<String>,
     }
     #[derive(serde::Deserialize)]
     struct Matrix {
@@ -354,7 +356,29 @@ fn shared_sanitize_vectors() {
         for form in &cases.matrix.forms {
             cases.mask.push(Case {
                 input: form.input.replace("{N}", name),
-                expected: form.expected.replace("{N}", name),
+                expected: if matches!(
+                    name.to_ascii_lowercase().as_str(),
+                    "cookie"
+                        | "set-cookie"
+                        | "name"
+                        | "full_name"
+                        | "fullname"
+                        | "username"
+                        | "email"
+                        | "phone"
+                        | "mobile"
+                        | "tel"
+                        | "address"
+                        | "addr"
+                        | "birth"
+                        | "birthday"
+                ) {
+                    form.full_line_expected.as_ref().unwrap_or(&form.expected)
+                } else {
+                    &form.expected
+                }
+                .replace("{N}", name),
+                full_line_expected: None,
             });
         }
     }

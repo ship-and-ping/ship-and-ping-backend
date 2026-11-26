@@ -32,10 +32,16 @@ it("pgTAP uses the shared name and form matrix", () => {
   expect(JSON.parse(sql.split("$matrix$")[1])).toEqual(vectors.matrix);
 });
 
+it("limits raw input and reserves space for the truncation marker", () => {
+  expect(maskText("🔒".repeat(295) + "가".repeat(1706))).toBe("🔒".repeat(295) + "…[잘림]");
+  expect(maskText("Cookie=" + "a".repeat(1994))).toBe("Cookie=[가림]…[잘림]");
+});
+
 for (const name of vectors.matrix.names) {
-  it.each(vectors.matrix.forms)(`mask ${name} form %#`, ({ input, expected }) => {
+  it.each(vectors.matrix.forms)(`mask ${name} form %#`, ({ input, expected, fullLineExpected }) => {
     const raw = input.replaceAll("{N}", name);
-    const masked = expected.replaceAll("{N}", name);
+    const fullLine = /^(?:cookie|set-cookie|name|full_name|fullname|username|email|phone|mobile|tel|address|addr|birth|birthday)$/i.test(name);
+    const masked = ((fullLine && fullLineExpected) || expected).replaceAll("{N}", name);
     expect(maskText(raw)).toBe(masked);
     expect(displayText(raw)).toBe(masked.replace(/\n+/g, " "));
   });
