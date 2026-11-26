@@ -28,7 +28,7 @@ const cases = [
   ["회원 가입","/signup","normal","input[name=confirm]"],
   ["새 비밀번호","/reset-password#type=recovery&access_token=qa-local-only&refresh_token=qa-local-only&expires_in=3600&token_type=bearer","normal","input[name=confirm]"],
   ["비밀번호 찾기","/forgot-password","normal","input[type=email]"],
-  ["PC 로그인 승인","/login/approve?req=qa-request","approval","fieldset"],
+  ["PC 로그인 승인","/login/approve?req=qa-request&proof=fixture","approval","input[inputmode=numeric]"],
 ];
 // Keep the original D6 indices stable for before/after comparisons.
 const flow = [

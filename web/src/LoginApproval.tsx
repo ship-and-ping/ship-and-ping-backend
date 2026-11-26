@@ -6,6 +6,8 @@ import { forget, remembered, type Decision, type LoginRequest } from "./login-re
 
 const messages: Record<string,string> = {
   approved:"이 PC 로그인을 승인했어요.", denied:"휴대폰에서 거절했어요.",
+  mismatch:"휴대폰에서 숫자가 맞지 않아 요청을 취소했어요. 다시 요청해 주세요.",
+  mail_required:"메일의 링크를 다시 눌러 주세요.",
   expired:"요청 시간이 지났어요. 새 메일을 받아 주세요.", used:"이미 처리한 요청이에요.",
   failed:"요청을 확인하지 못했어요. 새 메일을 받아 주세요.",
   limited:"요청이 너무 많아요. 잠시 후 다시 시도해 주세요.",
@@ -44,6 +46,7 @@ export function LoginWaiting({api,request,restart}: {api:Gateway; request:LoginR
 export function LoginApproval({api,user}: {api:Gateway; user:string|null}) {
   const [params] = useSearchParams();
   const id = params.get("req") ?? "";
+  const proof = params.get("proof") ?? "";
   const navigate = useNavigate();
   const [details,setDetails] = useState<Decision>();
   const [status,setStatus] = useState("loading");
@@ -52,11 +55,11 @@ export function LoginApproval({api,user}: {api:Gateway; user:string|null}) {
   useEffect(() => {
     let active = true;
     async function inspect() {
-      if (!user || !id || !api.requests) { setStatus("failed"); return; }
+      if (!user || !id || !proof || !api.requests) { setStatus("mail_required"); return; }
       const local = remembered();
       try {
         const same = local?.request_id===id;
-        const result = await api.requests.decide(id,same ? "local" : "inspect",undefined,same ? local.poll_secret : undefined);
+        const result = await api.requests.decide(id,same ? "local" : "inspect",proof,undefined,same ? local.poll_secret : undefined);
         if (!active) return;
         if (same && result.status==="used") { forget(id); navigate("/login",{replace:true}); return; }
         setDetails(result);
@@ -65,24 +68,24 @@ export function LoginApproval({api,user}: {api:Gateway; user:string|null}) {
     }
     void inspect();
     return () => {active=false;};
-  },[api,user,id,navigate]);
+  },[api,user,id,proof,navigate]);
   async function decide(action:"approve"|"deny") {
     if (busy || !api.requests) return;
     setBusy(true);
-    try { const result=await api.requests.decide(id,action,code); setStatus(result.status); setCode(""); }
+    try { const result=await api.requests.decide(id,action,proof,code); setStatus(result.status); setCode(""); }
     catch { setStatus("failed"); }
     finally {setBusy(false);}
   }
   return <><PublicBar/><main id="main" className="public"><section className="panel auth-form login-approval">
     <h1>PC 로그인을 승인할까요?</h1>
-    {details && ["pending","incorrect"].includes(status) ? <>
+    {details && status==="pending" ? <>
       <p>{new Date(details.created_at!).toLocaleString("ko-KR")} · {details.client_info?.browser} · {details.client_info?.place}</p>
-      <p>직접 요청하지 않았다면 거절해 주세요.</p>
-      <fieldset><legend>PC 화면의 숫자와 같은 숫자를 고르세요.</legend>
-        <div className="login-choices">{details.choices?.map(n=><label key={n}><input type="radio" name="match" value={n} checked={code===n} onChange={()=>setCode(n)}/> {n}</label>)}</div>
-      </fieldset>
-      {status==="incorrect" && <p role="alert">숫자가 달라요. PC 화면을 다시 확인해 주세요.</p>}
-      <button disabled={busy || !code} onClick={()=>void decide("approve")}>이 PC 로그인 승인</button>
+      <p>PC 화면에 보이는 숫자를 적어 주세요. 직접 로그인하려는 게 아니라면 적지 말고 [거절]을 누르세요.</p>
+      <label>PC 확인 숫자 두 자리
+        <input inputMode="numeric" pattern="[0-9]{2}" maxLength={2} autoComplete="off" value={code}
+          onChange={event=>setCode(event.target.value.replace(/[^0-9]/g,""))}/>
+      </label>
+      <button disabled={busy || code.length!==2} onClick={()=>void decide("approve")}>이 PC 로그인 승인</button>
       <button className="secondary" disabled={busy} onClick={()=>void decide("deny")}>거절</button>
     </> : <><p role="status">{status==="loading" ? "요청을 확인하고 있어요." : messages[status] ?? messages.failed}</p>
       <Link to="/login">쉽앤핑으로 돌아가기</Link></>}

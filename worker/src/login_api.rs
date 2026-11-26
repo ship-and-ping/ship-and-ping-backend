@@ -22,7 +22,7 @@ pub(super) async fn route(req: Request, env: &Env) -> Result<Response> {
     headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")?;
     headers.set(
         "Access-Control-Allow-Headers",
-        "Content-Type, Authorization, X-Poll-Secret",
+        "Content-Type, Authorization, X-Poll-Secret, X-Mail-Proof",
     )?;
     headers.set("Vary", "Origin")?;
     headers.set("Cache-Control", "no-store")?;
@@ -72,7 +72,46 @@ async fn handle(mut req: Request, env: &Env) -> Result<Response> {
             .headers()
             .get("CF-IPCountry")?
             .filter(|v| v.len() == 2 && v.bytes().all(|b| b.is_ascii_uppercase()));
-        rpc(&db,"login_create",&json!({"p_email":email,"p_ip":ip,"p_browser":browser,"p_place":place.unwrap_or_else(|| "위치 확인 불가".into())})).await?
+        let mut challenge = rpc(&db,"login_create",&json!({"p_email":email,"p_ip":ip,"p_browser":browser,"p_place":place.unwrap_or_else(|| "위치 확인 불가".into())})).await?;
+        if challenge["status"] != "limited" {
+            let Some(id) = challenge["request_id"].as_str() else {
+                return error(503, "request unavailable");
+            };
+            let Some(proof) = challenge["mail_secret"].as_str() else {
+                return error(503, "mail unavailable");
+            };
+            let redirect = format!(
+                "{}/login/approve?req={id}&proof={proof}",
+                env.var("WEB_ORIGIN")?
+            );
+            let (path, payload) = match body.get("password") {
+                None => ("otp", json!({"email":email,"create_user":true})),
+                Some(Value::String(password)) => (
+                    "signup",
+                    json!({"email":email,"password":password,"data":{"ship_ping_password_set":true}}),
+                ),
+                _ => return error(400, "invalid request"),
+            };
+            let mut url = Url::parse(&format!("{}/auth/v1/{path}", db.url.trim_end_matches('/')))?;
+            url.query_pairs_mut().append_pair("redirect_to", &redirect);
+            let headers = Headers::new();
+            headers.set("apikey", &env.var("SUPABASE_PUBLISHABLE_KEY")?.to_string())?;
+            headers.set("Content-Type", "application/json")?;
+            let mut init = RequestInit::new();
+            init.with_method(Method::Post)
+                .with_headers(headers)
+                .with_body(Some(payload.to_string().into()));
+            let response = Fetch::Request(Request::new_with_init(url.as_str(), &init)?)
+                .send()
+                .await?;
+            if !(200..300).contains(&response.status_code()) {
+                return error(503, "mail unavailable");
+            }
+            // Only the Auth email receives the proof. Explicitly whitelist the PC response.
+            challenge = json!({"request_id":id,"poll_secret":challenge["poll_secret"],
+                "match_code":challenge["match_code"],"expires_at":challenge["expires_at"]});
+        }
+        challenge
     } else {
         let pieces: Vec<_> = tail.trim_start_matches('/').split('/').collect();
         let Ok(id) = uuid::Uuid::parse_str(pieces[0]) else {
@@ -91,6 +130,7 @@ async fn handle(mut req: Request, env: &Env) -> Result<Response> {
         };
         let mut email = String::new();
         let mut member = String::new();
+        let mut mail_time = Value::Null;
         if action != "poll" {
             if rpc(&db, "login_auth_budget", &json!({"p_ip":ip})).await? != true {
                 return error(429, "too many requests");
@@ -118,10 +158,18 @@ async fn handle(mut req: Request, env: &Env) -> Result<Response> {
             };
             email = address.to_owned();
             member = uid.to_owned();
+            let mut stamp = db
+                .account_request(Method::Get, "/rest/v1/rpc/login_mail_time", Some(&auth))
+                .await?;
+            if stamp.status_code() != 200 {
+                return error(503, "authentication unavailable");
+            }
+            mail_time = stamp.json().await?;
         }
         let mut args = json!({"p_id":id,"p_action":action,"p_email":email,"p_ip":ip,
             "p_secret":req.headers().get("X-Poll-Secret")?.unwrap_or_default(),"p_code":body["match_code"].as_str().unwrap_or(""),
-            "p_key":key_hash(&format!("T32/login-grant/{}",db.key)),"p_token":""});
+            "p_key":key_hash(&format!("T32/login-grant/{}",db.key)),"p_token":"",
+            "p_proof":req.headers().get("X-Mail-Proof")?,"p_mail_time":mail_time});
         let decision = rpc(&db, "login_step", &args).await?;
         if action == "claim" && decision["status"] == "issuing" {
             let headers = Headers::new();

@@ -24,8 +24,8 @@ export async function mockPage(page, state, member, origin) {
     if (url.origin === origin) return route.continue();
     if (url.origin === "https://ingest.ship-and-ping.invalid" && url.pathname.startsWith("/v1/login-requests")) {
       const reply = url.pathname === "/v1/login-requests"
-        ? {request_id:"qa-request",poll_secret:"fixture-only",match_code:"427",expires_at:"2026-11-25T09:20:00Z"}
-        : state === "approval" ? {status:"pending",choices:["316","427","591"],created_at:now,client_info:{browser:"Chrome",place:"KR"}}
+        ? {request_id:"qa-request",poll_secret:"fixture-only",match_code:"07",expires_at:"2026-11-25T09:20:00Z"}
+        : state === "approval" ? {status:"pending",created_at:now,client_info:{browser:"Chrome",place:"KR"}}
         : {status:"pending"};
       return route.fulfill({json:reply});
     }

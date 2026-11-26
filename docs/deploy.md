@@ -3,7 +3,7 @@
 ## T32 기기 간 승인 적용 순서
 
 1. Supabase에 `20261126400000_login_requests.sql`을 적용한다. Auth Redirect URLs에 운영 Pages 원점의 `/login/approve?req=*`를 추가하고 로그인·가입 확인 메일 양식을 갱신한다.
-2. Worker를 배포한다. `WEB_ORIGIN`을 운영 Pages 원점으로 설정하고 기존 `SUPABASE_SECRET_KEY`를 사용한다. 키 교체 시 진행 중인 승인 요청은 새로 시작한다.
+2. Worker에 같은 Supabase 프로젝트의 공개 키를 `SUPABASE_PUBLISHABLE_KEY`로 등록하고 배포한다. Worker는 이 키로 일반 OTP·가입 메일을 요청하며, 해당 메일의 복귀 주소에만 요청별 승인 값을 넣는다. `WEB_ORIGIN`은 운영 Pages 원점으로 설정한다. 기존 `SUPABASE_SECRET_KEY`를 교체하면 진행 중인 승인 요청은 새로 시작한다.
 3. Pages를 배포한다. PC에서 메일 링크를 요청하고 휴대폰으로 확인해 두 기기에 각각 로그인되는지 확인한다. 새 요청을 거절해 PC 거절 화면도 확인한다.
 
 ## 1. 계정과 배포 권한 준비 · 사람

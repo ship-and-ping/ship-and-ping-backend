@@ -1,8 +1,8 @@
 create table private.login_requests (
  id uuid primary key default gen_random_uuid(), email text not null,
- poll_secret_hash bytea not null, match_code_hash bytea not null, choices text[] not null,
- status text not null default 'pending' check(status in ('pending','issuing','approved','denied','used')),
- attempts integer not null default 0, token_cipher bytea, client_info jsonb not null,
+ poll_secret_hash bytea not null, match_code_hash bytea not null, mail_secret_hash bytea not null,
+ status text not null default 'pending' check(status in ('pending','issuing','approved','denied','mismatch','used')),
+ token_cipher bytea, client_info jsonb not null,
  created_at timestamptz not null default now(), expires_at timestamptz not null default now()+interval '10 minutes'
 );
 create index on private.login_requests(expires_at);
@@ -33,20 +33,30 @@ grant execute on function public.login_auth_budget(text) to service_role;
 create function public.login_create(p_email text,p_ip text,p_browser text,p_place text) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare rid uuid:=gen_random_uuid(); secret text:=encode(extensions.gen_random_bytes(32),'hex');
- codes text[]; answer text; expiry timestamptz;
+ mail_secret text:=encode(extensions.gen_random_bytes(32),'hex'); digit_pair integer; answer text; expiry timestamptz;
 begin
  if not private.login_allow('create-ip',p_ip,30) or not private.login_allow('create-email',lower(trim(p_email)),5) then
   return '{"status":"limited"}';
  end if;
- select array_agg(n::text) into codes from (select n from generate_series(100,999) n order by random() limit 3) s;
- answer:=codes[1+(get_byte(extensions.gen_random_bytes(1),0)%3)];
- insert into private.login_requests(id,email,poll_secret_hash,match_code_hash,choices,client_info)
- values(rid,lower(trim(p_email)),extensions.digest(secret,'sha256'),extensions.digest(rid::text||answer,'sha256'),codes,
+ loop
+  digit_pair:=get_byte(extensions.gen_random_bytes(1),0);
+  exit when digit_pair<200;
+ end loop;
+ answer:=lpad((digit_pair%100)::text,2,'0');
+ insert into private.login_requests(id,email,poll_secret_hash,match_code_hash,mail_secret_hash,client_info)
+ values(rid,lower(trim(p_email)),extensions.digest(secret,'sha256'),extensions.digest(rid::text||answer,'sha256'),extensions.digest(mail_secret,'sha256'),
  jsonb_build_object('browser',p_browser,'place',p_place)) returning expires_at into expiry;
- return jsonb_build_object('request_id',rid,'poll_secret',secret,'match_code',answer,'expires_at',expiry);
+ return jsonb_build_object('request_id',rid,'poll_secret',secret,'match_code',answer,'expires_at',expiry,'mail_secret',mail_secret);
 end $$;
 
-create function public.login_step(p_id uuid,p_action text,p_email text,p_ip text,p_secret text,p_code text,p_key text,p_token text)
+-- PostgREST verifies the bearer before exposing the original authentication method and timestamp.
+create function public.login_mail_time() returns bigint language sql stable set search_path='' as $$
+ select max((m->>'timestamp')::bigint) from jsonb_array_elements(auth.jwt()->'amr') m where m->>'method'='otp'
+$$;
+revoke all on function public.login_mail_time() from public,anon;
+grant execute on function public.login_mail_time() to authenticated;
+
+create function public.login_step(p_id uuid,p_action text,p_email text,p_ip text,p_secret text,p_code text,p_key text,p_token text,p_proof text,p_mail_time bigint)
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare r private.login_requests; result text; category text:=case when p_action='poll' then 'poll' else 'approve' end;
 begin
@@ -57,6 +67,12 @@ begin
   if r.poll_secret_hash is distinct from extensions.digest(p_secret,'sha256') then return '{"status":"missing"}'; end if;
  end if;
  if p_action<>'poll' and r.email is distinct from lower(trim(p_email)) then return '{"status":"missing"}'; end if;
+ if p_action in ('inspect','claim','deny','local') and
+  (r.mail_secret_hash is distinct from extensions.digest(p_proof,'sha256') or p_mail_time is null
+   or to_timestamp(p_mail_time)<date_trunc('second',r.created_at)
+   or to_timestamp(p_mail_time)<clock_timestamp()-interval '5 minutes' or to_timestamp(p_mail_time)>clock_timestamp()) then
+  return '{"status":"mail_required"}';
+ end if;
  if not private.login_allow(category||'-email',r.email,case when category='poll' then 600 else 40 end) then return '{"status":"limited"}'; end if;
  if r.expires_at<=clock_timestamp() then return '{"status":"expired"}'; end if;
  if p_action='poll' then
@@ -72,11 +88,11 @@ begin
  end if;
  if r.status<>'pending' then return '{"status":"used"}'; end if;
  if p_action='inspect' then
-  return jsonb_build_object('status','pending','client_info',r.client_info,'created_at',r.created_at,'choices',r.choices);
+  return jsonb_build_object('status','pending','client_info',r.client_info,'created_at',r.created_at);
  elsif p_action='claim' then
   if r.match_code_hash is distinct from extensions.digest(p_id::text||p_code,'sha256') then
-   update private.login_requests set attempts=attempts+1,status=case when attempts>=2 then 'denied' else 'pending' end where id=p_id returning status into result;
-   return jsonb_build_object('status',case when result='pending' then 'incorrect' else result end);
+   update private.login_requests set status='mismatch' where id=p_id;
+   return '{"status":"mismatch"}';
   end if;
   result:='issuing';
  elsif p_action='deny' then result:='denied';
@@ -95,5 +111,5 @@ begin
  delete from private.login_limits where since<=now()-interval '10 minutes';
 end $$;
 revoke all on function private.cleanup_daily(),private.login_allow(text,text,integer),
- public.login_create(text,text,text,text),public.login_step(uuid,text,text,text,text,text,text,text) from public,anon,authenticated,service_role;
-grant execute on function public.login_create(text,text,text,text),public.login_step(uuid,text,text,text,text,text,text,text) to service_role;
+ public.login_create(text,text,text,text),public.login_step(uuid,text,text,text,text,text,text,text,text,bigint) from public,anon,authenticated,service_role;
+grant execute on function public.login_create(text,text,text,text),public.login_step(uuid,text,text,text,text,text,text,text,text,bigint) to service_role;

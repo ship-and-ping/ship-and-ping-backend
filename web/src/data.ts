@@ -89,9 +89,6 @@ function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
 }
 export function gateway(client: SupabaseClient, origin?: string): Gateway {
   const requests = origin ? loginRequests(client,origin) : undefined;
-  function redirect(request?: LoginRequest) {
-    return location.origin + (request ? "/login/approve?req="+encodeURIComponent(request.request_id) : "/login");
-  }
   const columns = "id,name,url,created_at,first_record_at";
   let withdrawalToken: string | undefined;
   // A fast Auth redirect can finish before React mounts the route listener.
@@ -260,9 +257,10 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       if (error) throw error;
     },
     async signup(email, password) {
-      const request = await requests?.create(email);
+      const request = await requests?.create(email,password).catch(() => undefined);
+      if (request) return request;
       const { error } = await client.auth.signUp({ email, password, options: {
-        emailRedirectTo: redirect(request), data: { ship_ping_password_set: true },
+        emailRedirectTo: location.origin + "/login", data: { ship_ping_password_set: true },
       } });
       if (error && error.code !== "user_already_exists" && error.code !== "email_exists") throw error;
       return request;
@@ -282,8 +280,9 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       if (error) throw error;
     },
     async login(email) {
-      const request = email ? await requests?.create(email) : undefined;
-      const redirectTo = redirect(request);
+      const request = email ? await requests?.create(email).catch(() => undefined) : undefined;
+      if (request) return request;
+      const redirectTo = location.origin + "/login";
       const result = email
         ? await client.auth.signInWithOtp({
             email,

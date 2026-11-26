@@ -84,6 +84,29 @@ fn ingest_http_statuses() {
         let output = curl.arg(format!("http://{addr}{path}")).output().unwrap();
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
+    for body in [
+        json!({"email":"phone@example.invalid"}),
+        json!({"email":"phone@example.invalid","password":"fixture-password"}),
+    ] {
+        let created = Command::new("curl")
+            .args([
+                "-s",
+                "-H",
+                "Origin: https://web.test",
+                "--json",
+                &body.to_string(),
+                &format!("http://{addr}/v1/login-requests"),
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&created.stdout).unwrap(),
+            json!({
+                "request_id":"00000000-0000-4000-8000-000000000042","poll_secret":"pc-only",
+                "match_code":"07","expires_at":"fixture-expiry"
+            })
+        );
+    }
     let request_url =
         format!("http://{addr}/v1/login-requests/00000000-0000-4000-8000-000000000042");
     let approved = Command::new("curl")
@@ -94,7 +117,9 @@ fn ingest_http_statuses() {
             "-H",
             "Authorization: Bearer phone",
             "--json",
-            r#"{"match_code":"427"}"#,
+            r#"{"match_code":"07"}"#,
+            "-H",
+            "X-Mail-Proof: fixture-mail",
             &format!("{request_url}/approve"),
         ])
         .output()

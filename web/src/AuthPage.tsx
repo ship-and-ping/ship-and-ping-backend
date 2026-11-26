@@ -96,13 +96,13 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
       } else if (action === "link") {
         const pending = await api.login(email.trim());
         if (pending) { remember(pending); setRequest(pending); }
-        setMessage("로그인 링크를 보냈어요. 메일이 안 오면 스팸함을 확인해 주세요.");
+        else setMessage("이 메일 링크는 링크를 연 기기에서 로그인돼요.");
       } else if (mode === "login") {
         await api.passwordLogin(email.trim(), password);
       } else if (mode === "signup") {
         const pending = await api.signup(email.trim(), password);
         if (pending) { remember(pending); setRequest(pending); }
-        setMessage("확인 메일을 보냈어요. 메일이 안 오면 스팸함을 확인해 주세요.");
+        else setMessage("이 메일 링크는 링크를 연 기기에서 로그인돼요.");
       } else if (mode === "forgot") {
         await api.requestReset(email.trim());
         setMessage("가입한 이메일이라면 비밀번호 재설정 메일을 받을 수 있어요. 스팸함도 확인해 주세요.");
