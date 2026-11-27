@@ -341,6 +341,27 @@ it("슬랙 연결을 시작할 수 없으면 알림 설정에 서버 안내를 �
   fireEvent.click(await screen.findByRole("button", { name: "Slack에 추가" }));
   expect(await screen.findByText(message)).toBeTruthy();
 });
+it("이메일 설정 저장 중에는 이전 상태를 유지하고 실패하면 다시 시도할 수 있다", async () => {
+  const api = fake();
+  let rejectSave!: (reason: Error) => void;
+  vi.mocked(api.emailSetting).mockImplementationOnce(() => new Promise<void>((_, reject) => { rejectSave = reject; }));
+  open("/apps/a/notifications", api);
+  const toggle = await screen.findByRole<HTMLButtonElement>("switch", {name:"이메일로도 받기"});
+  fireEvent.click(toggle);
+  expect(toggle.disabled).toBe(true);
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  expect(screen.getByText("이메일 알림 설정을 저장하는 중이에요.")).toBeTruthy();
+  fireEvent.click(toggle);
+  expect(api.emailSetting).toHaveBeenCalledTimes(1);
+  rejectSave(new Error("다시 시도해 주세요."));
+  await screen.findByText("다시 시도해 주세요.");
+  expect(toggle.disabled).toBe(false);
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  vi.mocked(api.settings).mockResolvedValueOnce({email:true,connected:false,broken:false,channel:null});
+  fireEvent.click(toggle);
+  await screen.findByText("이메일 알림이 켜졌어요.");
+  expect(toggle.getAttribute("aria-checked")).toBe("true");
+});
 it("받을 곳 없음, 연결 끊김, 연결됨 상태와 시험 알림을 표시한다", async () => {
   const api = fake();
   open("/apps/a/notifications", api);
@@ -485,7 +506,7 @@ it("베타 정원이 차면 앱 등록 화면에 이유를 표시한다", async 
   fireEvent.change(await screen.findByLabelText("앱 이름 (필수)"), {
     target: { value: "새 앱" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "등록" }));
+  fireEvent.click(screen.getByRole("button", { name: "등록하고 연결하기" }));
   expect(await screen.findByText("베타 정원이 찼어요")).toBeTruthy();
   expect(api.issue).not.toHaveBeenCalled();
 });
@@ -495,7 +516,7 @@ it("등록한 수집 키는 미리 보기에서 가리고 화면을 다시 열�
   fireEvent.change(await screen.findByLabelText("앱 이름 (필수)"), {
     target: { value: " 내 앱 " },
   });
-  fireEvent.click(screen.getByRole("button", { name: "등록" }));
+  fireEvent.click(screen.getByRole("button", { name: "등록하고 연결하기" }));
   const preview = (await screen.findByLabelText(
     "연결 요청문 복사(키 포함) 전문",
   )) as HTMLTextAreaElement;

@@ -8,7 +8,8 @@ import { exampleEmail, mockPage, now } from "./fixtures.mjs";
 
 const phase = process.argv[2] ?? "screens";
 const require = createRequire(import.meta.url);
-if (!["screens", "before", "after","qa3-before","qa3-after"].includes(phase)) throw Error("Unknown QA phase");
+const patterns = ["patterns-before", "patterns-after"].includes(phase);
+if (!patterns && !["screens", "before", "after","qa3-before","qa3-after"].includes(phase)) throw Error("Unknown QA phase");
 const qa3 = phase.startsWith("qa3-");
 const gallery = phase === "screens";
 const dir = gallery ? resolve("../docs/design/screens") : resolve("../docs/design/qa", phase);
@@ -78,7 +79,10 @@ const profiles = qa3 ? [[1440,"light",1,false],[1440,"dark",1,false],[390,"light
   [1440,"light",1,false], [1280,"dark",1,false], [390,"light",1,false], [390,"dark",2,true],
 ];
 const selected = process.argv.slice(3);
-const scenes = gallery || qa3 ? flow : cases;
+const scenes = patterns ? [...cases,
+  ["내 앱 불러오기","/apps","loading","main h1"],
+  ["이메일 알림 저장","/apps/demo/notifications","email-saving","[role=switch]"],
+] : gallery || qa3 ? flow : cases;
 if (selected.some(id => !scenes[Number(id)] || String(Number(id)) !== id)) throw Error("Unknown screen index");
 const server = await createServer({server:{host:"127.0.0.1",port:4179,strictPort:true,hmr:false},
   define: { "import.meta.env.VITE_SUPABASE_URL": JSON.stringify("https://example.supabase.co"),
@@ -102,6 +106,16 @@ try {
         await page.goto(origin+path,{waitUntil:"domcontentloaded"});
         await page.locator(ready).first().waitFor({timeout:12000});
         if (gallery || qa3) await prepareScene(page,state);
+        if (state === "email-saving") {
+          const toggle = page.getByRole("switch");
+          await tabTo(page,toggle);
+          await page.keyboard.press("Space");
+          await page.waitForSelector('[role=switch]:disabled');
+          if (phase === "patterns-after") {
+            await page.getByRole("status").filter({hasText:"이메일 알림 설정을 저장하는 중이에요."}).waitFor();
+            if (await toggle.getAttribute("aria-checked") !== "true") throw Error("Unconfirmed email setting");
+          }
+        }
         if (phase === "qa3-after" && state === "approval") {
           const field = page.getByRole("textbox");
           await tabTo(page,field);
@@ -140,18 +154,19 @@ try {
           if (endings.length) console.warn("Short last lines", index, endings);
         }
         const issues = [];
-        if (phase === "after" || phase === "qa3-after") {
+        if (phase === "after" || phase === "qa3-after" || phase === "patterns-after") {
           await page.addScriptTag({path:require.resolve("axe-core/axe.min.js")});
           const violations = await page.evaluate(async () => (await window.axe.run(document, {
             runOnly:{type:"tag",values:["wcag2a","wcag2aa","wcag21aa"]},
           })).violations.map(v=>({id:v.id,targets:v.nodes.map(n=>n.target)})));
           issues.push(...violations);
         }
-        if ((phase === "after" || phase === "qa3-after") && reduced && await page.evaluate(()=>document.getAnimations().length))
+        if (phase.endsWith("after") && reduced && await page.evaluate(()=>document.getAnimations().length))
           throw Error("Reduced-motion animation on "+path);
         const file = gallery ? String(index+1).padStart(2,"0")+"-"+width+".jpg"
           : String(index).padStart(2,"0")+"-"+state+"-"+width+"-"+colorScheme+".jpg";
-        const capture = phase !== "qa3-after" || state === "approval-mismatch" || existsSync(resolve(dir,"../qa3-before",file));
+        const capture = phase === "patterns-after" ? existsSync(resolve(dir,"../patterns-before",file))
+          : phase !== "qa3-after" || state === "approval-mismatch" || existsSync(resolve(dir,"../qa3-before",file));
         if (capture) {
           const bytes = await page.screenshot({path:resolve(dir,file),type:"jpeg",quality:80,fullPage:true,animations:"disabled"});
           if (gallery && bytes.length > 500000) throw Error(file+" exceeds 500 KB");
@@ -161,7 +176,16 @@ try {
             const rect = el.getBoundingClientRect();
             return rect.height < 44 || rect.width < 44;
           }).map(el=>el.getAttribute("aria-label") || el.textContent.trim() || el.name)) : [];
-        entries.push({title,state,width,colorScheme,scale,reduced,file,overflow,issues,...(qa3 ? {capture,smallTargets} : {})});
+        entries.push({title,state,width,colorScheme,scale,reduced,file,overflow,issues,...(patterns ? {capture} : {}),...(qa3 ? {capture,smallTargets} : {})});
+        if (phase === "patterns-after" && path === "/") {
+          const item = page.locator(".product-example .issue-list-item button");
+          await tabTo(page,item);
+          await page.keyboard.press("Enter");
+          const detail = page.getByRole("button",{name:"문제 상세",exact:true});
+          await page.getByRole("heading",{name:"모임 신청 20건 중 6건 실패"}).waitFor();
+          if (!await detail.evaluate(el=>el===document.activeElement && el.getAttribute("aria-pressed")==="true"))
+            throw Error("Example detail lost keyboard focus");
+        }
         if (state === "approval-mismatch") {
           await page.reload();
           await page.getByRole("status").filter({hasText:"이미 처리한 요청이에요."}).waitFor();
@@ -212,7 +236,7 @@ try {
   console.log(entries.length+" views checked, "+entries.filter(entry=>entry.capture !== false).length+" screenshots in "+dir);
   if (phase === "qa3-after" && entries.some(entry=>entry.smallTargets.length))
     throw Error("Review targets smaller than 44px in results.json");
-  if ((phase === "after" || phase === "qa3-after") && entries.some(entry=>entry.issues.length || entry.overflow > 1))
+  if (phase.endsWith("after") && entries.some(entry=>entry.issues.length || entry.overflow > 1))
     throw Error("Review overflow or axe findings in results.json");
 } finally { await browser?.close(); await server.close(); }
 

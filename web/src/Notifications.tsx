@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { CurrentAppName } from "./Layout";
+import { CurrentAppName, LoadingRows } from "./Layout";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import type { AlertSettings, AppSummary, Gateway } from "./data";
 import { displayText } from "./normalize";
@@ -73,7 +73,7 @@ export function Notifications({ api, origin }: Props) {
             setListFailed(false);
             setAttempt(n => n + 1);
           }}>앱 목록 다시 불러오기</button>
-        </div> : <div className="monitor-loading" role="status" aria-busy="true">알림을 설정할 앱을 불러오는 중이에요.<div aria-hidden="true" /><div aria-hidden="true" /></div>
+        </div> : <LoadingRows>알림을 설정할 앱을 불러오는 중이에요.</LoadingRows>
       ) : !apps.length ? (
         <p>알림을 받을 앱이 아직 없어요. <Link to="/apps/new">앱 등록하기</Link></p>
       ) : (
@@ -102,9 +102,11 @@ export function Notifications({ api, origin }: Props) {
     </>
   );
 }
+type NotificationAction = "connect" | "disconnect" | "test" | "email";
 function Settings({ app, api, origin }: Props & { app: string }) {
   const [settings, setSettings] = useState<AlertSettings>();
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<NotificationAction | null>(null);
+  const busy = pending !== null;
   const [message, setMessage] = useState("");
   const [feedbackArea, setFeedbackArea] = useState<"slack" | "email">("slack");
   const [attempt, setAttempt] = useState(0);
@@ -122,17 +124,20 @@ function Settings({ app, api, origin }: Props & { app: string }) {
       active = false;
     };
   }, [api, app, attempt]);
-  async function act(fn: () => Promise<void>, area: "slack" | "email" = "slack") {
-    setBusy(true);
-    setFeedbackArea(area);
+  async function act(action: NotificationAction, fn: () => Promise<void>) {
+    setPending(action);
+    setFeedbackArea(action === "email" ? "email" : "slack");
     setMessage("");
     try {
       await fn();
-      setSettings(await api.settings(app));
+      const confirmed = await api.settings(app);
+      setSettings(confirmed);
+      if (action === "email")
+        setMessage(confirmed.email ? "이메일 알림이 켜졌어요." : "이메일 알림이 꺼졌어요.");
     } catch (error) {
       setMessage(reason(error));
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }
   async function connect() {
@@ -167,7 +172,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                     <button
                       disabled={busy}
                       onClick={() =>
-                        act(async () =>
+                        act("test", async () =>
                           setMessage(
                             (await api.testSlack(app))
                               ? "시험 알림을 예약했어요. 잠시 뒤 슬랙에서 확인해 주세요."
@@ -176,14 +181,14 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                         )
                       }
                     >
-                      시험 알림 보내기
+                      {pending === "test" ? "시험 알림 요청 중" : "시험 알림 보내기"}
                     </button>
                     <button
                       className="secondary"
                       disabled={busy}
-                      onClick={() => act(() => api.disconnectSlack(app))}
+                      onClick={() => act("disconnect", () => api.disconnectSlack(app))}
                     >
-                      슬랙 연결 끊기
+                      {pending === "disconnect" ? "연결 끊는 중" : "슬랙 연결 끊기"}
                     </button>
                   </div>
                 </>
@@ -203,8 +208,8 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                       돌아와요.
                     </p>
                   )}
-                  <button disabled={busy} onClick={() => act(connect)}>
-                    {settings.broken ? "슬랙 다시 연결" : "Slack에 추가"}
+                  <button disabled={busy} onClick={() => act("connect", connect)}>
+                    {pending === "connect" ? "슬랙 연결 요청 중" : settings.broken ? "슬랙 다시 연결" : "Slack에 추가"}
                   </button>
                 </>
               )}
@@ -215,10 +220,11 @@ function Settings({ app, api, origin }: Props & { app: string }) {
               <button
                 role="switch"
                 className="notification-switch"
+                aria-label="이메일로도 받기"
                 aria-checked={settings.email}
                 disabled={busy}
                 onClick={() =>
-                  act(() => api.emailSetting(app, !settings.email), "email")
+                  act("email", () => api.emailSetting(app, !settings.email))
                 }
               >
                 이메일로도 받기 · {settings.email ? "켜짐" : "꺼짐"}
@@ -229,7 +235,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                   ? "슬랙이 끊긴 동안은 꺼 두어도 이메일로 보내요."
                   : "로그인한 이메일로 보내요."}
               </p>
-              {feedbackArea === "email" && message && <p role="status">{message}</p>}
+              {feedbackArea === "email" && <p role="status">{pending === "email" ? "이메일 알림 설정을 저장하는 중이에요." : message}</p>}
             </section>
           </div>
           <details>
@@ -242,7 +248,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
           </details>
         </>
       ) : message ? (
-        <button onClick={() => setAttempt((n) => n + 1)}>다시 불러오기</button>
+        <button onClick={() => { setMessage(""); setAttempt((n) => n + 1); }}>다시 불러오기</button>
       ) : (
         <p role="status">알림 설정을 불러오는 중</p>
       )}
