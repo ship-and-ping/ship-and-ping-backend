@@ -358,6 +358,18 @@ mod tests {
     }
 
     #[test]
+    fn slow_mail_uses_the_detection_window_and_normal_range() {
+        let mut n = notice("open", "slow");
+        n.metric = json!({"baseline_p50":200,"baseline_p95":400,"p50":1400,"severity":7,"window":10,"total":12});
+        let mail = render_mail(&[n], 0, Some(ORIGIN));
+        for body in [&mail.html, &mail.text] {
+            for expected in ["평소 약 0.2초", "보통 0.4초 안", "최근 10분", "약 1.4초", "7배", "12건"] {
+                assert!(body.contains(expected), "{expected} missing from {body}");
+            }
+        }
+    }
+
+    #[test]
     fn resend_contains_safe_html_and_plain_text() {
         let mut row = notice("open", "failure");
         row.app_name = Some("<script>&\"'".into());
