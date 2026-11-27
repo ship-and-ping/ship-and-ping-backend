@@ -29,4 +29,3 @@ export function compareVersions(row: Insight) {
   const ratio = before === after ? 1 : Math.max(after,before) / Math.min(after,before);
   return {before, after, ratio, direction};
 }
-

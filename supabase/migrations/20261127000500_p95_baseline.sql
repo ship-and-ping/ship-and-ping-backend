@@ -77,11 +77,21 @@ returns table(ms integer,n integer) language sql immutable parallel safe set sea
  ), bounds as (
   select *,sum(low::numeric*n) over()/sum(n) over() mean_low,
    sum(high::numeric*n) over()/sum(n) over() mean_high from bins
+ ), centers as (
+  select *,low+(high-low)*least(1,greatest(0,coalesce((mean_ms-mean_low)/nullif(mean_high-mean_low,0),0.5))) center,
+   case when lo is not null and hi is not null and low<high then least(n,33) else 1 end groups
+  from bounds
+ ), strata as (
+  select low,high,center,c.n,g*c.n::bigint/groups first_rank,(g+1)*c.n::bigint/groups past_last
+  from centers c cross join lateral generate_series(0,groups-1) g
+ ), positions as (
+  select *,coalesce((first_rank+past_last-1)::numeric/nullif(n-1,0),1) position from strata
  )
  select e.ms,e.n from exact e where (select complete from coverage)
  union all
- select round(low+(high-low)*least(1,greatest(0,coalesce((mean_ms-mean_low)/nullif(mean_high-mean_low,0),0.5))))::int,n
- from bounds
+ select round(case when position<=1 then low+(center-low)*position
+              else center+(high-center)*(position-1) end)::int,(past_last-first_rank)::int
+ from positions
 $$;
 
 -- percentile_cont over weighted millisecond values without expanding counts to rows.
