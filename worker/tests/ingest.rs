@@ -284,7 +284,9 @@ fn refined_histogram_uses_inclusive_upper_bounds() {
         .collect();
     let (bytes, _) = prepare(&key(), &serde_json::to_vec(&batch(rows)).unwrap(), NOW).unwrap();
     let rpc: Value = serde_json::from_slice(&bytes).unwrap();
-    let hist = rpc["payload"]["stats"][0]["hist"].as_array().unwrap();
+    let stat = &rpc["payload"]["stats"][0];
+    assert_eq!(stat["hist"], json!([0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 4, 1, 0, 0, 0]));
+    let hist = stat["hist_30"].as_array().unwrap();
     let occupied: Vec<_> = hist
         .iter()
         .enumerate()

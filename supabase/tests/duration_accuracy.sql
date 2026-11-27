@@ -9,11 +9,12 @@ insert into app_keys(app_id,kind,prefix,key_hash) select id,'pub','fixture',repe
 
 -- Build the wire-format counts independently of the database binning helper.
 create function pg_temp.record(route text, samples integer[], age interval default '5 minutes',
-                              failed integer default 0) returns jsonb language sql as $$
+                              failed integer default 0, legacy boolean default false) returns jsonb language sql as $$
  with bounds as (
-  select edge,i from unnest(array[50,100,200,300,500,750,1000,1500,2000,3000,
+  select edge,i from unnest(case when legacy then array[50,100,200,300,500,750,1000,1500,2000,3000,
+    5000,7500,10000,20000,30000,600000] else array[50,100,200,300,500,750,1000,1500,2000,3000,
     3300,3600,3900,4200,4500,4800,5000,5100,5400,5700,6000,6300,6600,6900,7200,7500,
-    10000,20000,30000,600000]) with ordinality as b(edge,i)
+    10000,20000,30000,600000] end) with ordinality as b(edge,i)
  ), events as (
   select ms,pos,(select min(i) from bounds where edge>=ms) bin from unnest(samples) with ordinality e(ms,pos)
  )
@@ -64,5 +65,16 @@ select is(private.hist_above(array_fill(0,array[10])||array[3,0,0,0,0,0],3300),0
  'changed custom threshold stays conservative with old counts');
 select is(private.hist_above(array_fill(0,array[10])||array[2,3]||array_fill(0,array[18]),3300),3::bigint,
  'changed custom threshold excludes the boundary itself with refined counts');
+select pg_temp.record('/mixed',array_fill(3200,array[5]),legacy=>true);
+select pg_temp.record('/mixed',array[3200]);
+update features set slow_threshold_ms=3300 where route='/mixed';
+select results_eq($$select (metric->>'slow')::int,(metric->>'total')::int,breached from speeds where route='/mixed'$$,
+ 'select 0,6,false','five legacy and one refined success below the new threshold stay below it');
+select pg_temp.record('/mixed',array[3301,4900]);
+select is((select (metric->>'slow')::int from speeds where route='/mixed'),2,
+ 'refined observations above the custom threshold remain countable after another merge');
+update features set slow_threshold_ms=3000 where route='/mixed';
+select is((select (metric->>'slow')::int from speeds where route='/mixed'),8,
+ 'legacy observations count when their entire interval exceeds the new threshold');
 select * from finish();
 rollback;
