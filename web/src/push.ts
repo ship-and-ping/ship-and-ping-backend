@@ -29,9 +29,6 @@ export function standalone() {
   return (navigator as Navigator & {standalone?: boolean}).standalone === true ||
     Boolean(window.matchMedia?.("(display-mode: standalone)").matches);
 }
-const bindingCache = "ship-ping-push-device";
-const bindingPath = "/.push-device";
-
 export function notifyPushChange() {
   window.dispatchEvent(new Event("push-device-change"));
   if (window.BroadcastChannel) {
@@ -41,22 +38,6 @@ export function notifyPushChange() {
   }
 }
 
-type PushBinding = { device: string; owner: string };
-
-export async function getPushBinding(): Promise<PushBinding | null> {
-  const cache = await globalThis.caches?.open(bindingCache);
-  const response = await cache?.match(bindingPath);
-  // Older releases only stored the device id, without a verified owner.
-  const binding = await response?.json().catch(() => null);
-  return typeof binding?.device === "string" && typeof binding.owner === "string" ? binding : null;
-}
-
-export async function setPushBinding(binding: PushBinding | null) {
-  if (!binding && !globalThis.caches) return;
-  const cache = await caches.open(bindingCache);
-  if (binding) await cache.put(bindingPath, new Response(JSON.stringify(binding)));
-  else await cache.delete(bindingPath);
-}
 export async function closePushNotifications() {
   const registration = await navigator.serviceWorker?.getRegistration("/");
   const notices = await registration?.getNotifications?.();
@@ -75,7 +56,7 @@ export async function fingerprint(bytes: ArrayBuffer | null | undefined) {
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2,"0")).join("");
 }
-export async function subscribe(remove: (endpoint: string) => Promise<void>) {
+export async function subscribe(remove: (endpoint: string) => Promise<void>, registeredEndpoint?: string) {
   const bytes = configuredKey();
   if (!bytes) throw Error("푸시 발송 설정을 준비 중이에요.");
   // iOS requires permission to be requested directly from a user gesture.
@@ -85,7 +66,7 @@ export async function subscribe(remove: (endpoint: string) => Promise<void>) {
   const registration = await navigator.serviceWorker.ready;
   const current = await registration.pushManager.getSubscription();
   const oldKey = current?.options.applicationServerKey;
-  if (current && oldKey && bytes.toString() === new Uint8Array(oldKey).toString()) return current;
+  if (current && current.endpoint === registeredEndpoint && oldKey && bytes.toString() === new Uint8Array(oldKey).toString()) return current;
   if (current) {
     await remove(current.endpoint);
     if (!await current.unsubscribe()) throw Error("푸시 구독을 갱신하지 못했어요.");

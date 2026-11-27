@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AlertSettings, Gateway, PushDevice } from "./data";
-import { canInstall, configuredKey, deniedHelp, deviceType, fingerprint, getPushBinding, install, notifyPushChange, setPushBinding, standalone, subscribe } from "./push";
+import { canInstall, configuredKey, deniedHelp, deviceType, fingerprint, install, notifyPushChange, standalone, subscribe } from "./push";
 
 type Props = { api: Gateway; app: string; settings: AlertSettings; reload(): void };
 export function PushChannel({api, app, settings, reload}: Props) {
@@ -8,7 +8,6 @@ export function PushChannel({api, app, settings, reload}: Props) {
   const [endpoint, setEndpoint] = useState("");
   const [keyHash, setKeyHash] = useState<string | null>(null);
   const [browserHash, setBrowserHash] = useState<string | null>(null);
-  const [boundDevice, setBoundDevice] = useState<string | null>(null);
   const [installable, setInstallable] = useState(canInstall);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
@@ -18,9 +17,8 @@ export function PushChannel({api, app, settings, reload}: Props) {
   const home = standalone();
   const supported = "Notification" in window && "PushManager" in window && "serviceWorker" in navigator;
   const current = devices.find(d => d.endpoint === endpoint);
-  const missingBinding = endpoint && (!boundDevice || (current && current.id !== boundDevice));
   const keyChanged = current && (!keyHash || current.vapid_fingerprint !== keyHash || (browserHash && browserHash !== keyHash));
-  const stale = missingBinding || keyChanged;
+  const stale = keyChanged;
   useEffect(() => {
     const update = () => setInstallable(canInstall());
     const updateDevices = () => setVersion(v => v + 1);
@@ -44,8 +42,7 @@ export function PushChannel({api, app, settings, reload}: Props) {
       .then(reg => reg?.pushManager.getSubscription())
       .then(async sub => {
         const hash = await fingerprint(sub?.options?.applicationServerKey);
-        const binding = await getPushBinding().catch(() => null);
-        if (active) { setBrowserHash(hash); setEndpoint(sub?.endpoint ?? ""); setBoundDevice(binding?.device ?? null); }
+        if (active) { setBrowserHash(hash); setEndpoint(sub?.endpoint ?? ""); }
       }).catch(() => {});
     return () => { active = false; };
   }, [api, supported, version]);
@@ -63,8 +60,13 @@ export function PushChannel({api, app, settings, reload}: Props) {
     reload();
   }
   async function enable() {
-    const sub = await subscribe(api.removeEndpoint);
-    await api.registerPush(app,sub.toJSON(),type);
+    const sub = await subscribe(api.removeEndpoint, current?.endpoint);
+    try {
+      await api.registerPush(app,sub.toJSON(),type);
+    } catch (error) {
+      if (sub.endpoint !== current?.endpoint) await sub.unsubscribe().catch(() => {});
+      throw error;
+    }
     setEndpoint(sub.endpoint);
     setMessage("이 기기에서 푸시를 받을 수 있어요.");
     refresh();
@@ -76,7 +78,6 @@ export function PushChannel({api, app, settings, reload}: Props) {
       const reg = await navigator.serviceWorker.getRegistration("/");
       const sub = await reg?.pushManager.getSubscription();
       if (sub?.endpoint === device.endpoint) {
-        await setPushBinding(null);
         await sub.unsubscribe();
         notifyPushChange();
       }

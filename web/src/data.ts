@@ -4,7 +4,7 @@ import { loginRequests, type LoginRequest } from "./login-requests";
 import { loadMonitor, type Monitor } from "./monitor-data";
 import type { DeepFeature, Definitions, FirstResult } from "./deep";
 import { resultKinds } from "./deep";
-import { closePushNotifications, configuredKey, currentSubscription, deviceType, fingerprint, getPushBinding, notifyPushChange, setPushBinding } from "./push";
+import { closePushNotifications, configuredKey, currentSubscription, fingerprint, notifyPushChange } from "./push";
 
 interface AppRow {
   url?: string | null;
@@ -115,49 +115,27 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
         if (event === "PASSWORD_RECOVERY") initialRecovery = session?.user.id;
         if (!session) initialRecovery = undefined;
       }).data.subscription : undefined;
-  async function savePush(app: string | null, sub: PushSubscriptionJSON, agent: string, hash: string | null) {
-    const {data, error} = await client.rpc("register_push", {app,p_endpoint:sub.endpoint,
-      p_key:sub.keys?.p256dh,p_auth:sub.keys?.auth,p_agent:agent,p_fingerprint:hash});
-    if (error) throw error;
-    return data as string | null;
-  }
   async function removeEndpoint(endpoint: string) {
     const {error} = await client.from("push_subscriptions").delete().eq("endpoint",endpoint);
     if (error) throw error;
   }
-  // Serialize local binding writes with logout and with other tabs on this origin.
-  function deviceOperation<T>(action: () => Promise<T>) {
-    return navigator.locks ? navigator.locks.request("push-device", action) : action();
+  // Auth redirects can replace the account while this page is closed.
+  // Only the page uses this marker to detect that transition on its next load.
+  const lastMemberKey = "ship-ping-last-member";
+  let observedMember: string | null | undefined;
+  async function unregister(sub: PushSubscription) {
+    const keys = sub.toJSON().keys;
+    await client.rpc("unregister_browser_push", {p_endpoint:sub.endpoint,
+      p_key:keys?.p256dh,p_auth:keys?.auth}).abortSignal(AbortSignal.timeout(5000));
   }
-  async function restorePush(user: string | null) {
-    await deviceOperation(async () => {
-      const {data} = await client.auth.getSession();
-      if ((data.session?.user.id ?? null) !== user) return;
-      try {
-        const previous = await getPushBinding().catch(() => null);
-        try {
-          if (!user || previous?.owner !== user) await closePushNotifications();
-        } finally {
-          await setPushBinding(null);
-        }
-        if (!user) return;
-        const sub = await currentSubscription();
-        if (!sub) return;
-        const device = await savePush(null, sub.toJSON(), deviceType(), await fingerprint(sub.options.applicationServerKey));
-        if (device) await setPushBinding({device, owner:user});
-      } finally {
-        notifyPushChange();
-      }
-    });
-  }
-  // The worker cannot read the Supabase session. Only attest to a device visible
-  // under the current session's RLS policy, with the same user before and after.
-  async function confirmPushOwner(device: string, owner: string) {
-    const session = await client.auth.getSession();
-    if (session.error || session.data.session?.user.id !== owner) return false;
-    const row = await client.from("push_subscriptions").select("id").eq("id",device).maybeSingle();
-    const latest = await client.auth.getSession();
-    return !row.error && row.data?.id === device && !latest.error && latest.data.session?.user.id === owner;
+  async function clearDevice(accountDeleted = false) {
+    async function revoke() {
+      const sub = await currentSubscription();
+      if (sub) await Promise.allSettled([
+        accountDeleted ? undefined : unregister(sub), sub.unsubscribe(),
+      ]);
+    }
+    await Promise.allSettled([closePushNotifications(), revoke()]);
   }
   return {
     requests,
@@ -255,17 +233,10 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       return value(await client.from("push_subscriptions").select("id,endpoint,user_agent,created_at,vapid_fingerprint").order("created_at"));
     },
     async registerPush(app, sub, agent) {
-      await deviceOperation(async () => {
-        const {data} = await client.auth.getSession();
-        const owner = data.session?.user.id;
-        if (!owner) throw Error("로그인이 필요해요.");
-        const previous = await getPushBinding().catch(() => null);
-        if (previous?.owner !== owner) await closePushNotifications();
-        const device = await savePush(app, sub, agent, await fingerprint(configuredKey()?.buffer));
-        if (!device) throw Error("기기 등록 실패");
-        await setPushBinding({device,owner});
-        notifyPushChange();
-      });
+      const {data,error} = await client.rpc("register_push", {app,p_endpoint:sub.endpoint,
+        p_key:sub.keys?.p256dh,p_auth:sub.keys?.auth,p_agent:agent,p_fingerprint:await fingerprint(configuredKey()?.buffer)});
+      if (error || !data) throw error ?? Error("기기 등록 실패");
+      notifyPushChange();
     },
     async removeDevice(id) {
       const {error} = await client.from("push_subscriptions").delete().eq("id",id);
@@ -331,45 +302,28 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       return data.session?.user.id ?? null;
     },
     listen(fn) {
-      let restored: string | null | undefined;
-      let timer: ReturnType<typeof setTimeout>;
-      let generation = 0;
-      function restore(user: string | null, attempt: number, retry = true) {
-        void restorePush(user).catch(() => {
-          if (generation !== attempt) return;
-          if (retry) timer = setTimeout(() => restore(user, attempt, false), 5000);
-          else restored = undefined;
-        });
-      }
-      const confirm = (event: MessageEvent) => {
-        if (event.data?.type !== "confirm-push-owner" || !event.ports[0] || !event.source ||
-          event.source !== navigator.serviceWorker.controller) return;
-        const {device, owner} = event.data;
-        void confirmPushOwner(device, owner).catch(() => false).then(ok => event.ports[0].postMessage(ok));
-      };
-      navigator.serviceWorker?.addEventListener?.("message", confirm);
       const { data } = client.auth.onAuthStateChange((event, session) => {
-        fn(session?.user.id ?? null, event === "PASSWORD_RECOVERY");
         const user = session?.user.id ?? null;
-        if (user !== restored) {
-          restored = user;
-          // Supabase releases its auth lock after the callback returns.
-          clearTimeout(timer);
-          const attempt = ++generation;
-          timer = setTimeout(() => restore(user, attempt), 0);
+        if (user !== observedMember) {
+          let previous = observedMember;
+          try {
+            previous = localStorage.getItem(lastMemberKey);
+            if (user) localStorage.setItem(lastMemberKey,user);
+            else localStorage.removeItem(lastMemberKey);
+          } catch { /* Private storage can be unavailable. */ }
+          observedMember = user;
+          if (previous !== user || (!user && event === "INITIAL_SESSION")) {
+            void clearDevice().catch(() => {}).finally(notifyPushChange);
+          }
         }
+        fn(user, event === "PASSWORD_RECOVERY");
       });
       earlyListener?.unsubscribe();
       if (initialRecovery) {
         fn(initialRecovery, true);
         initialRecovery = undefined;
       }
-      return () => {
-        generation++;
-        clearTimeout(timer);
-        navigator.serviceWorker?.removeEventListener?.("message", confirm);
-        data.subscription.unsubscribe();
-      };
+      return () => data.subscription.unsubscribe();
     },
     async passwordLogin(email, password) {
       const { error } = await client.auth.signInWithPassword({ email, password });
@@ -415,20 +369,7 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       return request;
     },
     async logout(accountDeleted) {
-      // An ordinary logout can retry device removal while still authenticated.
-      // Every terminal withdrawal result must attempt local sign-out.
-      function cleanup(step: Promise<unknown>) {
-        return accountDeleted === undefined ? step : step.catch(() => {});
-      }
-      await cleanup(deviceOperation(async () => {
-        await cleanup(closePushNotifications());
-        await cleanup(setPushBinding(null));
-        const sub = await currentSubscription();
-        if (sub) {
-          if (!accountDeleted) await cleanup(removeEndpoint(sub.endpoint));
-          if (!await sub.unsubscribe() && await currentSubscription()) throw Error("기기 구독 해제 실패");
-        }
-      }));
+      await clearDevice(accountDeleted).catch(() => {});
       const { error } = await client.auth.signOut({ scope: "local" });
       if (error) throw error;
     },

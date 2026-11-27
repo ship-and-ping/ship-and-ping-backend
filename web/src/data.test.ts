@@ -233,154 +233,92 @@ it("화면 구독 전 도착한 복구 이벤트를 한 번만 다시 전달한�
   }
 });
 
-it("logs out only after revoking this endpoint under the current session and unsubscribing locally", async () => {
+function pushFixture() {
   const endpoint = "https://web.push.apple.com/shared";
-  const operations: string[] = [];
-  const sub = {endpoint,unsubscribe:async () => { operations.push("unsubscribe"); return true; }};
-  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:async () => ({pushManager:{getSubscription:async () => sub}})}});
-  vi.stubGlobal("caches",{open:async () => ({delete:async () => operations.push("unbind")})});
-  const eq = vi.fn(async () => { operations.push("delete"); return {error:null}; });
-  const client = {from:vi.fn(() => ({delete:() => ({eq})})),
-    auth:{signOut:async () => { operations.push("logout"); return {error:null}; }}};
-  try {
-    await gateway(client as unknown as SupabaseClient).logout();
-    expect(client.from).toHaveBeenCalledWith("push_subscriptions");
-    expect(eq).toHaveBeenCalledWith("endpoint",endpoint);
-    expect(operations).toEqual(["unbind","delete","unsubscribe","logout"]);
-  } finally { vi.unstubAllGlobals(); }
-});
-it("reclaims an existing browser subscription after sign-in without prompting or enabling an app", async () => {
-  const sub = {endpoint:"https://web.push.apple.com/shared",keys:{p256dh:"device-key",auth:"device-auth"}};
-  const put = vi.fn();
-  vi.stubGlobal("navigator",{userAgent:"PC",serviceWorker:{getRegistration:async () => ({pushManager:{
-    getSubscription:async () => ({toJSON:() => sub,options:{applicationServerKey:null}})}})}});
-  vi.stubGlobal("caches",{open:async () => ({delete:vi.fn(),put})});
-  const rpc = vi.fn(async () => ({data:"new-binding",error:null}));
-  const session = {user:{id:"next-member"}};
-  const client = {rpc,auth:{getSession:async () => ({data:{session}}),
-    onAuthStateChange:(fn: (event: string,s: typeof session) => void) => {
-      fn("SIGNED_IN",session); return {data:{subscription:{unsubscribe:vi.fn()}}};
-    }}};
-  try {
-    gateway(client as unknown as SupabaseClient).listen(vi.fn());
-    await vi.waitFor(() => expect(put).toHaveBeenCalledOnce());
-    expect(rpc).toHaveBeenCalledWith("register_push",{app:null,p_endpoint:sub.endpoint,p_key:sub.keys.p256dh,
-      p_auth:sub.keys.auth,p_agent:"PC",p_fingerprint:null});
-    expect(await (put.mock.calls[0][1] as Response).json()).toEqual({owner:"next-member",device:"new-binding"});
-  } finally { vi.unstubAllGlobals(); }
-});
-
-it("closes already displayed notifications even if logout has no subscription", async () => {
-  const notices = [{close:vi.fn()},{close:vi.fn()}];
-  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:async () => ({
-    getNotifications:async () => notices, pushManager:{getSubscription:async () => null},
-  })}});
+  const close = vi.fn();
+  const unsubscribe = vi.fn(async () => true);
+  const keys = {p256dh:"fixture-key",auth:"fixture-auth"};
+  const sub = {endpoint,toJSON:() => ({keys}),unsubscribe};
+  const registration = {getNotifications:async () => [{close}],pushManager:{getSubscription:vi.fn(async ():Promise<typeof sub | null> => sub)}};
+  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:async () => registration}});
+  const abortSignal = vi.fn().mockResolvedValue({error:null});
+  const rpc = vi.fn(() => ({abortSignal}));
   const signOut = vi.fn(async () => ({error:null}));
-  try {
-    await gateway({auth:{signOut}} as unknown as SupabaseClient).logout();
-    for (const notice of notices) expect(notice.close).toHaveBeenCalledOnce();
-    expect(signOut).toHaveBeenCalledWith({scope:"local"});
-  } finally { vi.unstubAllGlobals(); }
-});
+  type Listener = (event:string,session:{user:{id:string}} | null)=>void;
+  const onAuthStateChange = vi.fn<(fn:Listener) => {data:{subscription:{unsubscribe:()=>void}}}>()
+    .mockReturnValue({data:{subscription:{unsubscribe:vi.fn()}}});
+  const api = gateway({rpc,auth:{onAuthStateChange,signOut}} as unknown as SupabaseClient);
+  return {api,sub,registration,abortSignal,rpc,close,signOut,onAuthStateChange,keys};
+}
 
-it("keeps ordinary logout retryable when the server fails to remove the current device", async () => {
-  const sub = {endpoint:"device",unsubscribe:vi.fn(async () => true)};
-  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:async () => ({pushManager:{getSubscription:async () => sub}})}});
-  const eq = vi.fn().mockResolvedValueOnce({error:Error("offline")}).mockResolvedValue({error:null});
-  const signOut = vi.fn(async () => ({error:null}));
-  const api = gateway({from:() => ({delete:() => ({eq})}),auth:{signOut}} as unknown as SupabaseClient);
+it.each(["success","server offline","browser failure","both offline","deleted account"])("ends the local session after push cleanup (%s)", async reason => {
+  const {api,sub,keys,rpc,abortSignal,close,signOut} = pushFixture();
+  if (reason === "server offline" || reason === "both offline") abortSignal.mockRejectedValue(Error("offline"));
+  if (reason === "browser failure" || reason === "both offline") sub.unsubscribe.mockRejectedValue(Error("browser unavailable"));
   try {
-    await expect(api.logout()).rejects.toThrow("offline");
-    expect(signOut).not.toHaveBeenCalled();
-    expect(sub.unsubscribe).not.toHaveBeenCalled();
-    await api.logout();
+    await api.logout(reason === "deleted account" || undefined);
+    if (reason === "deleted account") expect(rpc).not.toHaveBeenCalled();
+    else expect(rpc).toHaveBeenCalledExactlyOnceWith("unregister_browser_push",{p_endpoint:sub.endpoint,p_key:keys.p256dh,p_auth:keys.auth});
     expect(sub.unsubscribe).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    expect(signOut).toHaveBeenCalledExactlyOnceWith({scope:"local"});
+    expect(signOut.mock.invocationCallOrder[0]).toBeGreaterThan(sub.unsubscribe.mock.invocationCallOrder[0]);
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it("closes displayed notifications even without a subscription", async () => {
+  const {api,registration,close,signOut} = pushFixture();
+  registration.pushManager.getSubscription.mockResolvedValue(null);
+  try {
+    await api.logout();
+    expect(close).toHaveBeenCalledOnce();
     expect(signOut).toHaveBeenCalledOnce();
   } finally { vi.unstubAllGlobals(); }
 });
 
-it.each(["registration","notification center","binding","subscription"])("withdrawal signs out after %s cleanup fails", async step => {
-  const fail = () => { throw Error("unavailable"); };
-  const unsubscribe = vi.fn(step === "subscription" ? fail : async () => true);
-  const reg = {getNotifications:step === "notification center" ? fail : async () => [],
-    pushManager:{getSubscription:async () => ({unsubscribe})}};
-  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:step === "registration" ? fail : async () => reg}});
-  vi.stubGlobal("caches",{open:async () => ({delete:step === "binding" ? fail : vi.fn()})});
-  const signOut = vi.fn(async () => ({error:null}));
+it.each(["SIGNED_IN","INITIAL_SESSION"])("discards the previous member's subscription on a live switch or redirect (%s)", async event => {
+  const {api,sub,rpc,keys,close,onAuthStateChange} = pushFixture();
+  localStorage.setItem("ship-ping-last-member","former");
+  const stop = api.listen(vi.fn());
+  const emit = onAuthStateChange.mock.calls[0][0];
   try {
-    await gateway({auth:{signOut}} as unknown as SupabaseClient).logout(true);
-    expect(signOut).toHaveBeenCalledExactlyOnceWith({scope:"local"});
-    if (step !== "registration") expect(unsubscribe).toHaveBeenCalledOnce();
-  } finally { vi.unstubAllGlobals(); }
-});
-
-it("closes a previous member's notices on account change without a subscription", async () => {
-  vi.useFakeTimers();
-  const close = vi.fn();
-  const session = {user:{id:"next"}};
-  const reg = {getNotifications:async () => [{close}],pushManager:{getSubscription:async () => null}};
-  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:async () => reg}});
-  const remove = vi.fn();
-  vi.stubGlobal("caches",{open:async () => ({match:async () => Response.json({device:"old",owner:"former"}),delete:remove})});
-  const client = {auth:{getSession:async () => ({data:{session}}),
-    onAuthStateChange:(fn:(event:string,s:typeof session)=>void) => {
-      fn("SIGNED_IN",session); return {data:{subscription:{unsubscribe:vi.fn()}}};
-    }}};
-  try {
-    const stop = gateway(client as unknown as SupabaseClient).listen(vi.fn());
-    await vi.advanceTimersByTimeAsync(0);
+    emit(event,{user:{id:"next"}});
+    await vi.waitFor(() => expect(sub.unsubscribe).toHaveBeenCalledOnce());
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("unregister_browser_push",{p_endpoint:sub.endpoint,p_key:keys.p256dh,p_auth:keys.auth});
     expect(close).toHaveBeenCalledOnce();
-    expect(remove).toHaveBeenCalledWith("/.push-device");
-    stop();
-  } finally { vi.useRealTimers(); vi.unstubAllGlobals(); }
+    emit("SIGNED_IN",{user:{id:"next"}});
+    expect(sub.unsubscribe).toHaveBeenCalledOnce();
+  } finally { stop(); localStorage.removeItem("ship-ping-last-member"); vi.unstubAllGlobals(); }
 });
 
-it("signals an invalid binding on restore failure and retries the same member without another auth event", async () => {
-  vi.useFakeTimers();
-  const session = {user:{id:"member"}};
-  const sub = {options:{applicationServerKey:null},toJSON:() => ({endpoint:"device",keys:{}})};
-  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:async () => ({pushManager:{getSubscription:async () => sub}})}});
-  const put = vi.fn(), remove = vi.fn(), changed = vi.fn();
-  vi.stubGlobal("caches",{open:async () => ({match:async () => Response.json({device:"same",owner:"member"}),delete:remove,put})});
-  const rpc = vi.fn().mockResolvedValueOnce({error:Error("offline")}).mockResolvedValue({data:"same"});
-  const client = {rpc,auth:{getSession:async () => ({data:{session}}),
-    onAuthStateChange:(fn:(event:string,s:typeof session)=>void) => {
-      fn("INITIAL_SESSION",session); return {data:{subscription:{unsubscribe:vi.fn()}}};
-    }}};
-  window.addEventListener("push-device-change",changed);
+it("keeps an existing subscription on a page reload in the same session", () => {
+  const {api,registration,onAuthStateChange,rpc} = pushFixture();
+  localStorage.setItem("ship-ping-last-member","same");
+  const stop = api.listen(vi.fn());
   try {
-    const stop = gateway(client as unknown as SupabaseClient).listen(vi.fn());
-    await vi.advanceTimersByTimeAsync(0);
-    expect(remove).toHaveBeenCalledOnce();
-    expect(changed).toHaveBeenCalledOnce();
-    expect(put).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(rpc).toHaveBeenCalledTimes(2);
-    expect(await put.mock.calls[0][1].json()).toEqual({device:"same",owner:"member"});
-    stop();
-  } finally { window.removeEventListener("push-device-change",changed); vi.useRealTimers(); vi.unstubAllGlobals(); }
+    onAuthStateChange.mock.calls[0][0]("INITIAL_SESSION",{user:{id:"same"}});
+    expect(registration.pushManager.getSubscription).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  } finally { stop(); localStorage.removeItem("ship-ping-last-member"); vi.unstubAllGlobals(); }
 });
 
-it.each([
-  ["member","member","device",true], ["next","next","device",false],
-  ["member","next","device",false], ["member","member",null,false],
-] as const)("confirms a worker notification only for a currently owned RLS row (%s, %s, %s)", async (before,after,row,expected) => {
-  const controller = {};
-  const addEventListener = vi.fn();
-  vi.stubGlobal("navigator",{serviceWorker:{controller,addEventListener}});
-  const getSession = vi.fn()
-    .mockResolvedValueOnce({data:{session:{user:{id:before}}}})
-    .mockResolvedValueOnce({data:{session:{user:{id:after}}}});
-  const eq = vi.fn(() => ({maybeSingle:async () => ({data:row ? {id:row} : null})}));
-  const client = {from:() => ({select:() => ({eq})}),auth:{getSession,
-    onAuthStateChange:() => ({data:{subscription:{unsubscribe:vi.fn()}}})}};
+it("does not register a device again when the same member logs back in", async () => {
+  const {api,registration,sub,rpc,onAuthStateChange} = pushFixture();
+  localStorage.setItem("ship-ping-last-member","same");
+  sub.unsubscribe.mockImplementation(async () => {
+    registration.pushManager.getSubscription.mockResolvedValue(null);
+    return true;
+  });
+  const stop = api.listen(vi.fn());
+  const emit = onAuthStateChange.mock.calls[0][0];
   try {
-    const stop = gateway(client as unknown as SupabaseClient).listen(vi.fn());
-    const postMessage = vi.fn();
-    addEventListener.mock.calls[0][1]({source:controller,ports:[{postMessage}],
-      data:{type:"confirm-push-owner",device:"device",owner:"member"}});
-    await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith(expected));
-    if (before === "member") expect(eq).toHaveBeenCalledWith("id","device");
-    stop();
-  } finally { vi.unstubAllGlobals(); }
+    emit("INITIAL_SESSION",{user:{id:"same"}});
+    await api.logout();
+    emit("SIGNED_OUT",null);
+    emit("SIGNED_IN",{user:{id:"same"}});
+    expect(await registration.pushManager.getSubscription()).toBeNull();
+    expect(sub.unsubscribe).toHaveBeenCalledOnce();
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc.mock.calls[0]).toContain("unregister_browser_push");
+  } finally { stop(); localStorage.removeItem("ship-ping-last-member"); vi.unstubAllGlobals(); }
 });

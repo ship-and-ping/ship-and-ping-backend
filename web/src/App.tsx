@@ -372,7 +372,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
         path="/login"
         element={user ? <AfterLogin api={api} /> : <>
           {notice && <p className="panel" role="status">
-            <strong>{notice}</strong>{notice === "로그아웃했어요" && " 이 기기에서 로그아웃했어요. 문제가 생기면 알림은 계속 보내 드려요."}
+            <strong>{notice}</strong>{notice === "로그아웃했어요" && " 이 기기에서 푸시를 다시 받으려면 로그인한 뒤 알림 설정에서 켜 주세요."}
           </p>}
           <AuthPage api={api} mode="login" />
         </>}

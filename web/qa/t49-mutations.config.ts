@@ -13,11 +13,11 @@ export default defineConfig({
         return source.replace("notices?.forEach(notice => notice.close());", "void notices;");
       }
       if (id.endsWith("/src/PushChannel.tsx")) {
-        return source.replace("const stale = missingBinding || keyChanged;", "const stale = keyChanged;");
+        return source.replace("devices.find(d => d.endpoint === endpoint)", "devices[0]");
       }
       if (id.endsWith("/src/data.ts")) {
-        return source.replace("accountDeleted === undefined ? step : step.catch(() => {})", "step")
-          .replace("if (retry) timer = setTimeout(() => restore(user, attempt, false), 5000);", "if (retry) return;");
+        return source.replace("unregister(sub), sub.unsubscribe()", "unregister(sub)")
+          .replace("void clearDevice().catch", "void Promise.resolve().catch");
       }
     },
   }],

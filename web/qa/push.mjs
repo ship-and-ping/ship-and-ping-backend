@@ -25,6 +25,7 @@ try {
       userAgent:"Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile Safari/604.1"});
     await mockPage(page,"normal",true,origin);
     await page.addInitScript(({home,endpoint}) => {
+      localStorage.setItem("ship-ping-last-member","qa-member");
       Object.defineProperty(navigator,"standalone",{value:home});
       const reg = {pushManager:{getSubscription:async () => home ? {endpoint, options:{applicationServerKey:Uint8Array.of(4).buffer},toJSON:()=>({endpoint})} : null}};
       Object.defineProperty(navigator,"serviceWorker",{value:{register:async () => reg,getRegistration:async () => reg}});
@@ -41,14 +42,11 @@ try {
       let notice;
       const source = await readFile(new URL("../public/sw.js",import.meta.url),"utf8");
       const events = {};
-      const binding = JSON.stringify({device:"one",owner:"fixture-member"});
-      const client = {focused:true,postMessage:(_message,ports)=>ports[0].postMessage(true)};
-      runInNewContext(source,{URL,MessageChannel,setTimeout,clearTimeout,caches:{open:async()=>({match:async()=>({text:async()=>binding})})},self:{
-        navigator:{locks:{request:(_name,action)=>action()}},clients:{matchAll:async()=>[client]},
+      runInNewContext(source,{URL,self:{
         location:{origin},addEventListener:(name,fn)=>{events[name]=fn;},
         registration:{showNotification:(title,options)=>{notice={title,...options};}}}});
       let displayed;
-      events.push({data:{json:()=>({device:"one",title:"[쉽앤핑] 트루바 · 장소 목록 보기가 느려졌어요",body:"평소 약 0.2초 → 지금 약 1.4초"})},waitUntil(promise){displayed=promise;}});
+      events.push({data:{json:()=>({title:"[쉽앤핑] 트루바 · 장소 목록 보기가 느려졌어요",body:"평소 약 0.2초 → 지금 약 1.4초"})},waitUntil(promise){displayed=promise;}});
       await displayed;
       await page.evaluate(notice => {
         const preview = document.createElement("section");

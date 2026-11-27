@@ -6,25 +6,37 @@ select no_plan();
 insert into auth.users(id) values ('00000000-0000-0000-0000-000000000049'),('00000000-0000-0000-0000-000000000048');
 insert into apps(owner_id,name) values ('00000000-0000-0000-0000-000000000049','first');
 select set_config('test.app',id::text,true) from apps;
+insert into apps(owner_id,name) values ('00000000-0000-0000-0000-000000000048','second');
+select set_config('test.second',id::text,true) from apps where name='second';
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000049',true);
 set local role authenticated;
 select set_config('test.device',register_push(current_setting('test.app')::uuid,'https://web.push.apple.com/shared',
  'B'||repeat('A',86),repeat('A',22),'iPhone',repeat('1',64))::text,true);
 select ok(queue_test_push(current_setting('test.app')::uuid,current_setting('test.device')::uuid),'old account queues a push');
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000048',true);
-select throws_ok($$select register_push(null,'https://web.push.apple.com/shared','B'||repeat('A',86),
+select throws_ok($$select register_push(current_setting('test.second')::uuid,'https://web.push.apple.com/shared','B'||repeat('A',86),
  repeat('Z',22),'PC')$$,'42501',null,'endpoint alone cannot claim an existing subscription');
-select isnt(register_push(null,'https://web.push.apple.com/shared','B'||repeat('A',86),repeat('A',22),'iPhone',repeat('1',64)),
- current_setting('test.device')::uuid,'authenticated session with both device keys receives a new delivery id');
-select is((select vapid_fingerprint from push_subscriptions),repeat('1',64),'new owner sees fingerprint');
-select is(register_push(null,'https://web.push.apple.com/removed','B'||repeat('A',86),repeat('A',22),'PC'),
- null::uuid,'login does not recreate an evicted or deleted device');
-select ok(not has_function_privilege('anon','register_push(uuid,text,text,text,text,text)','execute'),'anonymous transfer denied');
+select throws_ok($$select register_push(current_setting('test.second')::uuid,'https://web.push.apple.com/shared',
+ 'B'||repeat('A',86),repeat('A',22),'iPhone')$$,'42501',null,'both device keys cannot transfer a subscription');
+select throws_ok($$select register_push(null,'https://web.push.apple.com/removed','B'||repeat('A',86),repeat('A',22),'PC')$$,
+ '42501',null,'login cannot register without explicit app opt-in');
+select unregister_browser_push('https://web.push.apple.com/shared','B'||repeat('A',86),repeat('Z',22));
+select is_empty('select id from push_subscriptions','second member sees no first-member devices');
 reset role;
-select is((select push_target from claim_notifications(1)),null::jsonb,'old queued alert cannot target the new owner');
-select is_empty($$select id from push_subscriptions where user_id='00000000-0000-0000-0000-000000000049'$$,'previous owner removed');
-delete from auth.users where id='00000000-0000-0000-0000-000000000048';
-select is_empty('select id from push_subscriptions','withdrawal deletes transferred device');
+select is((select vapid_fingerprint from push_subscriptions),repeat('1',64),'failed transfer and wrong revocation proof leave the original row intact');
+-- A mismatched queued job must never receive delivery credentials.
+update notifications set test_app=current_setting('test.second')::uuid;
+create temp table mismatched as select * from claim_notifications(1);
+select is((select count(*) from mismatched),1::bigint,'mismatched job claimed for settlement');
+select is((select push_target from mismatched),null::jsonb,'mismatched job has no delivery target');
+select is_empty('select id from push_subscriptions','mismatched subscription deleted at dispatch');
+select register_push(current_setting('test.second')::uuid,'https://web.push.apple.com/new','B'||repeat('A',86),repeat('Z',22),'PC');
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000049',true);
+set local role authenticated;
+select unregister_browser_push('https://web.push.apple.com/new','B'||repeat('A',86),repeat('Z',22));
+reset role;
+select is_empty('select id from push_subscriptions','switch can revoke the exact old subscription');
+select ok(not has_function_privilege('anon','unregister_browser_push(text,text,text)','execute'),'anonymous revocation denied');
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000049',true);
 select register_push(current_setting('test.app')::uuid,'https://web.push.apple.com/device'||n,
