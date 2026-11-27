@@ -1,4 +1,4 @@
-﻿const tl = gsap.timeline({paused:true, defaults:{ease:"sine.inOut"}});
+const tl = gsap.timeline({paused:true, defaults:{ease:"sine.inOut"}});
 window.__timelines = {main:tl};
 const hide = (target, at) => tl.set(target,{autoAlpha:0},at);
 const show = (target, at) => tl.set(target,{autoAlpha:1},at);
@@ -26,9 +26,9 @@ function step(at,cycles,period=.42){
   swivel("wool","659 400",-4,at+.07,.18);
   swivel("wool","659 400",0,at+cycles*period,.26);
 }
-function leap(at,height,flight=.56){
+function leap(at,height,flight=.56,stretch=1.065){
   tl.to("#pose",{scaleX:1.085,scaleY:.88,rotation:-3,duration:.19,ease:"power2.in"},at);
-  tl.to("#pose",{scaleX:.95,scaleY:1.065,rotation:2,y:-height,duration:flight*.46,ease:"power2.out"},at+.19);
+  tl.to("#pose",{scaleX:.95,scaleY:stretch,rotation:2,y:-height,duration:flight*.46,ease:"power2.out"},at+.19);
   tl.to("#pose",{scaleX:1,scaleY:1,rotation:0,y:0,duration:flight*.54,ease:"power2.in"},at+.19+flight*.46);
   tl.to("#pose",{scaleX:1.075,scaleY:.91,duration:.085,ease:"power2.out"},at+.19+flight);
   tl.to("#pose",{scaleX:1,scaleY:1,duration:.31,ease:"back.out(1.25)"},at+.275+flight);
@@ -95,46 +95,46 @@ for(const [at,offset,duration] of [[7.98,-1730,2.45],[17.46,-1580,1.95],[29.37,-
   tl.fromTo("#current",{strokeDashoffset:120,opacity:.95},{strokeDashoffset:offset,duration,ease:"sine.inOut",immediateRender:false},at);
   tl.to("#current",{opacity:0,duration:.32},at+duration-.28);
 }
-step(9.1,4,.41);travel(9.1,1.64,-17,948,.69);
+step(9.1,4,.41);travel(9.1,1.64,-40,960,.72);
 tl.fromTo("#window",{y:421,scale:.48,rotationX:12,rotation:-5,autoAlpha:0,transformPerspective:1200},
   {y:0,scale:1,rotationX:0,rotation:0,autoAlpha:1,duration:1.72,ease:"sine.inOut",immediateRender:false},8.25);
 tl.set("#location",{textContent:"예제 웹앱 · 연결하기"},8);
 tl.set("#location",{textContent:"코딩 AI"},13.8);
 tl.set("#location",{textContent:"예제 웹앱 · 연결하기"},15.6);
-tl.fromTo("#spark",{x:190,y:1287,scale:.5,autoAlpha:0},{x:447,y:977,scale:1,autoAlpha:1,duration:.42,ease:"power2.out",immediateRender:false},11.44);
+tl.fromTo("#spark",{x:161,y:1297,scale:.5,autoAlpha:0},{x:447,y:838,scale:1,autoAlpha:1,duration:.42,ease:"power2.out",immediateRender:false},11.44);
 tl.to("#spark",{scale:1.7,autoAlpha:0,duration:.22,ease:"sine.out"},11.86);
-ping(11.92,463,992,1.65);
+ping(11.92,463,853,1.65);
 swivel("head","604 573",-11,10.68,.39);swivel("head","604 573",3,11.5,.47);
-leap(13.83,38,.39);
-step(15.68,3,.37);travel(15.68,1.11,-94,963,.54);
+leap(13.83,25,.39,1.025);
+step(15.68,3,.37);travel(15.68,1.11,-81,962,.64);
 tl.set("#location",{textContent:"예제 웹앱 · 앱 홈"},17.4);
 tl.to("#pose .horn path:last-of-type",{stroke:"#ef939c",duration:.25,yoyo:true,repeat:1},17.46);
-ping(17.5,118,1290,3.3);
+ping(17.5,107,1296,3.3);
 swivel("head","604 573",12,19.36,.3);
-tl.fromTo("#lift",{autoAlpha:0,x:147,y:822,scale:.61,rotation:0},
-  {autoAlpha:1,x:268,y:1163,scale:1,rotation:-3,duration:.75,ease:"sine.inOut",immediateRender:false},19.43);
+tl.fromTo("#lift",{autoAlpha:0,x:147,y:683,scale:.61,rotation:0},
+  {autoAlpha:1,x:339,y:1192,scale:1,rotation:-1,duration:.75,ease:"sine.inOut",immediateRender:false},19.43);
 swivel("head","604 573",-12,19.78,.46);
-tl.to("#lift",{y:1150,rotation:0,duration:.47},20.19);
+tl.to("#lift",{y:1174,rotation:0,duration:.47},20.19);
 tl.to("#lift",{y:1101,scale:.78,autoAlpha:0,duration:.28,ease:"power2.in"},23.52);
 swivel("leg-2","680 932",-13,20.82,.26);swivel("leg-2","680 932",0,21.30,.38);
 swivel("head","604 573",-5,20.92,.37);swivel("head","604 573",-12,21.46,.39);
 swivel("head","604 573",0,23.45,.35);
 tl.set("#location",{textContent:"예제 웹앱 · 문제 상세"},23.8);
-step(23.88,3,.39);travel(23.88,1.17,-90,956,.54);
+step(23.88,3,.39);travel(23.88,1.17,-69,960,.66);
 swivel("head","604 573",9,26.45,.46);
-tl.fromTo("#sheet",{autoAlpha:0,x:245,y:875,scale:.55,rotation:3},{autoAlpha:1,x:278,y:1178,scale:1,rotation:-5,duration:.52,ease:"sine.inOut",immediateRender:false},27.87);
-tl.to("#sheet",{clipPath:"polygon(0% 0%,100% 42%,26% 100%,29% 61%)",duration:.43,ease:"power2.inOut"},29.73);
-tl.to("#fold",{opacity:1,duration:.36},29.80);
-tl.fromTo("#inbox",{autoAlpha:0,scale:.8,y:18},{autoAlpha:1,scale:1,y:0,duration:.27,ease:"back.out(1.12)",immediateRender:false},27.98);
+tl.fromTo("#sheet",{autoAlpha:0,x:222,y:775,scale:.50,rotation:0},{autoAlpha:1,x:345,y:1099,scale:1,rotation:0,duration:.25,ease:"sine.inOut",immediateRender:false},27.80);
+tl.fromTo("#sheet",{clipPath:"polygon(0% 0%,100% 0%,100% 100%,0% 100%)"},{immediateRender:false,clipPath:"polygon(0% 0%,100% 42%,26% 100%,29% 61%)",duration:.31,ease:"power2.inOut"},29.95);
+tl.to("#fold",{opacity:1,duration:.28},29.96);
+tl.fromTo("#inbox",{autoAlpha:0,scale:.8,y:18},{autoAlpha:1,scale:1,y:0,duration:.27,ease:"back.out(1.12)",immediateRender:false},29.85);
 tl.to("#inbox",{scale:.88,autoAlpha:0,duration:.17,ease:"power2.in"},30.43);
-swivel("head","604 573",-13,29.66,.28);
-tl.to("#sheet",{x:736,y:1219,rotation:-24,scale:.13,autoAlpha:0,duration:.48,ease:"power2.in"},30.05);
+swivel("head","604 573",-13,29.91,.27);
+tl.to("#sheet",{x:744,y:1221,rotation:-24,scale:.11,autoAlpha:0,duration:.33,ease:"power2.in"},30.21);
 swivel("head","604 573",0,30.18,.35);
 tl.set("#location",{textContent:"예제 웹앱 · 업데이트 후 확인"},30.6);
-step(30.69,3,.43);travel(30.69,1.29,-102,959,.57);
-tl.fromTo("#verified",{autoAlpha:0,x:160,y:862,scale:.55,rotation:1},{autoAlpha:1,x:281,y:1178,scale:1,rotation:0,duration:.57,ease:"sine.inOut",immediateRender:false},34.28);
-ping(34.85,123,1279,4.9);leap(34.78,124,.67);
-tl.to("#verified",{x:310,y:1154,scale:.81,autoAlpha:0,duration:.36,ease:"power2.in"},36.84);
+step(30.69,3,.43);travel(30.69,1.29,-73,960,.64);
+tl.fromTo("#verified",{autoAlpha:0,x:160,y:723,scale:.55,rotation:1},{autoAlpha:1,x:346,y:1174,scale:1,rotation:0,duration:.57,ease:"sine.inOut",immediateRender:false},34.28);
+ping(34.85,113,1283,4.9);leap(34.78,63,.67);
+tl.to("#verified",{x:312,y:1124,scale:.81,autoAlpha:0,duration:.36,ease:"power2.in"},36.84);
 tl.to("#window",{y:-143,scale:.85,autoAlpha:0,duration:1.05,ease:"sine.inOut"},36.15);
 step(36.7,4,.38);travel(36.7,1.52,105,833,1.01);
 tl.fromTo("#ending",{scale:.4,y:130,rotation:-9,autoAlpha:0},{scale:1,y:0,rotation:5,autoAlpha:1,duration:.62,ease:"back.out(1.12)",immediateRender:false},37.54);

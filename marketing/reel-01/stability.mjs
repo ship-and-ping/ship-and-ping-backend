@@ -6,11 +6,11 @@ const holds=[
   ["connect",10.0,11.4], ["connect-copied",12.3,13.8],
   ["paste",13.9,15.6], ["arrival",15.65,17.4],
   ["alert",20.7,23.5], ["copy",23.82,25.7], ["copy-confirmed",25.9,27.8],
-  ["preview",28.0,30.55], ["update",30.7,33.55], ["resolved",34.0,36.14],
+  ["preview",28.0,30.55], ["preview-card",28.05,29.95,[358,1108,560,238]], ["update",30.7,33.55], ["resolved",34.0,36.14],
 ];
 export function measureHolds(file){
-  return holds.map(([shot,start,end])=>{
-    const [x,y,w,h]=shot==="resolved"?[419,804,448,302]:[155,804,712,302];
+  return holds.map(([shot,start,end,cardRoi])=>{
+    const [x,y,w,h]=cardRoi ?? (shot==="resolved"?[419,665,448,302]:[155,665,712,302]);
     const size=w*h;
     const frames=execFileSync("ffmpeg",["-hide_banner","-loglevel","error","-ss",String(start),"-i",file,
       "-t",(end-start).toFixed(3),"-vf","crop="+w+":"+h+":"+x+":"+y+",format=gray","-f","rawvideo","pipe:1"],{maxBuffer:64*1024*1024});

@@ -39,10 +39,13 @@ export async function assemble() {
   await writeFile("capture/shots.txt",parts.join("\n")+"\n");
   await run("ffmpeg",["-hide_banner","-loglevel","error","-y","-f","concat","-safe","1","-i","capture/shots.txt",
     "-c","copy","-an","-movflags","+faststart","composition/desktop.mp4"]);
-  for (const [shot,area] of [["alert","636:280:16:79"],["preview","834:346:14:42"],["resolved","506:170:16:213"],["paste","854:416:8:10"]]) {
+  for (const [shot,area] of [["alert","604:280:26:79"],["resolved","460:170:26:213"],["paste","854:416:8:10"]]) {
     await run("ffmpeg",["-hide_banner","-loglevel","error","-y","-ss",shot==="paste"?"0":"0.5","-i","capture/"+shot+".mp4","-vf","crop="+area,
       "-frames:v","1","-update","1","composition/"+shot+".png"]);
   }
+  // Use the stationary, high-density recording of the real mobile preview.
+  await run("ffmpeg",["-hide_banner","-loglevel","error","-y","-ss","0.2","-i","raw/preview-mobile.mp4",
+    "-frames:v","1","-update","1","composition/preview.png"]);
   const svg=(await readFile("../../docs/design/brand/sheep.svg","utf8"))
     .replace(/ id="/g,' class="').replace(/<!--[\s\S]*?-->/g,"").replace(/>\s+</g,"><");
   const template=await readFile("film.html","utf8"), motion=await readFile("motion.js","utf8");

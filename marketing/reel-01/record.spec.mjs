@@ -1,8 +1,56 @@
-import { test, expect } from "playwright/test";
+﻿import { test, expect } from "playwright/test";
 import { readFile } from "node:fs/promises";
 import { origin, prepareDemo } from "./demo.mjs";
-import { cameraFor, prepareDirs, take } from "./capture-utils.mjs";
+import { cameraFor, prepareDirs, run, take } from "./capture-utils.mjs";
 import { assemble } from "./film.mjs";
+
+test("record the four-line mobile prompt excerpt", async ({browser}) => {
+  await prepareDirs();
+  const context = await browser.newContext({
+    viewport: {width:312,height:820}, deviceScaleFactor:3, locale:"ko-KR",
+    timezoneId:"Asia/Seoul", colorScheme:"light", serviceWorkers:"block"
+  });
+  try {
+    const page = await context.newPage();
+    await prepareDemo(page,{value:"slow"});
+    await page.goto(origin+"/apps/demo/issues/example",{waitUntil:"networkidle"});
+    await page.getByText("보낼 내용 미리 보기",{exact:true}).click();
+    await page.evaluate(()=>document.fonts.ready);
+    const preview = page.locator(".issue-actions details[open] pre").first();
+    await preview.evaluate(el=>el.scrollIntoView({block:"start",behavior:"instant"}));
+    const excerpt = await preview.evaluate(el=>{
+      const node=el.firstChild, rows=[];
+      for(let i=0;i<node.length;i++){
+        const range=document.createRange();
+        range.setStart(node,i);range.setEnd(node,i+1);
+        const box=range.getBoundingClientRect();
+        if(!box.width)continue;
+        if(!rows.length || Math.abs(rows.at(-1).top-box.top)>1){
+          if(rows.length===4)break;
+          rows.push({top:box.top,bottom:box.bottom,text:""});
+        }
+        rows.at(-1).text+=node.data[i];
+      }
+      const rect=el.getBoundingClientRect();
+      const x=Math.floor(rect.left)-4,y=Math.max(0,Math.floor(rows[0].top)-4);
+      const even=n=>2*Math.ceil(n/2);
+      return {clip:{x,y,width:even(rect.width+8),height:even(rows.at(-1).bottom+4-y)},
+        font:parseFloat(getComputedStyle(el).fontSize),lines:rows.map(row=>row.text)};
+    });
+    expect(excerpt.lines[0]).toBe("[쉽앤핑 문제 보고]");
+    expect(excerpt.lines[1]).toContain("상태: 문제를 감지했어요");
+    expect(excerpt.lines.join(" ")).not.toMatch(/(?:sp_(?:pub|sec)|sb_secret|Bearer|https?:\/\/|[a-f0-9]{24,})/i);
+    expect(excerpt.font*582/excerpt.clip.width).toBeGreaterThanOrEqual(32);
+    for(let frame=0;frame<12;frame++){
+      await page.screenshot({clip:excerpt.clip,scale:"device",path:"raw/mobile-"+String(frame).padStart(2,"0")+".png"});
+    }
+    await run("ffmpeg",["-hide_banner","-loglevel","error","-y","-framerate","30","-i","raw/mobile-%02d.png",
+      "-frames:v","12","-an","-c:v","libx264","-crf","10","-pix_fmt","yuv420p","raw/preview-mobile.mp4"]);
+    console.log("Mobile prompt excerpt",JSON.stringify(excerpt));
+  } finally {
+    await context.close();
+  }
+});
 
 test("record the local React application", async ({page}) => {
   await prepareDirs();

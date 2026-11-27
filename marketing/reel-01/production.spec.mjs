@@ -1,4 +1,4 @@
-﻿import {test,expect} from "playwright/test";
+import {test,expect} from "playwright/test";
 import {execFileSync,spawnSync} from "node:child_process";
 import {resolve} from "node:path";
 import {existsSync} from "node:fs";
@@ -41,7 +41,7 @@ test("playback of all 2424 frames and representative stills",async({page})=>{
   });
   for(const b of bounds){expect(b.left,b.selector).toBeGreaterThanOrEqual(60);expect(b.right,b.selector).toBeLessThanOrEqual(940);expect(b.top,b.selector).toBeGreaterThanOrEqual(250);expect(b.bottom,b.selector).toBeLessThanOrEqual(1500);}
   const cards=await page.evaluate(()=>{
-    return [[21.5,"#lift"],[35.5,"#verified"]].map(([time,id])=>{
+    return [[21.5,"#lift"],[28.67,"#sheet"],[30.2,"#inbox"],[35.5,"#verified"]].map(([time,id])=>{
       window.__timelines.main.seek(time);
       const {left,right,top,bottom}=document.querySelector(id).getBoundingClientRect();
       return {id,left,right,top,bottom};
@@ -53,6 +53,13 @@ test("playback of all 2424 frames and representative stills",async({page})=>{
     expect(card.bottom,card.id).toBeLessThanOrEqual(1500);
     expect(card.top,card.id).toBeGreaterThanOrEqual(250);
   }
+  // The fold starts with the entire sheet in view, including its far right edge.
+  const earlyFold=await page.locator("#sheet").evaluate(sheet=>{
+    window.__timelines.main.seek(30);
+    return getComputedStyle(sheet).clipPath;
+  });
+  const rightEdge=earlyFold.match(/^polygon\([^,]+,\s*([\d.]+)%/);
+  expect(Number(rightEdge?.[1]),"Width of the sheet at the start of folding (%)").toBeGreaterThan(95);
   const separated=await page.evaluate(()=>{
     for(let frame=300;frame<450;frame++){
       window.__timelines.main.seek(frame/60);
@@ -80,9 +87,20 @@ test("playback of all 2424 frames and representative stills",async({page})=>{
   await run("ffmpeg",["-hide_banner","-loglevel","error","-y","-framerate","1","-i","frames/%02d.png","-vf","scale=270:480,tile=4x2","-frames:v","1","-update","1","qa/contact.png"]);
   await run("ffmpeg",["-hide_banner","-loglevel","error","-y","-i",file,"-vf","select=not(mod(n\\,60)),scale=216:384,drawtext=fontfile=composition/NotoSansKR-VF.ttf:text='%{n}s':fontsize=15:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=3:x=7:y=360,tile=7x6",
     "-frames:v","1","-update","1","qa/timeline.png"]);
+  // Count the dark ink in each line of the enlarged recording on the encoded frame.
+  const inkHeights=[1108,1166,1227,1287].map(y=>{
+    const scan=spawnSync("ffmpeg",["-hide_banner","-nostats","-ss","28.67","-i",file,
+      "-vf","crop=556:52:358:"+y+",format=gray,negate,bbox=min_val=140",
+      "-frames:v","1","-f","null","-"],{encoding:"utf8"});
+    expect(scan.status).toBe(0);
+    const height=Number(scan.stderr.match(/\bw:\d+ h:(\d+) crop=/)?.[1]);
+    expect(height,"Visible prompt ink at y="+y).toBeGreaterThanOrEqual(32);
+    return height;
+  });
+  console.log("Prompt ink heights",inkHeights);
   const camera=await measureCamera(page);
   const stability=measureHolds(file);
-  await writeFile("qa/stability.json",JSON.stringify({camera,stability},null,2));
+  await writeFile("qa/stability.json",JSON.stringify({camera,stability,inkHeights},null,2));
   for(const move of camera)expect(move.reversals).toBe(0);
   for(const shot of stability)expect(shot.maxShift,shot.shot).toBe(0);
   await writeFile("qa/playback.html",'<meta charset="utf-8"><style>*{margin:0;background:#261b40}video{display:block;height:100vh}</style><video preload="auto" muted playsinline src="../final/ship-and-ping-reel-01.mp4"></video>');
@@ -121,4 +139,41 @@ test("proof representative frames before encoding",async({page})=>{
     await page.screenshot({path:"qa/proof"+i+".png"});
   }
   await run("ffmpeg",["-hide_banner","-loglevel","error","-y","-start_number","0","-i","qa/proof%d.png","-vf","scale=270:480,tile=4x2","-frames:v","1","-update","1","qa/proof.png"]);
+});
+
+test("playback layout during the four demonstrations", async ({page})=>{
+  await page.goto(pathToFileURL(resolve("composition/index.html")).href);
+  await page.evaluate(()=>document.fonts.ready);
+  const layout=await page.evaluate(()=>{
+    const actor=document.querySelector("#actor");
+    const shapes=[...document.querySelectorAll("#pose .sheep path,#pose .sheep circle,#pose .sheep ellipse")];
+    const appWindow=document.querySelector("#window");
+    const holds=[[20.66,23.52,"#lift"],[28.05,29.95,"#sheet"],[34.85,36.84,"#verified"]];
+    const result={frames:0,minScale:1,right:0,bottom:0,windowGap:Infinity,cardGap:Infinity};
+    for(let i=624;i<2232;i++){
+      const t=i/60;
+      window.__timelines.main.seek(t);
+      const rects=shapes.map(shape=>shape.getBoundingClientRect());
+      const sheep={top:Math.min(...rects.map(r=>r.top)),right:Math.max(...rects.map(r=>r.right)),bottom:Math.max(...rects.map(r=>r.bottom))};
+      result.frames++;
+      result.minScale=Math.min(result.minScale,gsap.getProperty(actor,"scaleX"));
+      result.right=Math.max(result.right,sheep.right);
+      result.bottom=Math.max(result.bottom,sheep.bottom);
+      const gap=sheep.top-appWindow.getBoundingClientRect().bottom;
+      if(gap<result.windowGap){result.windowGap=gap;result.windowTime=t;}
+      for(const [start,end,id] of holds){
+        if(t<start || t>=end)continue;
+        const card=document.querySelector(id).getBoundingClientRect();
+        const side=card.left-sheep.right;
+        if(side<result.cardGap){result.cardGap=side;result.cardTime=t;}
+      }
+    }
+    return result;
+  });
+  console.log("Demo layout",JSON.stringify(layout));
+  expect(layout.minScale).toBeGreaterThanOrEqual(.60);
+  expect(layout.right).toBeLessThanOrEqual(940);
+  expect(layout.bottom).toBeLessThanOrEqual(1500);
+  expect(layout.windowGap).toBeGreaterThanOrEqual(0);
+  expect(layout.cardGap).toBeGreaterThanOrEqual(0);
 });
