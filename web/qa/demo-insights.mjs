@@ -1,10 +1,11 @@
 import {mkdir} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
+import {createRequire} from "node:module";
 import {chromium} from "playwright";
 import {createServer} from "vite";
 import {mockPage} from "./fixtures.mjs";
 
-const output = new URL("../../docs/design/qa/demo-insights/", import.meta.url);
+const output = new URL("../../docs/design/qa/demo-insights/panels/", import.meta.url);
 const origin = "http://127.0.0.1:4188";
 const service = "https://example.supabase.co";
 const end = Date.parse("2026-11-27T08:00:00Z");
@@ -60,7 +61,8 @@ try {
   await server.listen();
   browser = await chromium.launch({channel:process.platform === "win32" ? "msedge" : "chrome"});
   for (const stage of ["before","load","fixed"]) for (const width of [1440,390]) for (const colorScheme of ["light","dark"]) {
-    const page = await browser.newPage({viewport:{width,height:width === 390 ? 844 : 900},colorScheme});
+    const page = await browser.newPage({viewport:{width,height:width === 390 ? 844 : 900},colorScheme,
+      hasTouch:width === 390,reducedMotion:width === 390 ? "reduce" : "no-preference"});
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.clock.setFixedTime(new Date(end));
@@ -70,10 +72,6 @@ try {
       await page.getByText(/최근 1시간 성공 요청의/).waitFor();
       if (stage !== "before") await page.getByText(stage === "load" ? /4.7배 느려졌어요/ : /4.7배 빨라졌어요/).waitFor();
       if (screen === "detail") {
-        if (width === 390) {
-          await page.getByText("그래프와 표 보기",{exact:true}).focus();
-          await page.keyboard.press("Enter");
-        }
         const slider = page.getByRole("slider",{name:"걸린 시간"});
         if (await page.locator("rect.usual-band").evaluate(el => el.getBBox().height <= 0)) throw Error("Missing range band");
         await slider.focus();
@@ -85,6 +83,36 @@ try {
       await page.evaluate(async () => { await document.fonts.ready; window.scrollTo(0,0); });
       if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw Error("Horizontal overflow");
       await page.screenshot({path:fileURLToPath(new URL([stage,screen,width,colorScheme].join("-")+".png",output)),fullPage:true});
+      if (stage === "fixed") {
+        await page.addScriptTag({path:createRequire(import.meta.url).resolve("axe-core/axe.min.js")});
+        const violations = await page.evaluate(async () => (await window.axe.run(document,{runOnly:["wcag2a","wcag2aa","wcag21aa"]})).violations.map(v => [v.id,v.nodes.map(n => n.target)]));
+        if (violations.length) throw Error(JSON.stringify(violations));
+        const plot = page.getByRole("slider",{name:"걸린 시간"});
+        await plot.scrollIntoViewIfNeeded();
+        await plot.hover({position:{x:Math.floor((await plot.boundingBox()).width*.8),y:45}});
+        await page.locator(".flow-tip").waitFor();
+        if (await page.locator(".flow-selection").count() !== 2) throw Error("Missing linked cursor");
+        // Pin the same bucket so positioning a full-board capture keeps the pointer result.
+        await plot.click({position:{x:Math.floor((await plot.boundingBox()).width*.8),y:45}});
+        await page.locator(".metrics-board").screenshot({style:".dashboard-dock { visibility:hidden }",
+          path:fileURLToPath(new URL(["hover",screen,width,colorScheme].join("-")+".png",output))});
+        if (width === 390) {
+          await plot.evaluate(el => el.scrollIntoView({block:"center"}));
+          const box = await plot.boundingBox();
+          const point = slot => [{x:Math.round(box.x+box.width*(slot-.5)/24),y:Math.round(box.y+box.height/2)}];
+          const session = await page.context().newCDPSession(page);
+          await session.send("Input.dispatchTouchEvent",{type:"touchStart",touchPoints:point(3)});
+          await session.send("Input.dispatchTouchEvent",{type:"touchMove",touchPoints:point(21)});
+          await session.send("Input.dispatchTouchEvent",{type:"touchEnd",touchPoints:[]});
+          await session.detach();
+          const peer = page.getByRole("slider",{name:"사용과 실패"});
+          if (await peer.getAttribute("aria-valuenow") !== "21") throw Error("Touch drag did not synchronize");
+          const duration = await page.locator(".flow-selection").first().evaluate(el => getComputedStyle(el).transitionDuration);
+          if (duration !== "0s") throw Error("Crosshair should move immediately with reduced motion");
+          await page.keyboard.press("Escape");
+          if (await page.locator(".flow-tip").count()) throw Error("Escape did not dismiss touch selection");
+        }
+      }
     }
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();

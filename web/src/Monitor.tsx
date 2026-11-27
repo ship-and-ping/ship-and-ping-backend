@@ -1,11 +1,12 @@
 import { errorKind, errorName, stepName } from "./normalize";
-import { useContext, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { Copy } from "./Connect";
 import { status, StatusBadge, Timeline, IssueListItem } from "./IncidentSummary";
 import type { Gateway } from "./data";
 import { Hero, CurrentAppName } from "./Layout";
 import { Chart } from "./Chart";
+import { MonitorToolbar, periodName } from "./MonitorToolbar";
 import { SpeedInsights } from "./SpeedInsights";
 import "./styles/dashboard.css";
 import { displayText, sanitizeRoute } from "./normalize";
@@ -81,34 +82,59 @@ function MonitorPage({
 }) {
   const [data, setData] = useState<Monitor>();
   const [error, setError] = useState(false);
-  const [attempt, setAttempt] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [interval, setIntervalSeconds] = useState(60);
+  const [days, setDays] = useState(1);
+  const [updated, setUpdated] = useState(0);
+  const currentDays = useRef(1);
+  const pending = useRef(false);
+  const mounted = useRef(false);
   const heading = useContext(CurrentAppName);
   const { hash } = useLocation();
+  const reload = useCallback(async (range = currentDays.current) => {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    try {
+      const result = await api.monitor(id, feature, issue, range);
+      if (!mounted.current) return;
+      setData(result);
+      currentDays.current = range;
+      setDays(range);
+      setUpdated(Date.now());
+      setError(false);
+      heading({id,name:result.name,issues:result.incidents.filter(i => i.status === "open").length});
+    } catch {
+      if (mounted.current) setError(true);
+    } finally {
+      pending.current = false;
+      if (mounted.current) setBusy(false);
+    }
+  }, [api,id,feature,issue,heading]);
   useEffect(() => {
-    let active = true;
-    setError(false);
-    api
-      .monitor(id, feature, issue)
-      .then((result) => {
-        if (active) {
-          setData(result);
-          heading({ id, name: result.name, issues: result.incidents.filter((i) => i.status === "open").length });
-        }
-      })
-      .catch(() => {
-        if (active) setError(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [api, id, feature, issue, attempt, heading]);
+    mounted.current = true;
+    void reload();
+    return () => { mounted.current = false; };
+  }, [reload]);
   useEffect(() => {
-    if (!data) return;
+    if (issue || !interval) return;
+    let timer:number | undefined;
+    function schedule() {
+      window.clearInterval(timer);
+      if (document.visibilityState === "visible") timer = window.setInterval(() => void reload(),interval*1000);
+    }
+    schedule();
+    document.addEventListener("visibilitychange",schedule);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange",schedule); };
+  }, [interval,issue,reload]);
+  const loaded = Boolean(data);
+  useEffect(() => {
+    if (!loaded) return;
     const target = hash.slice(1);
     if (target) document.getElementById(target)?.scrollIntoView?.();
     else document.querySelector<HTMLElement>(".monitor h1")?.focus();
-  }, [data, hash]);
-  const retry = () => setAttempt((n) => n + 1);
+  }, [loaded, hash]);
+  const retry = () => void reload();
   const base = "/apps/" + encodeURIComponent(id);
   if (error && !data)
     return (
@@ -124,9 +150,14 @@ function MonitorPage({
   const selected = data.features.find(
     (f) => f.id === (feature ?? incident?.feature_id),
   );
+  const toolbar = <MonitorToolbar days={days} interval={interval} onInterval={setIntervalSeconds}
+    refresh={retry} busy={busy} updated={updated} onPeriod={range => {
+      if (selected) { currentDays.current = range; setDays(range); }
+      else if (range !== days) void reload(range);
+    }} />;
   return (
     <div className="monitor">
-      {error && <p role="alert">새 기록을 불러오지 못했어요. 마지막으로 확인한 내용이에요. <button onClick={retry}>다시 불러오기</button></p>}
+      {error && <p className="refresh-error" role="alert">새 기록을 불러오지 못했어요. 마지막으로 확인한 내용이에요. {issue && <button onClick={retry}>다시 불러오기</button>}</p>}
       {(feature || issue) && (
         <Link to={base}>{displayText(data.name)} 홈으로</Link>
       )}
@@ -142,12 +173,13 @@ function MonitorPage({
         />
       ) : selected ? (
         <FeaturePage
+          days={days} toolbar={toolbar}
           data={data}
           feature={selected}
           save={(ms) => api.threshold(id, selected.id, ms)}
         />
       ) : (
-        <Home data={data} base={base} />
+        <Home data={data} base={base} days={days} toolbar={toolbar} />
       )}
     </div>
   );
@@ -156,7 +188,7 @@ function Outcomes({stats}: {stats:ReturnType<typeof summarize>}) {
   const rate = stats.eligible ? Math.round(stats.failures / stats.eligible * 100) + "%" : "기록 없음";
   return <p>성공 {stats.successes}건 · 실패 {stats.failures}건 · 중단 {stats.abandoned}건 · 결과 미확인 {stats.unconfirmed}건 · 실패율 {rate}</p>;
 }
-function Home({ data, base }: { data: Monitor; base: string }) {
+function Home({ data, base, days, toolbar }: { data: Monitor; base: string; days:number; toolbar:ReactNode }) {
   const [showSpeed, setShowSpeed] = useState(false);
   const open = data.incidents.filter((i) => i.status === "open");
   const find = (i: Incident) =>
@@ -199,7 +231,7 @@ function Home({ data, base }: { data: Monitor; base: string }) {
   return (
     <>
       <div className="dashboard-title"><div><small>앱 홈</small><h1 tabIndex={-1}>{displayText(data.name)}</h1></div>
-        <small><time dateTime={new Date(data.now).toISOString()}>{when(new Date(data.now).toISOString())} 조회</time></small></div>
+        {toolbar}</div>
       {first ? <section className="panel status-overview" aria-label="앱 상태 요약">
         <div className="problem-count"><dl><dt>열린 문제 수</dt><dd><strong>{open.length}</strong>개</dd></dl><h2>{stateTitle}</h2></div>
         <div className="incident-ticket">
@@ -210,16 +242,15 @@ function Home({ data, base }: { data: Monitor; base: string }) {
           <p>처음 감지 · <time dateTime={first.opened_at}>{when(first.opened_at)}</time></p>
           <Link className="button dashboard-primary" to={action.to}>{action.label}</Link>
         </div>
-        <SpeedInsights data={data} />
       </section> : <section className="panel dashboard-state hero-card" aria-label="앱 상태 요약">
         {sparse ? <span className="status-badge waiting">기록 적음</span> : <StatusBadge state={hasRecords ? "healthy" : "waiting"} />}<h2>{stateTitle}</h2>
-        <p role="status">{sparse ? "최근 24시간 사용 " + total + "건 · 열린 문제가 없어요." : hasRecords ? "열린 문제가 없어요." : "연결한 앱을 한 번 사용하면 첫 기록을 확인할 수 있어요."}</p>
-        <SpeedInsights data={data} />
+        <p role="status">{sparse ? "최근 " + periodName(days) + " 사용 " + total + "건 · 열린 문제가 없어요." : hasRecords ? "열린 문제가 없어요." : "연결한 앱을 한 번 사용하면 첫 기록을 확인할 수 있어요."}</p>
         <Link className="button dashboard-primary" to={action.to}>{action.label}</Link>
       </section>}
+      <DashboardPanels data={data} days={days} />
       <div className="dashboard-lower">
         <section className="panel feature-list" id="features">
-          <header><h2>기능별 상태</h2><small>최근 24시간 · 문제 있는 기능 먼저</small></header>
+          <header><h2>기능별 상태</h2><small>최근 {periodName(days)} · 문제 있는 기능 먼저</small></header>
           {rows.length ? rows.map(({f,s}) => {
             const problem = open.find(i => i.feature_id === f.id);
             const baseline = f.baselines;
@@ -262,17 +293,38 @@ function Home({ data, base }: { data: Monitor; base: string }) {
     </>
   );
 }
+function DashboardPanels({data,days,feature}: {data:Monitor; days:number; feature?:Feature}) {
+  const [filter,setFilter] = useState("");
+  const visible = feature ? [feature] : data.features.filter(f => !f.hidden);
+  const selected = feature ?? visible.find(f => f.id === filter) ?? (visible.length === 1 ? visible[0] : undefined);
+  const features = selected ? [selected] : visible;
+  const ids = new Set(features.map(f => f.id));
+  const rows = data.stats.filter(r => ids.has(r.feature_id));
+  const thresholds = new Map(features.flatMap(f => f.baselines?.p95_ms == null ? [] : [[f.id,f.baselines.p95_ms] as const]));
+  return <section className="usage-panel metrics-board" aria-label="사용 흐름">
+    <header className="board-heading"><h2>사용 흐름</h2>{!feature && visible.length > 1 &&
+      <select aria-label="그래프에 표시할 기능" value={filter} onChange={e => setFilter(e.target.value)}>
+        <option value="">모든 기능</option>{visible.map(f => <option key={f.id} value={f.id}>{displayText(f.name)}</option>)}
+      </select>}</header>
+    <Chart key={days + "/" + (selected?.id ?? "")} rows={rows} days={days} now={data.now}
+      baseline={selected?.baselines?.p50_ms ?? null} p95={selected?.baselines?.p95_ms ?? null}
+      thresholds={thresholds} aggregate={!selected && visible.length > 1} learnsRange={selected?.method !== "*"}
+      samples={selected?.baselines?.sample_count ?? summarize(rows).successes}/>
+    <SpeedInsights data={data} featureId={feature?.id ?? (filter || undefined)} />
+  </section>;
+}
 function FeaturePage({
   data,
   feature: f,
   save,
+  days, toolbar,
 }: {
   data: Monitor;
   feature: Feature;
   save: (ms: number) => Promise<void>;
+  days:number; toolbar:ReactNode;
 }) {
-  const [days, period] = useState(1),
-    [seconds, setSeconds] = useState(String(f.slow_threshold_ms / 1000)),
+  const [seconds, setSeconds] = useState(String(f.slow_threshold_ms / 1000)),
     [result, message] = useState(""),
     [busy, setBusy] = useState(false);
   const rows = data.stats.filter(
@@ -285,13 +337,6 @@ function FeaturePage({
   const base = "/apps/" + encodeURIComponent(id);
   const destination = problem ? base + "/issues/" + problem.id : base + "#features";
   const action = problem ? "문제 보기" : "기능 목록 보기";
-  const [expanded, setExpanded] = useState(() => !window.matchMedia?.("(max-width: 760px)").matches);
-  useEffect(() => {
-    const media = window.matchMedia?.("(max-width: 760px)");
-    const resize = () => setExpanded(!media.matches);
-    media?.addEventListener("change", resize);
-    return () => media?.removeEventListener("change", resize);
-  }, []);
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -313,30 +358,16 @@ function FeaturePage({
     });
   return (
     <>
-      <h1 tabIndex={-1}>{displayText(f.name)}</h1>
+      <div className="dashboard-title"><div><small>기능 상세</small><h1 tabIndex={-1}>{displayText(f.name)}</h1></div>{toolbar}</div>
       {f.kind === "deep" && <><Outcomes stats={summary} /><Link to={"../deep/" + encodeURIComponent(f.id)} relative="path">추가 연결 요청과 첫 결과 보기</Link></>}
       <section className="panel dashboard-state">
         <StatusBadge state={problem ? "open" : summary.total ? "healthy" : "waiting"} />
         <h2>{problem ? title(f, problem) : summary.total ? displayText(f.name) + " 기능은 괜찮아요" : "이 기간에는 사용 기록이 없어요"}</h2>
-        <p>최근 {days === 1 ? "24시간" : "7일"} 사용 {summary.total}건 중 {summary.failures}건 실패 · 보통 시간 {approximateDuration(summary.median)}</p>
+        <p>최근 {periodName(days)} 사용 {summary.total}건 중 {summary.failures}건 실패 · 보통 시간 {approximateDuration(summary.median)}</p>
         {f.baselines?.p50_ms != null && <p>{usualDuration(f.baselines.p50_ms, f.baselines.p95_ms)}</p>}
-        <SpeedInsights data={data} featureId={f.id} />
         <Link className="button dashboard-primary" to={destination}>{action}</Link>
       </section>
-      <section className="panel usage-panel">
-        <h2>사용 흐름</h2>
-        <details className="chart-fold" open={expanded} onToggle={e => setExpanded(e.currentTarget.open)}>
-        <summary>그래프와 표 보기</summary>
-        <div className="chart-period" role="group" aria-label="조회 기간">{[1, 7].map((d) => (
-          <button key={d} aria-pressed={d === days} onClick={() => period(d)}>
-            {d === 1 ? "24시간" : "7일"}
-          </button>
-        ))}</div>
-        <Chart key={days} rows={rows} days={days} now={data.now} baseline={f.baselines?.p50_ms ?? null}
-          learnsRange={f.method !== "*"} p95={f.baselines?.p95_ms ?? null}
-          samples={f.baselines?.sample_count ?? summarize(data.stats.filter(r => r.feature_id === f.id)).successes} />
-        </details>
-      </section>
+      <DashboardPanels data={data} days={days} feature={f} />
       <section>
         <h2>최근 버전 비교</h2>
         <table>

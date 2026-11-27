@@ -77,11 +77,15 @@ it("빈 시간은 0건으로 표시하고 사용과 걸린 시간에 각각 눈�
   expect(duration.querySelector(".flow-key")).toBeNull();
   fireEvent.focus(mark);
   const tip = within(usage).getByRole("tooltip");
+  const cursor = () => [usage,duration].map(panel => panel.querySelector<HTMLElement>(".flow-selection")?.style.left);
+  expect(cursor()).toEqual([expect.any(String), cursor()[0]]);
+  expect(screen.getAllByRole("tooltip")).toHaveLength(1);
   expect(tip.textContent).toMatch(/(오전|오후).*사용 4건.*실패 1건.*보통 시간 약 0.1초/);
   expect(within(duration).getByText("약 0.1초", {selector: ".isolated-value"})).toBeTruthy();
   fireEvent.keyDown(mark, { key: "Escape" });
   expect(within(usage).queryByRole("tooltip")).toBeNull();
   fireEvent.keyDown(mark, { key: "ArrowLeft" });
+  expect(cursor()).toEqual([expect.any(String), cursor()[0]]);
   expect(within(usage).getByRole("tooltip").textContent).toBe(mark.getAttribute("aria-valuetext"));
   fireEvent.click(screen.getByRole("button", { name: "7일" }));
   const week = screen.getByRole("figure", { name: "사용과 실패" });
@@ -99,8 +103,11 @@ it("그래프에 포인터가 들어오면 가리킨 구간을 표시하고 나�
   const rows = screen.getByText("최근 24시간 기록").closest("table")!.tBodies[0].rows;
   fireEvent(plot, new MouseEvent("pointerover", { bubbles: true, clientX: 50 }));
   expect(within(usage).getByRole("tooltip").textContent).toContain(rows[0].cells[0].textContent);
+  const peer = screen.getByRole("slider",{name:"걸린 시간"});
+  expect(peer.getAttribute("aria-valuenow")).toBe("1");
   fireEvent(plot, new MouseEvent("pointermove", { bubbles: true, clientX: 309 }));
   expect(within(usage).getByRole("tooltip").textContent).toContain(rows[23].cells[0].textContent);
+  expect(peer.getAttribute("aria-valuenow")).toBe("24");
   fireEvent.pointerOut(plot);
   expect(within(usage).getByRole("tooltip").textContent).toBe(focused);
   fireEvent.keyDown(plot, { key: "ArrowRight" });
