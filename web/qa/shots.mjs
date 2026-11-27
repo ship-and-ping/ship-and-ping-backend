@@ -97,6 +97,7 @@ try {
     for (const [index,[title,path,state,ready]] of scenes.entries()) {
       if (selected.length && !selected.includes(String(index))) continue;
       const page = await browser.newPage({ viewport:{width,height:width===390?844:900}, colorScheme,
+        hasTouch: phase === "chart-after" && width === 390,
         reducedMotion: reduced ? "reduce" : "no-preference", locale:"ko-KR",timezoneId:"Asia/Seoul", serviceWorkers:"block" });
       try {
         await page.clock.setFixedTime(new Date(now));
@@ -147,9 +148,24 @@ try {
           });
           if (!contained) throw Error("Feature summary clips its sheep");
           const usage = page.getByRole("figure", {name:"사용과 실패"});
-          const mark = usage.getByRole("button").first();
+          const mark = usage.getByRole("slider");
           await tabTo(page, mark);
           await usage.getByRole("tooltip").waitFor();
+          if (width === 390 && state === "cluster") await checkMixedChartInput(page, usage, mark);
+          if (width === 390 && state === "scrolled") {
+            const duration = page.getByRole("figure", {name:"걸린 시간"});
+            const label = await duration.locator(".isolated-value").boundingBox();
+            const dot = await duration.locator("circle").boundingBox();
+            const gap = dot.x - (label.x + label.width);
+            if (gap < 0 || gap > 6 || Math.abs(label.y + label.height / 2 - dot.y - dot.height / 2) > 2)
+              throw Error("Single measurement label is detached from the last point");
+            if (await duration.locator(".isolated-value").evaluate(el => {
+              const text = document.createRange();
+              text.selectNodeContents(el);
+              return text.getClientRects().length !== 1;
+            })) throw Error("Single measurement label wraps");
+            await duration.screenshot({path:resolve(dir,"isolated-390.jpg")});
+          }
           await page.keyboard.press("Escape");
           await usage.getByRole("tooltip").waitFor({state:"hidden"});
           await mark.evaluate(el => el.blur());
@@ -312,6 +328,39 @@ function shortKoreanEndings() {
     if (lines.size > 1 && /^[가-힣]{1,2}[.!?]?$/.test(last)) findings.push(el.textContent.trim());
   }
   return findings;
+}
+
+async function checkMixedChartInput(page, figure, slider) {
+  await slider.evaluate(el => el.scrollIntoView({block:"center"}));
+  const box = await slider.boundingBox();
+  const y = Math.round(box.y + box.height / 2);
+  const x = slot => Math.round(box.x + box.width * (slot - 0.5) / 24);
+  const tap = slot => page.touchscreen.tap(x(slot), y);
+  const screenshot = name => page.screenshot({path:resolve(dir,name + "-390.jpg")});
+  await tap(3);
+  if (await slider.getAttribute("aria-valuenow") !== "3") throw Error("Touch did not select the third bucket");
+  if (page.context().browser().browserType().name() === "chromium") {
+    const session = await page.context().newCDPSession(page);
+    await session.send("Input.dispatchTouchEvent", {type:"touchStart", touchPoints:[{x:x(3), y}]});
+    await session.send("Input.dispatchTouchEvent", {type:"touchMove", touchPoints:[{x:x(21), y}]});
+    await session.send("Input.dispatchTouchEvent", {type:"touchEnd", touchPoints:[]});
+    await session.detach();
+  } else {
+    await tap(21);
+  }
+  if (await slider.getAttribute("aria-valuenow") !== "21") throw Error("Touch did not select the peak bucket");
+  const tip = figure.getByRole("tooltip");
+  await tip.filter({hasText:"실패 10건"}).waitFor();
+  await screenshot("touch");
+  await page.keyboard.press("ArrowLeft");
+  await tip.filter({hasText:"실패 8건"}).waitFor();
+  const focusedText = await tip.textContent();
+  await page.mouse.move(x(21), y);
+  await tip.filter({hasText:"실패 10건"}).waitFor();
+  await screenshot("mouse");
+  await page.mouse.move(box.x - 4, y);
+  await tip.filter({hasText:focusedText}).waitFor();
+  await screenshot("keyboard-restored");
 }
 
 async function tabTo(page,target) {

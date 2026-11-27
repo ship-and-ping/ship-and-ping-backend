@@ -27,7 +27,7 @@ it("빈 시간은 0건으로 표시하고 사용과 걸린 시간에 각각 눈�
   expect(screen.getByText("아직 사용 기록이 적어요. 쌓이면 흐름이 보여요.")).toBeTruthy();
   const table = screen.getByText("최근 24시간 기록").closest("table")!;
   expect(Array.from(table.tBodies[0].rows).filter(row => row.cells[1].textContent === "0").length).toBeGreaterThanOrEqual(23);
-  const mark = within(usage).getByRole("button", { name: /사용 4건.*실패 1건/ });
+  const mark = within(usage).getByRole("slider", { name: "사용과 실패" });
   expect(usage.querySelector('rect[fill="var(--sp-chart)"][height="75%"]')).toBeTruthy();
   expect(within(duration).getByText("최근 1시간 보통 0.1초")).toBeTruthy();
   fireEvent.focus(mark);
@@ -36,11 +36,42 @@ it("빈 시간은 0건으로 표시하고 사용과 걸린 시간에 각각 눈�
   expect(within(duration).getByText("0.1초", {selector: ".isolated-value"})).toBeTruthy();
   fireEvent.keyDown(mark, { key: "Escape" });
   expect(within(usage).queryByRole("tooltip")).toBeNull();
-  fireEvent.click(mark);
-  expect(within(usage).getByRole("tooltip").textContent).toBe(mark.getAttribute("aria-label"));
+  fireEvent.keyDown(mark, { key: "ArrowLeft" });
+  expect(within(usage).getByRole("tooltip").textContent).toBe(mark.getAttribute("aria-valuetext"));
   fireEvent.click(screen.getByRole("button", { name: "7일" }));
   const week = screen.getByRole("figure", { name: "사용과 실패" });
   expect(within(week).getAllByText(/\d+일.*[월화수목금토일]/).length).toBeGreaterThanOrEqual(4);
+});
+it("그래프에 포인터가 들어오면 가리킨 구간을 표시하고 나가면 키보드 구간을 복원한다", async () => {
+  setup("/apps/a/features/f");
+  const usage = await screen.findByRole("figure", { name: "사용과 실패" });
+  const plot = within(usage).getByRole("slider");
+  vi.spyOn(plot, "getBoundingClientRect").mockReturnValue(new DOMRect(48, 0, 264, 112));
+  fireEvent.focus(plot);
+  fireEvent.keyDown(plot, { key: "ArrowLeft" });
+  const focused = within(usage).getByRole("tooltip").textContent;
+  expect(plot.getAttribute("aria-valuenow")).toBe("23");
+  const rows = screen.getByText("최근 24시간 기록").closest("table")!.tBodies[0].rows;
+  fireEvent(plot, new MouseEvent("pointerover", { bubbles: true, clientX: 50 }));
+  expect(within(usage).getByRole("tooltip").textContent).toContain(rows[0].cells[0].textContent);
+  fireEvent(plot, new MouseEvent("pointermove", { bubbles: true, clientX: 309 }));
+  expect(within(usage).getByRole("tooltip").textContent).toContain(rows[23].cells[0].textContent);
+  fireEvent.pointerOut(plot);
+  expect(within(usage).getByRole("tooltip").textContent).toBe(focused);
+  fireEvent.keyDown(plot, { key: "ArrowRight" });
+  expect(plot.getAttribute("aria-valuenow")).toBe("24");
+});
+it("첫 실패나 사용량 최대 구간과 구별해서 실패가 가장 많은 구간을 요약한다", async () => {
+  setup("/apps/a/features/f", [], rows => {
+    const stat = (rows.stats_5m as object[])[0];
+    rows.stats_5m = [[4, 12, 2], [2, 7, 6], [0, 4, 1]].map(([hours, total, failures]) => ({
+      ...stat, bucket: new Date(Date.now() - (hours + 0.25) * 3600000).toISOString(), total, failures,
+    }));
+  });
+  const usage = await screen.findByRole("figure", { name: "사용과 실패" });
+  const table = screen.getByText("최근 24시간 기록").closest("table")!;
+  const label = table.tBodies[0].rows[21].cells[0].textContent;
+  expect(within(usage).getByText(label + " 구간에 실패 6건이 있었어요.")).toBeTruthy();
 });
 it("시간 기록 사이의 빈 구간에서 선을 끊는다", async () => {
   setup("/apps/a/features/f", [], rows => {

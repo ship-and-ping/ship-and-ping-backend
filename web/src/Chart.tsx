@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState, type PointerEvent } from "react";
 import { formatDuration, summarize, type Stat } from "./monitor-data";
 import "./styles/chart.css";
 
@@ -97,12 +97,27 @@ function Plot({ points, labels, duration, baseline, summary }: {
   points: Bucket[]; labels: ReturnType<typeof ticks>; duration?: boolean; baseline: number | null; summary?: string;
 }) {
   const id = useId();
-  const [active, setActive] = useState<number | null>(null);
+  const [selected, setSelected] = useState(() => Math.max(0,
+    points.findIndex(p => duration ? p.median !== null : p.total > 0)));
+  const [showSelection, setShowSelection] = useState(false);
+  const [hovered, setHovered] = useState<number | null>(null);
+  const active = hovered ?? (showSelection ? selected : null);
+  function pointAt(event: PointerEvent<HTMLDivElement>) {
+    const { left, width } = event.currentTarget.getBoundingClientRect();
+    const index = Math.floor((event.clientX - left) / width * points.length);
+    return Math.max(0, Math.min(points.length - 1, index));
+  }
+  function select(index: number) {
+    setSelected(index);
+    setHovered(null);
+    setShowSelection(true);
+  }
   const peak = duration
     ? Math.max(plotTime(baseline ?? 0), ...points.map(p => plotTime(p.median ?? 0)))
     : Math.max(...points.map(p => p.total));
   const max = peak || (duration ? 1000 : 1);
   const measurements = points.filter(p => p.median !== null);
+  const isolatedX = measurements.length === 1 ? center(points.indexOf(measurements[0]), points.length) : null;
   const title = duration ? "걸린 시간" : "사용과 실패";
   const top = duration ? formatDuration(max === 30001 ? Infinity : max) : max.toLocaleString("ko-KR") + "건";
   return <figure className="flow-figure" aria-labelledby={id}>
@@ -121,17 +136,37 @@ function Plot({ points, labels, duration, baseline, summary }: {
         <svg className="flow-marks" aria-hidden="true">
           {duration ? <DurationMarks points={points} max={max} baseline={baseline} /> : <CountMarks points={points} max={max} />}
         </svg>
-        {points.map((p, i) => {
-          if (duration ? p.median === null : p.total === 0) return null;
-          return <button type="button" className="flow-hit" key={i} aria-label={description(p)}
-            aria-describedby={active === i ? id + "-tip" : undefined}
-            style={{ left: percent(i * 100 / points.length), width: percent(100 / points.length) }}
-            onPointerEnter={() => setActive(i)} onPointerLeave={() => setActive(null)}
-            onFocus={() => setActive(i)} onBlur={() => setActive(null)} onClick={() => setActive(i)}
-            onKeyDown={e => { if (e.key === "Escape") setActive(null); }} />;
-        })}
-        {duration && measurements.length === 1 && <span className="isolated-value"
-          style={{ left: percent(Math.max(9, Math.min(91, center(points.indexOf(measurements[0]), points.length)))),
+        <div role="slider" tabIndex={0} className="flow-hit" aria-labelledby={id}
+          aria-valuemin={1} aria-valuemax={points.length} aria-valuenow={selected + 1} aria-valuetext={description(points[selected])}
+          onFocus={() => setShowSelection(true)} onBlur={() => setShowSelection(false)}
+          onPointerEnter={e => { if (e.pointerType !== "touch") setHovered(pointAt(e)); }}
+          onPointerDown={e => {
+            if (!e.isPrimary || e.button !== 0) return;
+            e.currentTarget.focus({ preventScroll: true });
+            e.currentTarget.setPointerCapture(e.pointerId);
+            select(pointAt(e));
+          }}
+          onPointerMove={e => {
+            if (e.currentTarget.hasPointerCapture?.(e.pointerId)) select(pointAt(e));
+            else if (e.pointerType !== "touch") setHovered(pointAt(e));
+          }}
+          onPointerLeave={() => setHovered(null)}
+          onKeyDown={e => {
+            if (e.key === "Escape") { setHovered(null); setShowSelection(false); return; }
+            switch (e.key) {
+              case "ArrowLeft": case "ArrowDown": select(Math.max(0, selected - 1)); break;
+              case "ArrowRight": case "ArrowUp": select(Math.min(points.length - 1, selected + 1)); break;
+              case "Home": select(0); break;
+              case "End": select(points.length - 1); break;
+              default: return;
+            }
+            e.preventDefault();
+          }}>
+          {active !== null && <span className="flow-selection" style={{ left: percent(active * 100 / points.length),
+            width: percent(100 / points.length) }} />}
+        </div>
+        {duration && isolatedX !== null && <span className={"isolated-value" + (isolatedX >= 50 ? " on-left" : "")}
+          style={{ left: percent(isolatedX),
             top: percent(y(plotTime(measurements[0].median!), max)) }}>{formatDuration(measurements[0].median)}</span>}
         {active !== null && <div role="tooltip" className="flow-tip" id={id + "-tip"}>{description(points[active])}</div>}
       </div>

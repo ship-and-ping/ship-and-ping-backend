@@ -48,20 +48,15 @@
 .flow-marks circle { fill: var(--sp-chart-time); }
 .duration-run { fill: none; stroke: var(--sp-chart-time); stroke-width: 2; }
 .usual-duration { stroke: var(--sp-chart-usual); stroke-width: 1.5; stroke-dasharray: 5 4; }
-.usage-panel button.flow-hit {
+.flow-hit {
   position: absolute;
-  inset-block: 0;
-  min-width: 0;
-  min-height: 0;
-  max-width: none;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
+  inset: 0;
+  touch-action: pan-y;
+  user-select: none;
+  cursor: crosshair;
 }
-.flow-hit:is(:hover, :focus-visible) { outline: 2px solid var(--sp-chart); outline-offset: -2px; }
+.flow-hit:focus-visible, .flow-selection { outline: 2px solid var(--sp-chart); outline-offset: -2px; }
+.flow-selection { position: absolute; inset-block: 0; pointer-events: none; }
 .flow-tip {
   position: absolute;
   z-index: 2;
@@ -79,12 +74,14 @@
 }
 .isolated-value {
   position: absolute;
-  transform: translate(-50%, 2px);
+  transform: translate(6px, -50%);
+  white-space: nowrap;
   pointer-events: none;
   background: var(--sp-surface);
   color: var(--sp-ink);
   font-size: var(--sp-text-xs);
 }
+.isolated-value.on-left { transform: translate(calc(-100% - 6px), -50%); }
 .flow-x { grid-column: 2; position: relative; min-height: 2.8em; line-height: 1.2; }
 .flow-x { --tick-width: min(16%, 6.5em); }
 .flow-x span {

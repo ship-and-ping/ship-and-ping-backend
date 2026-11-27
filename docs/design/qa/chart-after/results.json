@@ -33,6 +33,17 @@
     "issues": []
   },
   {
+    "title": "아래로 내린 회원 메뉴",
+    "state": "scrolled",
+    "width": 1440,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "03-scrolled-1440-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
     "title": "사용 흐름",
     "state": "many",
     "width": 390,
@@ -62,17 +73,6 @@
     "scale": 1,
     "reduced": true,
     "file": "02-cluster-390-light.jpg",
-    "overflow": 0,
-    "issues": []
-  },
-  {
-    "title": "아래로 내린 회원 메뉴",
-    "state": "scrolled",
-    "width": 1440,
-    "colorScheme": "light",
-    "scale": 1,
-    "reduced": false,
-    "file": "03-scrolled-1440-light.jpg",
     "overflow": 0,
     "issues": []
   },
