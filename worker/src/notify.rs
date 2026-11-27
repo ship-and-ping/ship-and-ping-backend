@@ -18,6 +18,8 @@ struct Notice {
     channel: String,
     kind: Option<String>,
     feature: Option<String>,
+    #[serde(default)]
+    is_overflow: bool,
     metric: Value,
     hook: Option<String>,
     destination: Option<String>,
@@ -135,7 +137,7 @@ fn metric_summary(n: &Notice) -> String {
 
 fn context(n: &Notice) -> String {
     let feature = feature_name(n);
-    let label = if feature == "기타" {
+    let label = if n.is_overflow {
         "기타 (따로 지켜보지 않는 기능 묶음)"
     } else {
         &feature
@@ -365,7 +367,6 @@ mod tests {
         let text = payload["text"].as_str().unwrap();
         assert!(html.contains("&lt;script&gt;&amp;&quot;&#39;"));
         assert!(!html.contains("<script>"));
-        assert!(html.contains("기타 (따로 지켜보지 않는 기능 묶음)"));
         assert!(html.contains("최근 30분 동안 9건 중 9건 실패"));
         assert!(text.contains("<script>") && text.contains("9건 중 9건이 실패했어요."));
         let link = format!("{ORIGIN}/apps/{APP}/issues/{ISSUE}");
@@ -376,18 +377,35 @@ mod tests {
     }
 
     #[test]
+    fn only_overflow_features_get_the_group_description() {
+        let mut row = notice("open", "failure");
+        assert_eq!(context(&row), "트루바 · 기타");
+        row.is_overflow = true;
+        assert_eq!(context(&row), "트루바 · 기타 (따로 지켜보지 않는 기능 묶음)");
+    }
+
+    #[test]
     fn digest_counts_overflow_and_links_to_apps() {
         let rows: Vec<_> = (0..11)
             .map(|i| {
                 let mut row = notice("open", "slow");
                 row.digest = true;
-                row.app_name = Some(format!("앱({i})"));
+                row.app_name = Some(format!("앱({i})<script>&\"'"));
+                let feature = if i == 0 { "<script>&\"'" } else { "검색&\"'" };
+                row.feature = Some(feature.into());
                 row
             })
             .collect();
         let mail = render_mail(&rows, 2, Some(ORIGIN));
         assert_eq!(mail.subject, "[쉽앤핑] 모아 둔 알림 13건이에요");
         assert!(mail.html.contains("앱(9)") && !mail.html.contains("앱(10)"));
+        let escaped_item = concat!(
+            "<li><strong>앱(9)&lt;script&gt;&amp;&quot;&#39;",
+            " · 검색&amp;&quot;&#39;</strong>"
+        );
+        assert!(mail.html.contains(escaped_item));
+        assert!(!mail.html.contains("<script>"));
+        assert!(mail.html.contains("앱(0)&lt;script&gt;&amp;&quot;&#39; · 기능</strong>"));
         assert!(mail.html.contains("3건 더") && mail.html.contains("평소 1.1초 → 최근 3.4초"));
         assert_eq!(mail.html.matches("쉽앤핑에서 자세히 보기").count(), 1);
         assert!(mail.html.contains("href=\"https://web.test/apps\""));
@@ -395,31 +413,37 @@ mod tests {
 
     #[test]
     fn previews_match_rendered_mail() {
+        fn assert_preview(rendered: &str, preview: &str) {
+            assert_eq!(
+                rendered.trim_end().replace("\r\n", "\n"),
+                preview.trim_end().replace("\r\n", "\n")
+            );
+        }
+
         let kinds = [
-            ("open", "failure", "기타"),
-            ("open", "slow", "검색"),
-            ("resolved", "failure", "결제"),
+            ("open", "failure", "기타", true),
+            ("open", "slow", "검색", false),
+            ("resolved", "failure", "결제", false),
         ];
         let mut rows = Vec::new();
-        for ((event, kind, feature), preview) in kinds.into_iter().zip([
+        for ((event, kind, feature, is_overflow), preview) in kinds.into_iter().zip([
             include_str!("../../docs/design/mail/alert-preview/failure.html"),
             include_str!("../../docs/design/mail/alert-preview/slow.html"),
             include_str!("../../docs/design/mail/alert-preview/resolved.html"),
         ]) {
             let mut n = notice(event, kind);
             n.feature = Some(feature.into());
-            assert_eq!(
-                render_mail(std::slice::from_ref(&n), 0, Some(ORIGIN))
-                    .html
-                    .trim_end(),
-                preview.trim_end()
+            n.is_overflow = is_overflow;
+            assert_preview(
+                &render_mail(std::slice::from_ref(&n), 0, Some(ORIGIN)).html,
+                preview,
             );
             n.digest = true;
             rows.push(n);
         }
-        assert_eq!(
-            render_mail(&rows, 0, Some(ORIGIN)).html.trim_end(),
-            include_str!("../../docs/design/mail/alert-preview/digest.html").trim_end()
+        assert_preview(
+            &render_mail(&rows, 0, Some(ORIGIN)).html,
+            include_str!("../../docs/design/mail/alert-preview/digest.html"),
         );
     }
 
