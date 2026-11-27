@@ -35,9 +35,23 @@ it("알림 탭을 클릭하거나 방향키로 선택하면 초점과 패널이 
   }
 });
 
+it.each(["슬랙", "이메일"])("%s 알림에서 같은 결제 지연의 상세를 연다", channel => {
+  visit();
+  fireEvent.click(screen.getByRole("tab", {name:channel}));
+  const panel = within(screen.getByRole("tabpanel", {name:channel}));
+  expect(panel.getByRole("heading", {name:/결제가 느려졌어요/})).toBeTruthy();
+  const action = panel.getByText("쉽앤핑에서 보기");
+  fireEvent.click(action);
+  const detail = action.closest("details");
+  expect(detail?.open).toBe(true);
+  const content = within(detail!);
+  expect(content.getByRole("heading", {name:"모임모아 · 결제 문제 상세"})).toBeTruthy();
+  expect(content.getByText("결제 24건 · 평소 1.1초 → 최근 30분 3.4초")).toBeTruthy();
+});
+
 it("다섯 질문의 답을 각각 열고 다시 닫을 수 있다", () => {
   const {container} = visit();
-  const disclosures = container.querySelectorAll("details");
+  const disclosures = container.querySelectorAll<HTMLDetailsElement>(".lp-faq details");
   expect(disclosures).toHaveLength(5);
   for (const details of disclosures) {
     const summary = details.querySelector("summary")!;

@@ -15,6 +15,11 @@ const questions = [
 ];
 const signals = ["로그인에서 실패가 늘었어요", "결제가 느려졌어요", "업데이트 후 해결됐어요"];
 const channels = ["슬랙", "이메일"] as const;
+const paymentAlert = {
+  title: "결제가 느려졌어요",
+  metric: "평소 1.1초 → 최근 30분 3.4초",
+  sample: "결제 24건",
+};
 
 function StartLink({ className = "" }: { className?: string }) {
   return <Link to="/login" className={"lp-start " + className}>무료로 시작하기 <span aria-hidden="true">↗</span></Link>;
@@ -62,9 +67,13 @@ function Alerts() {
         aria-labelledby={"alert-tab-" + i} hidden={selected !== i} tabIndex={0} className="lp-message">
         <div className="lp-envelope">{i === 0 ? "# 모임모아-알림" : "받은 메일함"}</div>
         <div className="lp-sender"><Sheep/><span><strong>쉽앤핑</strong><small>모임모아 · 오후 6:00</small></span></div>
-        <div className="lp-excerpt"><h3>{i === 0 ? "결제가 느려졌어요" : "[쉽앤핑] 모임모아 · 결제가 느려졌어요"}</h3>
-          <p>평소 1.1초 → 최근 30분 3.4초</p><small>결제 24건을 살펴봤어요.</small></div>
-        <a href="#app-preview">쉽앤핑에서 보기 <span aria-hidden="true">↗</span></a>
+        <div className="lp-excerpt"><h3>{i === 1 && "[쉽앤핑] 모임모아 · "}{paymentAlert.title}</h3>
+          <p>{paymentAlert.metric}</p><small>{paymentAlert.sample}을 살펴봤어요.</small></div>
+        <details className="lp-alert-detail">
+          <summary>쉽앤핑에서 보기</summary>
+          <Hero title="모임모아 · 결제 문제 상세" mood="worried" showSheep={false}
+            badge={<StatusBadge state="open"/>} detail={paymentAlert.sample + " · " + paymentAlert.metric}/>
+        </details>
       </div>)}
     </div>
   </section>;

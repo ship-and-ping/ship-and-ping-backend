@@ -20,6 +20,47 @@ const server = await createServer({
   },
 });
 let browser;
+
+// Sample the painted gradient behind the text, including its brightest edge.
+async function heroLabelContrast(page) {
+  const label = page.locator(".lp-hero .lp-kicker");
+  const { clip, color } = await label.evaluate(el => {
+    const range = document.createRange();
+    range.selectNodeContents(el.lastChild);
+    const { left, top, right, bottom } = range.getBoundingClientRect();
+    return {
+      clip: { x: Math.floor(left), y: Math.floor(top),
+        width: Math.ceil(right) - Math.floor(left), height: Math.ceil(bottom) - Math.floor(top) },
+      color: getComputedStyle(el).color,
+    };
+  });
+  const pixels = await page.screenshot({clip, style:".lp-hero .lp-kicker { color: transparent !important; }"});
+  return page.evaluate(async ({color, data}) => {
+    const img = new Image();
+    img.src = "data:image/png;base64," + data;
+    await img.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const bg = ctx.getImageData(0, 0, img.width, img.height).data;
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 1, 1);
+    function luminance(r, g, b) {
+      const linear = [r, g, b].map(v => v <= 10 ? v / 3294.6 : ((v / 255 + .055) / 1.055) ** 2.4);
+      return .2126 * linear[0] + .7152 * linear[1] + .0722 * linear[2];
+    }
+    const ink = luminance(...ctx.getImageData(0, 0, 1, 1).data);
+    let minimum = Infinity;
+    for (let i = 0; i < bg.length; i += 4) {
+      const paper = luminance(bg[i], bg[i + 1], bg[i + 2]);
+      minimum = Math.min(minimum, (Math.max(ink, paper) + .05) / (Math.min(ink, paper) + .05));
+    }
+    return minimum;
+  }, {color, data:pixels.toString("base64")});
+}
+
 try {
   await server.listen();
   browser = await chromium.launch({channel:"msedge"});
@@ -34,6 +75,12 @@ try {
         await page.evaluate(() => document.fonts.ready);
         await page.screenshot({path:join(dir, phase + "-" + width + "-" + colorScheme + ".png"), animations:"disabled"});
         if (phase === "before") continue;
+        const contrast = await heroLabelContrast(page);
+        console.log(width, colorScheme, "웹앱 모니터링 최소 대비", contrast.toFixed(2));
+        assert.ok(contrast >= 4.5);
+        const faqLabel = await page.locator(".answers .lp-kicker").boundingBox();
+        const faqTitle = await page.locator(".answers h2").boundingBox();
+        assert.ok(faqLabel.y + faqLabel.height < faqTitle.y);
         await page.addScriptTag({path:require.resolve("axe-core/axe.min.js")});
         const issues = await page.evaluate(async () => (await window.axe.run(document, {
           runOnly:{type:"tag", values:["wcag2a","wcag2aa","wcag21a","wcag21aa"]},
@@ -48,10 +95,15 @@ try {
         const tab = page.getByRole("tab", {name:"슬랙"});
         await tab.focus();
         await page.keyboard.press("ArrowRight");
-        await page.getByRole("tabpanel", {name:"이메일"}).waitFor();
+        const mail = page.getByRole("tabpanel", {name:"이메일"});
+        const detail = mail.getByText("쉽앤핑에서 보기");
+        await detail.focus();
+        await page.keyboard.press("Enter");
+        await mail.getByRole("heading", {name:"모임모아 · 결제 문제 상세"}).waitFor();
+        await page.keyboard.press("Enter");
         await page.getByText("키는 어디에 넣나요?", {exact:true}).focus();
         await page.keyboard.press("Enter");
-        assert.ok(await page.locator("details").first().evaluate(el => el.open));
+        assert.ok(await page.locator(".lp-faq details").first().evaluate(el => el.open));
         const pause = page.getByRole("button", {name:"알림 예시 띠 일시정지"});
         await pause.click();
         assert.equal(await page.locator(".lp-track").evaluate(el => getComputedStyle(el).animationPlayState), "paused");
