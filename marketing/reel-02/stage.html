@@ -1,0 +1,37 @@
+﻿<!doctype html>
+<html lang="ko" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=1080,height=1920">
+<script src="gsap.min.js"></script><link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="stage.css"></head>
+<body><main id="film" data-composition-id="main" data-start="0" data-duration="30" data-width="1080" data-height="1920">
+<section id="night" class="scene">
+  <div class="night-time"><i></i>밤 11:47</div>
+  <h1 class="title"><span><b>앱 켜 두고</b></span> <span><b>자도 <em>괜찮을까?</em></b></span></h1>
+  <div class="laptop"><div class="lid"><div class="glass"><div class="app-home monitor">{{homeHeading}}{{healthy}}</div></div></div><div class="base"><i></i></div></div>
+</section>
+<section id="watch" class="scene">
+  <h1 class="title"><span><b>자는 동안</b></span> <span><b><em>쉽앤핑이</em> 지켜봐요</b></span></h1>
+  <div class="watch-sheep"><img src="sheep.svg"><i class="signal"></i></div>
+  <div class="rows monitor"><div id="features">{{rows}}</div></div>
+</section>
+<section id="problem" class="scene">
+  <h1 class="title"><span><b>문제가 생기면</b></span> <span><b><em>쉬운 말로</em></b></span></h1>
+  <div class="home-detail monitor">{{homeHeading}}<div class="alert-card">{{problem}}</div></div>
+</section>
+<section id="morning" class="scene">
+  <h1 class="title"><span><b>일어나면</b></span> <span><b><em>알림이</em> 와 있어요</b></span></h1>
+  <div class="phone"><div class="phone-inner">
+    <div class="speaker"></div><div class="lock"><i></i></div><div class="clock"><small>오전</small> 7:02</div>
+    <div class="notification"><img src="wordmark.png"><div><strong>쉽앤핑</strong><p>{{alertText}}</p></div></div>
+    <div class="gesture"></div></div></div>
+</section>
+<section id="fix" class="scene">
+  <h1 class="title"><span><b>고쳐졌는지까지</b></span> <span><b><em>확인해요</em></b></span></h1>
+  <div class="action"><div class="original">{{copy}}</div><div class="success">{{copied}}</div><i class="tap"></i></div>
+  <div class="history monitor"><div class="history-title">{{historyTitle}}</div><ol class="timeline">{{events}}</ol></div>
+  <div class="verified"><i></i><img src="sheep.svg"></div>
+</section>
+<section id="close" class="scene">
+  <h1 class="title"><span><b>앱은 쉽앤핑이</b></span> <span><b><em>지켜볼게요</em></b></span></h1>
+  <div class="lockup"><img class="mascot" src="sheep.svg"><img class="word" src="wordmark-cut.png"></div>
+  <div class="address">ship-and-ping.pages.dev</div>
+</section>
+</main><script src="motion.js"></script></body></html>
