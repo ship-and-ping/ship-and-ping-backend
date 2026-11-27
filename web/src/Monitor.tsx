@@ -6,6 +6,7 @@ import { status, StatusBadge, Timeline, IssueListItem } from "./IncidentSummary"
 import type { Gateway } from "./data";
 import { Hero, CurrentAppName } from "./Layout";
 import { Chart } from "./Chart";
+import { SpeedInsights } from "./SpeedInsights";
 import "./styles/dashboard.css";
 import { displayText, sanitizeRoute } from "./normalize";
 import { buildIssuePrompt, displayVersion, noErrorSamples } from "./issue-prompt";
@@ -209,9 +210,11 @@ function Home({ data, base }: { data: Monitor; base: string }) {
           <p>처음 감지 · <time dateTime={first.opened_at}>{when(first.opened_at)}</time></p>
           <Link className="button dashboard-primary" to={action.to}>{action.label}</Link>
         </div>
+        <SpeedInsights data={data} />
       </section> : <section className="panel dashboard-state hero-card" aria-label="앱 상태 요약">
         {sparse ? <span className="status-badge waiting">기록 적음</span> : <StatusBadge state={hasRecords ? "healthy" : "waiting"} />}<h2>{stateTitle}</h2>
         <p role="status">{sparse ? "최근 24시간 사용 " + total + "건 · 열린 문제가 없어요." : hasRecords ? "열린 문제가 없어요." : "연결한 앱을 한 번 사용하면 첫 기록을 확인할 수 있어요."}</p>
+        <SpeedInsights data={data} />
         <Link className="button dashboard-primary" to={action.to}>{action.label}</Link>
       </section>}
       <div className="dashboard-lower">
@@ -317,6 +320,7 @@ function FeaturePage({
         <h2>{problem ? title(f, problem) : summary.total ? displayText(f.name) + " 기능은 괜찮아요" : "이 기간에는 사용 기록이 없어요"}</h2>
         <p>최근 {days === 1 ? "24시간" : "7일"} 사용 {summary.total}건 중 {summary.failures}건 실패 · 보통 시간 {approximateDuration(summary.median)}</p>
         {f.baselines?.p50_ms != null && <p>{usualDuration(f.baselines.p50_ms, f.baselines.p95_ms)}</p>}
+        <SpeedInsights data={data} featureId={f.id} />
         <Link className="button dashboard-primary" to={destination}>{action}</Link>
       </section>
       <section className="panel usage-panel">
@@ -328,7 +332,8 @@ function FeaturePage({
             {d === 1 ? "24시간" : "7일"}
           </button>
         ))}</div>
-        <Chart key={days} rows={rows} days={days} now={data.now} baseline={f.baselines?.p50_ms ?? null} />
+        <Chart key={days} rows={rows} days={days} now={data.now} baseline={f.baselines?.p50_ms ?? null}
+          p95={f.baselines?.p95_ms ?? null} samples={f.baselines?.sample_count ?? summarize(data.stats.filter(r => r.feature_id === f.id)).successes} />
         </details>
       </section>
       <section>

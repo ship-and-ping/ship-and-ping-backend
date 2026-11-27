@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Insight } from "./insights";
 
 export interface Feature {
   kind?: "auto" | "deep";
@@ -52,6 +53,7 @@ export interface Incident {
   notifications: { event: string; sent_at: string; ok: boolean }[];
 }
 export interface Monitor {
+  insights?: Insight[];
   verificationIncidentId?: string;
   verification?: {
     version: string | null;
@@ -200,7 +202,7 @@ export async function loadMonitor(
           .range(a, b),
       )
     : [];
-  const [rows, deepRows, errorKinds, samples, steps, proof] = await Promise.all([
+  const [rows, deepRows, errorKinds, samples, steps, proof, insights] = await Promise.all([
     stats,
     attempts,
     kindRows,
@@ -223,6 +225,7 @@ export async function loadMonitor(
     verificationIssue
       ? client.rpc("incident_verification", { incident_id: verificationIssue.id })
       : undefined,
+    issueId ? undefined : client.rpc("demo_insights", {target_app:app}),
   ]);
   const deepIds = new Set(deep.map((f) => f.id));
   const visibleRows = rows.filter((row) => !deepIds.has(row.feature_id));
@@ -246,6 +249,7 @@ export async function loadMonitor(
   }
   return {
     name: read(header).name,
+    insights: insights ? read<Insight[]>(insights) : [],
     verificationIncidentId: verificationIssue?.id,
     verification: proof ? read<NonNullable<Monitor["verification"]>>(proof) : undefined,
     features: read(features),

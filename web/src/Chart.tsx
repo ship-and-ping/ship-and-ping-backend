@@ -56,7 +56,9 @@ function verticalTicks(peak: number, duration: boolean) {
   return Array.from({length:count + 1}, (_, index) => index * step);
 }
 
-function DurationMarks({ points, max, baseline }: { points: Bucket[]; max: number; baseline: number | null }) {
+function DurationMarks({ points, max, baseline, p95 }: { points: Bucket[]; max: number; baseline: number | null; p95: number | null }) {
+  const clip = useId();
+  const top = p95 === null ? null : y(plotTime(p95), max);
   const runs: string[][] = [];
   points.forEach(({ median }, i) => {
     if (median === null) return;
@@ -65,13 +67,19 @@ function DurationMarks({ points, max, baseline }: { points: Bucket[]; max: numbe
     run.push((run.length ? "L" : "M") + center(i, points.length) + " " + y(plotTime(median), max));
   });
   return <>
+    {baseline !== null && top !== null && <rect className="usual-band" x="0" width="100%"
+      y={percent(top)} height={percent(y(plotTime(baseline),max) - top)} />}
     {baseline !== null && <line className="usual-duration" x1="0" x2="100%"
       y1={percent(y(plotTime(baseline), max))} y2={percent(y(plotTime(baseline), max))} />}
     <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+      {top !== null && <defs><clipPath id={clip}><rect width="100" height={top} /></clipPath></defs>}
       {runs.filter(run => run.length > 1).map(run =>
         <path key={run[0]} className="duration-run" d={run.join(" ")} vectorEffect="non-scaling-stroke" />)}
+      {top !== null && <g clipPath={`url(#${clip})`}>{runs.filter(run => run.length > 1).map(run =>
+        <path key={run[0]} className="above-run" d={run.join(" ")} vectorEffect="non-scaling-stroke" />)}</g>}
     </svg>
     {points.map(({ median }, i) => median !== null && <circle key={i}
+      className={p95 !== null && median > p95 ? "above-range" : undefined}
       cx={percent(center(i, points.length))} cy={percent(y(plotTime(median), max))} r="5"
       stroke="var(--sp-surface)" strokeWidth="2" />)}
   </>;
@@ -103,12 +111,14 @@ function CountMarks({ points, max }: { points: Bucket[]; max: number }) {
   </>;
 }
 
-function description(p: Bucket) {
-  return p.label + " · 사용 " + p.total + "건 · 실패 " + p.failures + "건 · 보통 시간 " + approximateDuration(p.median);
+function description(p: Bucket, p95: number | null) {
+  return p.label + " · 사용 " + p.total + "건 · 실패 " + p.failures + "건 · 보통 시간 " + approximateDuration(p.median)
+    + (p95 !== null && p.median !== null && p.median > p95 ? " · 평소 범위 초과" : "");
 }
 
-function Plot({ points, labels, duration, baseline, summary }: {
+function Plot({ points, labels, duration, baseline, p95 = null, samples = 0, summary }: {
   points: Bucket[]; labels: ReturnType<typeof ticks>; duration?: boolean; baseline: number | null; summary?: string;
+  p95?: number | null; samples?: number;
 }) {
   const id = useId();
   const [selected, setSelected] = useState(() => Math.max(0,
@@ -138,7 +148,7 @@ function Plot({ points, labels, duration, baseline, summary }: {
     setShowSelection(true);
   }
   const peak = duration
-    ? Math.max(plotTime(baseline ?? 0), ...points.map(p => plotTime(p.median ?? 0)))
+    ? Math.max(plotTime(p95 ?? baseline ?? 0), ...points.map(p => plotTime(p.median ?? 0)))
     : Math.max(...points.map(p => p.total));
   const levels = verticalTicks(peak || (duration ? 1000 : 1), !!duration);
   const max = levels[levels.length - 1];
@@ -148,9 +158,10 @@ function Plot({ points, labels, duration, baseline, summary }: {
   return <figure className="flow-figure" aria-labelledby={id}>
     <figcaption id={id}>{title}</figcaption>
     {summary && <p className="flow-summary">{summary}</p>}
+    {duration && p95 === null && <p className="flow-note">평소 범위는 성공 30번 뒤에 생겨요 (지금 {samples}번)</p>}
     {(!duration || baseline !== null) && <div className="flow-key">{duration ? <>
       <span className="median-key">보통 시간</span>
-      {baseline !== null && <span className="baseline-key">평소 {approximateDuration(baseline)}</span>}
+      {baseline !== null && p95 !== null && <span className="range-key">평소 범위 · {approximateDuration(baseline)} ~ {approximateDuration(p95)}</span>}
     </> : <>
       <span className="success-key">성공</span><span className="failure-key">실패</span>
       {points.some(p => p.total > p.eligible) && <span className="excluded-key">판정 제외</span>}
@@ -163,10 +174,10 @@ function Plot({ points, labels, duration, baseline, summary }: {
         <svg className="flow-marks" aria-hidden="true">
           {levels.slice(1).map(level => <line key={level} x1="0" x2="100%" y1={percent(y(level,max))} y2={percent(y(level,max))}
             stroke="var(--sp-line-strong)" strokeDasharray="2 4" />)}
-          {duration ? <DurationMarks points={points} max={max} baseline={baseline} /> : <CountMarks points={points} max={max} />}
+          {duration ? <DurationMarks points={points} max={max} baseline={baseline} p95={p95} /> : <CountMarks points={points} max={max} />}
         </svg>
         <div role="slider" tabIndex={0} className="flow-hit" aria-labelledby={id}
-          aria-valuemin={1} aria-valuemax={points.length} aria-valuenow={selected + 1} aria-valuetext={description(points[selected])}
+          aria-valuemin={1} aria-valuemax={points.length} aria-valuenow={selected + 1} aria-valuetext={description(points[selected], p95)}
           onFocus={() => setShowSelection(true)} onBlur={() => setShowSelection(false)}
           onPointerEnter={e => { if (e.pointerType !== "touch") setHovered(pointAt(e)); }}
           onPointerDown={e => {
@@ -196,7 +207,7 @@ function Plot({ points, labels, duration, baseline, summary }: {
         {duration && isolatedX !== null && <span className={"isolated-value" + (isolatedX >= 50 ? " on-left" : "")}
           style={{ left: percent(isolatedX),
             top: percent(y(plotTime(measurements[0].median!), max)) }}>{approximateDuration(measurements[0].median)}</span>}
-        {active !== null && <div role="tooltip" className="flow-tip" id={id + "-tip"}>{description(points[active])}</div>}
+        {active !== null && <div role="tooltip" className="flow-tip" id={id + "-tip"}>{description(points[active], p95)}</div>}
       </div>
       <div className="flow-x">{labels.map(({ left, label }) => <span key={label}
         style={{ left: `clamp(0%, calc(${left}% - var(--tick-width) / 2), calc(100% - var(--tick-width)))` }}>{label}</span>)}</div>
@@ -204,7 +215,9 @@ function Plot({ points, labels, duration, baseline, summary }: {
   </figure>;
 }
 
-export function Chart({ rows, days, now, baseline }: { rows: Stat[]; days: number; now: number; baseline: number | null }) {
+export function Chart({ rows, days, now, baseline, p95 = null, samples }: {
+  rows: Stat[]; days: number; now: number; baseline: number | null; p95?: number | null; samples?: number;
+}) {
   const start = now - days * day;
   const hourly = days === 1;
   const points = buckets(rows, start, now, hourly ? 24 : 7);
@@ -217,7 +230,7 @@ export function Chart({ rows, days, now, baseline }: { rows: Stat[]; days: numbe
     {occupied <= 3 && <p className="flow-note">{occupied ? "아직 사용 기록이 적어요. 쌓이면 흐름이 보여요." : "이 기간에는 표시할 사용 기록이 없어요."}</p>}
     <div className="flow-plots"><Plot points={points} labels={labels} baseline={null}
       summary={worst.failures ? worst.label + " 구간에 실패 " + worst.failures + "건이 있었어요." : undefined} />
-    <Plot points={points} labels={labels} duration baseline={baseline}
+    <Plot points={points} labels={labels} duration baseline={baseline} p95={p95} samples={samples}
       summary={period.median === null ? "선택한 기간에 걸린 시간 측정값이 없어요." : "선택한 기간 보통 " + approximateDuration(period.median)} /></div>
     <details><summary>표로 보기</summary>
       <table><caption>최근 {hourly ? "24시간" : "7일"} 기록</caption>

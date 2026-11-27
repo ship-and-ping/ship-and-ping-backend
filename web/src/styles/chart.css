@@ -46,6 +46,10 @@
 .flow-figure + .flow-figure .flow-plot { height: 78px; border-top-color: transparent; }
 .flow-marks { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .flow-marks circle { fill: var(--sp-chart-time); }
+.usual-band { fill: var(--sp-chart-usual); opacity: .2; }
+.flow-key .range-key::before { background: var(--sp-chart-usual); opacity: .6; }
+.flow-marks .above-range { fill: var(--sp-change-slower); }
+.above-run { fill: none; stroke: var(--sp-change-slower); stroke-width: 3; }
 .duration-run { fill: none; stroke: var(--sp-chart-time); stroke-width: 2; }
 .usual-duration { stroke: var(--sp-chart-usual); stroke-width: 1.5; stroke-dasharray: 5 4; }
 .flow-hit {

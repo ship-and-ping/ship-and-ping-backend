@@ -140,3 +140,15 @@
   .monitor .chart-fold > summary { display: list-item; }
   .dashboard-channels .panel { padding: 20px; }
 }
+.speed-insights {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--sp-space-3);
+  border-top: 1px solid var(--sp-line);
+  padding-block: var(--sp-space-3);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.speed-insights p { margin: 0; }
+.speed-insights .speed-faster { color: var(--sp-ok-ink); }
+.speed-insights .speed-slower { color: var(--sp-change-slower); }

@@ -286,6 +286,7 @@ function setup(
       message,
     })),
     attempts: [],
+    demo_insights: [],
     incident_verification: { version, consecutive_successes: 0, latest_duration_ms: 100, latest_success: false },
   };
   change?.(rows);

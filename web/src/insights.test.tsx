@@ -11,6 +11,8 @@ it("weights successful requests and keeps slow requests and failures visible", (
   expect(satisfaction([row])).toEqual({percent:96, slow:1, failures:3});
   expect(satisfaction([row, {...row, fast:0, measured:75, failures:2}])).toEqual({percent:24, slow:76, failures:5});
   expect(satisfaction([])).toBeNull();
+  expect(satisfaction([{...row, fast:null}])).toBeNull();
+  expect(satisfaction([{...row, fast:0, measured:0}])).toEqual({percent:null, slow:0, failures:3});
 });
 
 it("requires ten measured successes in both adjacent versions", () => {

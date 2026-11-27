@@ -35,6 +35,7 @@
   /* 상태 3가지 — 색만으로 구분하지 않는다(아이콘 모양 + 글자 함께) */
   --sp-ok: #76E7C4;             /* 괜찮아요: 채움·그래픽·카드 안 글자 */
   --sp-ok-ink: #0B6B50;         /* 괜찮아요: 밝은 바탕 위 글자 */
+  --sp-change-slower: #964400;
   --sp-ok-soft: #DDF8EF;
   --sp-on-ok: #13372B;          /* 민트 채움 위 글자 */
   --sp-bad: #FF8A65;            /* 문제 있어요: 카드 안 글자·그래픽 */
@@ -109,6 +110,7 @@
   --sp-hero-line: #3B2C63;
   --sp-hero-shadow: none;
   --sp-ok-ink: #76E7C4;
+  --sp-change-slower: var(--sp-bad);
   --sp-ok-soft: rgba(118, 231, 196, .12);
   --sp-bad-ink: #FF8A65;
   --sp-bad-soft: rgba(255, 138, 101, .12);
@@ -133,6 +135,7 @@
   --sp-hero-line: #3B2C63;
   --sp-hero-shadow: none;
   --sp-ok-ink: #76E7C4;
+  --sp-change-slower: var(--sp-bad);
   --sp-ok-soft: rgba(118, 231, 196, .12);
   --sp-bad-ink: #FF8A65;
   --sp-bad-soft: rgba(255, 138, 101, .12);
