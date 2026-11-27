@@ -17,6 +17,13 @@ export const CurrentAppName = createContext<(heading: AppHeading) => void>(
   () => {},
 );
 
+export function LoadingRows({ children }: { children: ReactNode }) {
+  return <section className="monitor-loading" role="status">
+    {children}
+    <div aria-hidden="true" /><div aria-hidden="true" />
+  </section>;
+}
+
 export function Hero({
   title,
   detail,
@@ -179,6 +186,7 @@ export function Shell({
 export function Landing() {
   const landing = useRef<HTMLElement>(null);
   const [preview, setPreview] = useState<"앱 홈" | "문제 상세">("앱 홈");
+  const detailButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!landing.current || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(entries => {
@@ -220,9 +228,8 @@ export function Landing() {
               대신 지켜볼게요.
             </p>
             <p>
-              바이브 코딩으로 앱을 낸 사람을 위한 관리형 모니터링이에요. 문제가
-              생기면 쉬운 한 문장으로 알려 드리고 코딩 AI에 보낼 내용까지 챙겨
-              드려요.
+              바이브 코딩으로 출시한 앱을 위한 관리형 모니터링이에요.
+              문제가 생기면 원인을 살펴볼 요청문을 코딩 AI에 보낼 수 있어요.
             </p>
             {acts}
           </div>
@@ -278,15 +285,18 @@ export function Landing() {
           <h2>연결하면 이렇게 보여요</h2>
           <div className="product-example" role="region" aria-label="예시 화면">
             <div className="example-bar"><strong>모임모아</strong>
-              <div className="example-tabs">{(["앱 홈", "문제 상세"] as const).map(name =>
-                <button key={name} aria-pressed={preview === name} onClick={() => setPreview(name)}>{name}</button>)}</div>
+              <div className="example-tabs" role="group" aria-label="예시 화면 선택">{(["앱 홈", "문제 상세"] as const).map(name =>
+                <button key={name} ref={name === "문제 상세" ? detailButton : undefined} aria-pressed={preview === name} onClick={() => setPreview(name)}>{name}</button>)}</div>
             </div>
             <Hero title={preview === "앱 홈" ? "모임 신청에서 실패가 늘었어요" : "모임 신청 20건 중 6건 실패"}
               mood="worried" showSheep={false} badge={<StatusBadge state="open" />}
               detail={preview === "앱 홈" ? "최근 30분 동안 실패가 6건 있었어요." : "감지 구간 · 최근 30분"} />
             {preview === "앱 홈" ? <div className="example-row"><h3>문제</h3>
               <IssueListItem summary="모임 신청에서 실패가 늘었어요" state="open"
-                metric="최근 30분 20건 중 실패 6건" onOpen={() => setPreview("문제 상세")} /></div> :
+                metric="최근 30분 20건 중 실패 6건" onOpen={() => {
+                  setPreview("문제 상세");
+                  detailButton.current?.focus();
+                }} /></div> :
               <div className="example-row"><h3>지금까지 흐름</h3>
                 <Timeline events={[{at:"2026-11-25T18:00:00+09:00", date:"오후 6:00", text:"버전 1.0에서 처음 감지했어요"}]} /></div>}
           </div>

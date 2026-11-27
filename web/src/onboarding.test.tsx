@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
   act,
+  within,
 } from "@testing-library/react";
 import { Link, MemoryRouter } from "react-router-dom";
 import { axe } from "vitest-axe";
@@ -341,6 +342,97 @@ it("슬랙 연결을 시작할 수 없으면 알림 설정에 서버 안내를 �
   fireEvent.click(await screen.findByRole("button", { name: "Slack에 추가" }));
   expect(await screen.findByText(message)).toBeTruthy();
 });
+it("이메일 설정 저장 중에는 이전 상태를 유지하고 실패하면 다시 시도할 수 있다", async () => {
+  const api = fake();
+  let rejectSave!: (reason: Error) => void;
+  vi.mocked(api.emailSetting).mockImplementationOnce(() => new Promise<void>((_, reject) => { rejectSave = reject; }));
+  open("/apps/a/notifications", api);
+  const toggle = await screen.findByRole<HTMLButtonElement>("switch", {name:"이메일로도 받기"});
+  fireEvent.click(toggle);
+  expect(toggle.disabled).toBe(true);
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  expect(screen.getByText("이메일 알림 설정을 저장하는 중이에요.")).toBeTruthy();
+  fireEvent.click(toggle);
+  expect(api.emailSetting).toHaveBeenCalledTimes(1);
+  rejectSave(new Error("다시 시도해 주세요."));
+  await screen.findByText("다시 시도해 주세요.");
+  expect(toggle.disabled).toBe(false);
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  vi.mocked(api.settings).mockResolvedValueOnce({email:true,connected:false,broken:false,channel:null});
+  fireEvent.click(toggle);
+  await screen.findByText("이메일 알림이 켜졌어요.");
+  expect(toggle.getAttribute("aria-checked")).toBe("true");
+});
+it.each([false, true])("이메일 설정(%s)을 바꾼 뒤 재조회가 실패해도 저장한 값을 유지한다", async email => {
+  const api = fake();
+  const settings = {email, connected:false, broken:false, channel:null};
+  vi.mocked(api.settings).mockResolvedValueOnce(settings)
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValue({...settings, email:!email, connected:true, channel:"#모임"});
+  open("/apps/a/notifications", api);
+  const toggle = await screen.findByRole("switch");
+  fireEvent.click(toggle);
+  await screen.findByText(/최신 상태를 불러오지 못했어요/);
+  expect(toggle.getAttribute("aria-checked")).toBe(String(!email));
+  expect(screen.getByText(email ? "이메일 알림이 꺼졌어요." : "이메일 알림이 켜졌어요.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", {name:"다시 불러오기"}));
+  await screen.findByText("#모임 채널로 보내요.");
+  expect(screen.queryByText(/최신 상태를 불러오지 못했어요/)).toBeNull();
+  expect(api.emailSetting).toHaveBeenCalledTimes(1);
+  expect(api.emailSetting).toHaveBeenCalledWith("a", !email);
+});
+it.each([
+  [true, "시험 알림을 예약했어요. 잠시 뒤 슬랙에서 확인해 주세요."],
+  [false, "잠시 뒤 다시 시도해 주세요. 시험 알림은 분당 한 번 보낼 수 있어요."],
+] as const)("시험 알림 예약 결과(%s)는 재조회 중과 실패 뒤에도 버튼 옆에 남는다", async (reserved, result) => {
+  const api = fake();
+  const settings = {email:false, connected:true, broken:false, channel:"#모임"};
+  let finish!: (reserved: boolean) => void;
+  let failRefresh!: (error: Error) => void;
+  vi.mocked(api.testSlack).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  vi.mocked(api.settings).mockResolvedValueOnce(settings)
+    .mockImplementationOnce(() => new Promise((_, reject) => { failRefresh = reject; }))
+    .mockResolvedValue(settings);
+  open("/apps/a/notifications", api);
+  const send = await screen.findByRole("button", {name:"시험 알림 보내기"});
+  const panel = within(send.closest("section")!);
+  fireEvent.click(send);
+  expect(panel.getByRole<HTMLButtonElement>("button", {name:"시험 알림 요청 중"}).disabled).toBe(true);
+  await act(async () => finish(reserved));
+  expect(panel.getByRole("button", {name:"시험 알림 보내기"})).toBeTruthy();
+  expect(panel.getByRole("status").textContent).toBe(result);
+  await act(async () => failRefresh(new Error("offline")));
+  await screen.findByText(/최신 상태를 불러오지 못했어요/);
+  expect(panel.getByRole("status").textContent).toBe(result);
+  fireEvent.click(screen.getByRole("button", {name:"다시 불러오기"}));
+  await waitFor(() => expect(api.settings).toHaveBeenCalledTimes(3));
+  expect(api.testSlack).toHaveBeenCalledTimes(1);
+});
+it.each(["지연", "실패"] as const)("슬랙 해제 후 재조회 %s 중에도 해제된 상태를 표시한다", async (refresh) => {
+  const api = fake();
+  let finishDisconnect!: () => void;
+  vi.mocked(api.disconnectSlack).mockImplementationOnce(() => new Promise(resolve => { finishDisconnect = resolve; }));
+  vi.mocked(api.settings)
+    .mockResolvedValueOnce({ email: false, connected: true, broken: false, channel: "#모임" })
+    .mockImplementationOnce(() => refresh === "지연" ? new Promise(() => {}) : Promise.reject(new Error("offline")));
+  open("/apps/a/notifications", api);
+  const disconnect = await screen.findByRole("button", { name: "슬랙 연결 끊기" });
+  expect(screen.getByRole("button", { name: "시험 알림 보내기" })).toBeTruthy();
+  expect(screen.queryByText("알림을 받을 곳이 없어요.")).toBeNull();
+  fireEvent.click(disconnect);
+  expect(screen.getByText(/연결됐어요/)).toBeTruthy();
+  await act(async () => finishDisconnect());
+  if (refresh === "지연") {
+    await screen.findByText("최신 상태를 불러오는 중이에요.");
+  } else {
+    await screen.findByText(/최신 상태를 불러오지 못했어요/);
+  }
+  expect(api.disconnectSlack).toHaveBeenCalledWith("a");
+  expect(screen.queryByText(/연결됐어요/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "시험 알림 보내기" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Slack에 추가" })).toBeTruthy();
+  expect(screen.getByText("알림을 받을 곳이 없어요.")).toBeTruthy();
+});
 it("받을 곳 없음, 연결 끊김, 연결됨 상태와 시험 알림을 표시한다", async () => {
   const api = fake();
   open("/apps/a/notifications", api);
@@ -485,7 +577,7 @@ it("베타 정원이 차면 앱 등록 화면에 이유를 표시한다", async 
   fireEvent.change(await screen.findByLabelText("앱 이름 (필수)"), {
     target: { value: "새 앱" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "등록" }));
+  fireEvent.click(screen.getByRole("button", { name: "등록하고 연결하기" }));
   expect(await screen.findByText("베타 정원이 찼어요")).toBeTruthy();
   expect(api.issue).not.toHaveBeenCalled();
 });
@@ -495,7 +587,7 @@ it("등록한 수집 키는 미리 보기에서 가리고 화면을 다시 열�
   fireEvent.change(await screen.findByLabelText("앱 이름 (필수)"), {
     target: { value: " 내 앱 " },
   });
-  fireEvent.click(screen.getByRole("button", { name: "등록" }));
+  fireEvent.click(screen.getByRole("button", { name: "등록하고 연결하기" }));
   const preview = (await screen.findByLabelText(
     "연결 요청문 복사(키 포함) 전문",
   )) as HTMLTextAreaElement;

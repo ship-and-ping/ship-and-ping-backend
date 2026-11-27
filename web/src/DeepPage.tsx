@@ -232,7 +232,8 @@ function DeepForm({
                     {!saved && <small id={"help-" + k}>{examples[k]}</small>}
                       <input
                         id={"deep-" + k}
-                        aria-describedby={saved ? undefined : "help-" + k}
+                        aria-invalid={!!(fields[k] && prompt.errors[k])}
+                        aria-describedby={[!saved && "help-" + k, fields[k] && prompt.errors[k] && "error-" + k].filter(Boolean).join(" ") || undefined}
                         readOnly={!!saved}
                         disabled={busy}
                         value={saved ? displayText(fields[k]) : raw[k]}
@@ -241,14 +242,17 @@ function DeepForm({
                         }
                       />
                     {fields[k] && prompt.errors[k] && (
-                      <small role="alert">{prompt.errors[k]}</small>
+                      <small id={"error-" + k} role="alert">{prompt.errors[k]}</small>
                     )}
                   </div>
                 ))}
                 {!saved && (
-                  <button disabled={busy || invalid} onClick={save}>
-                    기능 추가
-                  </button>
+                  <>
+                    {invalid && <small id="add-reason">세 칸을 모두 올바르게 입력하면 기능을 추가할 수 있어요.</small>}
+                    <button disabled={busy || invalid} aria-busy={busy} aria-describedby={invalid ? "add-reason" : undefined} onClick={save}>
+                      {busy ? "기능 추가 중" : "기능 추가"}
+                    </button>
+                  </>
                 )}
               </section>
               <section className="panel">
@@ -270,14 +274,14 @@ function DeepForm({
                   />
                 ) : (
                   <><button disabled aria-describedby="copy-reason">추가 연결 요청 복사</button>
-                    <p id="copy-reason">{invalid ? "세 칸을 모두 올바르게 입력하면 기능을 추가할 수 있어요." : "기능을 추가하면 연결 요청을 복사할 수 있어요."}</p></>
+                    <p id="copy-reason">{saved ? "기능 내용을 확인해 주세요." : "기능을 추가하면 연결 요청을 복사할 수 있어요."}</p></>
                 )}
               </section>
               {saved && <section className="panel">
                 {confirmDelete ? <>
                   <p>{displayText(saved.name)} 기능과 수집한 기록을 삭제할까요?</p>
                   <button disabled={busy} onClick={() => setConfirmDelete(false)}>취소</button>
-                  <button disabled={busy} onClick={remove}>삭제 확인</button>
+                  <button disabled={busy} aria-busy={busy} onClick={remove}>{busy ? "삭제 중" : "삭제 확인"}</button>
                 </> : <button onClick={() => setConfirmDelete(true)}>기능 삭제</button>}
               </section>}
             </>

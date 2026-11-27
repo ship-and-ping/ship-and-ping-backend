@@ -11,7 +11,7 @@ import {
 import type { AppSummary, Gateway } from "./data";
 import { appAddressHelp, appAddressLabel, validateApp } from "./domain";
 import { displayText } from "./normalize";
-import { Hero, Landing, Shell } from "./Layout";
+import { Hero, Landing, LoadingRows, Shell } from "./Layout";
 import { AuthPage } from "./AuthPage";
 import { LoginApproval } from "./LoginApproval";
 import { MonitorRoute } from "./Monitor";
@@ -127,19 +127,20 @@ function Apps({ api }: { api: Gateway }) {
                 key={app.id}
                 to={"/apps/" + app.id + (app.first_record_at ? "" : "/connect")}
               >
+                <h2>{displayText(app.name)}</h2>
                 <span
                   className={
                     "badge " +
                     (app.issues ? "bad" : app.first_record_at ? "ok" : "wait")
                   }
                 >
+                  <span aria-hidden="true">{app.issues ? "⚠" : app.first_record_at ? "✓" : "◷"}</span>{" "}
                   {app.issues
-                    ? "⚠ 문제 있어요"
+                    ? "문제 있어요"
                     : app.first_record_at
-                      ? "⊙ 괜찮아요"
-                      : "◷ 기록을 기다려요"}
+                      ? "괜찮아요"
+                      : "기록을 기다려요"}
                 </span>
-                <h2>{displayText(app.name)}</h2>
                 <p>열린 문제 {app.issues}개</p>
                 <small>
                   마지막 기록 {app.last ? relative(app.last) : "없음"}
@@ -149,7 +150,7 @@ function Apps({ api }: { api: Gateway }) {
           </div>
         </>
       ) : (
-        <p role="status">앱 목록을 불러오는 중</p>
+        <LoadingRows>앱 목록을 불러오는 중</LoadingRows>
       )}
     </>
   );
@@ -210,7 +211,7 @@ function Register({
   return (
     <div className="narrow">
       <h1 tabIndex={-1}>앱 등록</h1>
-      <p>지켜볼 앱의 이름을 알려 주세요.</p>
+      <p>등록하면 코딩 AI에 붙여넣을 연결 요청문을 드려요.</p>
       {loadError ? (
         <LoadError retry={retry} />
       ) : !apps ? (
@@ -244,7 +245,7 @@ function Register({
           <small id="url-help">
             {errors.url ?? appAddressHelp}
           </small>
-          <button disabled={busy}>{busy ? "등록하는 중" : "등록"}</button>
+          <button disabled={busy} aria-busy={busy}>{busy ? "등록하는 중" : "등록하고 연결하기"}</button>
           {error && (
             <p role="alert">
               {error} <Link to="/apps">내 앱 보기</Link>

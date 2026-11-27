@@ -60,6 +60,7 @@ export async function mockPage(page, state, member, origin) {
     if (state === "loading") return;
     if (state === "error") return route.fulfill({ status: 400, json: { message: "QA offline" } });
     const name = url.pathname.split("/").pop();
+    if (name === "set_notification_email" && state === "email-saving") return;
     if (name === "issue_key") return route.fulfill({json:"sp_" + route.request().postDataJSON().kind + "_" + "0".repeat(64)});
     const single = route.request().headers().accept?.includes("vnd.pgrst.object");
     const rows = {

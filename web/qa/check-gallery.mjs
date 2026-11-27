@@ -9,7 +9,7 @@ try {
     const profile = document.querySelector("#profile");
     let pairs = 0;
     for (const option of scene.options) {
-      scene.value = option.value;
+      scene.selectedIndex = option.index;
       for (const view of profile.options) {
         profile.value = view.value;
         profile.dispatchEvent(new Event("change", { bubbles: true }));
