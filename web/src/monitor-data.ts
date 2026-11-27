@@ -253,37 +253,31 @@ export async function loadMonitor(
     now,
   };
 }
+const legacyBounds = [50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000, 7500, 10000, 20000, 30000, Infinity];
 const bounds = [
-  50,
-  100,
-  200,
-  300,
-  500,
-  750,
-  1000,
-  1500,
-  2000,
-  3000,
-  5000,
-  7500,
-  10000,
-  20000,
-  30000,
-  Infinity,
+  ...legacyBounds.slice(0, 10),
+  3300, 3600, 3900, 4200, 4500, 4800, 5000, 5100, 5400, 5700, 6000, 6300, 6600, 6900, 7200,
+  ...legacyBounds.slice(11),
 ];
+const legacyIndices = legacyBounds.map(upper => bounds.indexOf(upper));
 export function summarize(rows: Stat[]) {
   let abandoned = 0, unconfirmed = 0;
   let total = 0,
     failures = 0,
     excluded = 0;
   const hist = bounds.map(() => 0);
+  let min = Infinity;
   for (const row of rows) {
     if (row.attemptStatus === "abandon") abandoned++;
     if (row.attemptStatus === "unconfirmed") unconfirmed++;
     excluded += row.client_errors ?? 0;
     total += row.total;
     failures += row.failures;
-    row.hist.forEach((n, i) => (hist[i] += n));
+    const legacy = row.hist.length === legacyBounds.length;
+    const edges = legacy ? legacyBounds : bounds;
+    const first = row.hist.findIndex(n => n > 0);
+    if (first >= 0) min = Math.min(min, edges[first - 1] ?? 0);
+    row.hist.forEach((n, i) => (hist[legacy ? legacyIndices[i] : i] += n));
   }
   const measured = hist.reduce((sum, n) => sum + n, 0);
   let left = Math.ceil(measured / 2);
@@ -295,7 +289,7 @@ export function summarize(rows: Stat[]) {
     successes: total - failures - excluded,
     eligible: total - excluded,
     median: measured ? bounds[index] : null,
-    min: measured ? (bounds[hist.findIndex((n) => n > 0) - 1] ?? 0) : null,
+    min: measured ? min : null,
     max: measured ? bounds[hist.map((n) => n > 0).lastIndexOf(true)] : null,
   };
 }
@@ -303,4 +297,8 @@ export function summarize(rows: Stat[]) {
 export function formatDuration(ms: number | null) {
   if (ms === null) return "기록 없음";
   return ms === Infinity ? "30초 초과" : +(ms / 1000).toFixed(2) + "초";
+}
+
+export function approximateDuration(ms: number | null) {
+  return (ms !== null && Number.isFinite(ms) ? "약 " : "") + formatDuration(ms);
 }

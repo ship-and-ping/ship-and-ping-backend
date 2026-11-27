@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type PointerEvent } from "react";
-import { formatDuration, summarize, type Stat } from "./monitor-data";
+import { approximateDuration, summarize, type Stat } from "./monitor-data";
 import "./styles/chart.css";
 
 const hour = 3600000;
@@ -104,7 +104,7 @@ function CountMarks({ points, max }: { points: Bucket[]; max: number }) {
 }
 
 function description(p: Bucket) {
-  return p.label + " · 사용 " + p.total + "건 · 실패 " + p.failures + "건 · 보통 시간 " + formatDuration(p.median);
+  return p.label + " · 사용 " + p.total + "건 · 실패 " + p.failures + "건 · 보통 시간 " + approximateDuration(p.median);
 }
 
 function Plot({ points, labels, duration, baseline, summary }: {
@@ -150,7 +150,7 @@ function Plot({ points, labels, duration, baseline, summary }: {
     {summary && <p className="flow-summary">{summary}</p>}
     {(!duration || baseline !== null) && <div className="flow-key">{duration ? <>
       <span className="median-key">보통 시간</span>
-      {baseline !== null && <span className="baseline-key">평소 {formatDuration(baseline)}</span>}
+      {baseline !== null && <span className="baseline-key">평소 {approximateDuration(baseline)}</span>}
     </> : <>
       <span className="success-key">성공</span><span className="failure-key">실패</span>
       {points.some(p => p.total > p.eligible) && <span className="excluded-key">판정 제외</span>}
@@ -195,7 +195,7 @@ function Plot({ points, labels, duration, baseline, summary }: {
         </div>
         {duration && isolatedX !== null && <span className={"isolated-value" + (isolatedX >= 50 ? " on-left" : "")}
           style={{ left: percent(isolatedX),
-            top: percent(y(plotTime(measurements[0].median!), max)) }}>{formatDuration(measurements[0].median)}</span>}
+            top: percent(y(plotTime(measurements[0].median!), max)) }}>{approximateDuration(measurements[0].median)}</span>}
         {active !== null && <div role="tooltip" className="flow-tip" id={id + "-tip"}>{description(points[active])}</div>}
       </div>
       <div className="flow-x">{labels.map(({ left, label }) => <span key={label}
@@ -218,12 +218,12 @@ export function Chart({ rows, days, now, baseline }: { rows: Stat[]; days: numbe
     <div className="flow-plots"><Plot points={points} labels={labels} baseline={null}
       summary={worst.failures ? worst.label + " 구간에 실패 " + worst.failures + "건이 있었어요." : undefined} />
     <Plot points={points} labels={labels} duration baseline={baseline}
-      summary={period.median === null ? "선택한 기간에 걸린 시간 측정값이 없어요." : "선택한 기간 보통 " + formatDuration(period.median)} /></div>
+      summary={period.median === null ? "선택한 기간에 걸린 시간 측정값이 없어요." : "선택한 기간 보통 " + approximateDuration(period.median)} /></div>
     <details><summary>표로 보기</summary>
       <table><caption>최근 {hourly ? "24시간" : "7일"} 기록</caption>
         <thead><tr>{["시간 구간", "사용", "실패", "보통 시간"].map(h => <th scope="col" key={h}>{h}</th>)}</tr></thead>
         <tbody>{points.map(p => <tr key={p.label}><th scope="row">{p.label}</th>
-          <td>{p.total}</td><td>{p.failures}</td><td>{formatDuration(p.median)}</td></tr>)}</tbody>
+          <td>{p.total}</td><td>{p.failures}</td><td>{approximateDuration(p.median)}</td></tr>)}</tbody>
       </table>
     </details>
   </>;

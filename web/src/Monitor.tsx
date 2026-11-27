@@ -12,6 +12,7 @@ import { buildIssuePrompt, displayVersion, noErrorSamples } from "./issue-prompt
 import {
   summarize,
   formatDuration,
+  approximateDuration,
   type Monitor,
   type Feature,
   type Incident,
@@ -42,9 +43,9 @@ function details(i: Incident, m: Incident["metric_at_open"], f?: Feature) {
     return "사용 결과를 확인하지 못했어요 · " + when(i.opened_at) + "부터";
   if (i.kind === "slow")
     return (
-      (m.baseline == null ? "기준 " + time(f?.slow_threshold_ms ?? 5000) : "평소 " + time(m.baseline)) +
+      (m.baseline == null ? "기준 " + time(f?.slow_threshold_ms ?? 5000) : "평소 " + approximateDuration(m.baseline)) +
       " → 최근 30분 " +
-      time(m.p50 ?? null) +
+      approximateDuration(m.p50 ?? null) +
       (m.total == null ? "" : " (" + displayText(String(m.total)) + "건)")
     );
   return (
@@ -224,8 +225,8 @@ function Home({ data, base }: { data: Monitor; base: string }) {
                 <span aria-hidden="true">{problem ? "⚠" : s.total ? "✓" : "◷"}</span> {problem ? "문제 있어요" : s.total ? "괜찮아요" : "사용을 기다려요"}
               </span>
               <span>{s.total}건 사용</span>{f.kind !== "deep" && <span>{s.failures}건 실패</span>}<span aria-hidden="true" className="row-next">›</span>
-              {showSpeed && <span className="row-metrics">보통 걸린 시간은 {time(s.median)}예요.{" "}
-                {baseline?.p50_ms != null ? "평소 " + time(baseline.p50_ms) : low != null && high != null
+              {showSpeed && <span className="row-metrics">보통 걸린 시간은 {approximateDuration(s.median)}예요.{" "}
+                {baseline?.p50_ms != null ? "평소 " + approximateDuration(baseline.p50_ms) : low != null && high != null
                   ? "지금까지 " + (baseline?.sample_count ?? s.total) + "건, " + time(low) + "~" + time(high) : "평소 속도를 알아가는 중이에요"}</span>}
               {f.kind === "deep" && <Outcomes stats={s} />}
             </Link>;
@@ -237,7 +238,7 @@ function Home({ data, base }: { data: Monitor; base: string }) {
           {events.length ? events.map(row => <div className="hour-row" key={row.at}>
             <time dateTime={new Date(row.at).toISOString()}>{new Date(row.at).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Seoul"})}</time>
             <div><strong>{displayText(visible.get(row.feature)?.name ?? "기능")} · {row.failures ? "실패 " + row.failures + "건" : "사용 " + row.total + "건"}</strong>
-            <p>{row.median === null ? "시간 측정값이 없어요." : "보통 " + time(row.median)}</p></div></div>) : <p>사용 기록이 도착하면 여기에 보여요.</p>}
+            <p>{row.median === null ? "시간 측정값이 없어요." : "보통 " + approximateDuration(row.median)}</p></div></div>) : <p>사용 기록이 도착하면 여기에 보여요.</p>}
         </section>
       </div>
       <section id="issues" className="panel dashboard-history"><h2>문제 기록</h2>
@@ -311,7 +312,7 @@ function FeaturePage({
       <section className="panel dashboard-state">
         <StatusBadge state={problem ? "open" : summary.total ? "healthy" : "waiting"} />
         <h2>{problem ? title(f, problem) : summary.total ? displayText(f.name) + " 기능은 괜찮아요" : "이 기간에는 사용 기록이 없어요"}</h2>
-        <p>최근 {days === 1 ? "24시간" : "7일"} 사용 {summary.total}건 중 {summary.failures}건 실패 · 보통 시간 {time(summary.median)}</p>
+        <p>최근 {days === 1 ? "24시간" : "7일"} 사용 {summary.total}건 중 {summary.failures}건 실패 · 보통 시간 {approximateDuration(summary.median)}</p>
         <Link className="button dashboard-primary" to={destination}>{action}</Link>
       </section>
       <section className="panel usage-panel">
@@ -352,7 +353,7 @@ function FeaturePage({
                     <td>
                       {s.eligible ? Math.round((100 * s.failures) / s.eligible) + "%" : "기록 없음"}
                     </td>
-                    <td>{time(s.median)}</td>
+                    <td>{approximateDuration(s.median)}</td>
                   </tr>
                 );
               })}

@@ -1,0 +1,68 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+set search_path=public,extensions;
+select no_plan();
+
+insert into auth.users(id) values ('00000000-0000-0000-0000-000000000045');
+insert into apps(owner_id,name) select id,'duration' from auth.users;
+insert into app_keys(app_id,kind,prefix,key_hash) select id,'pub','fixture',repeat('0',64) from apps;
+
+-- Build the wire-format counts independently of the database binning helper.
+create function pg_temp.record(route text, samples integer[], age interval default '5 minutes',
+                              failed integer default 0) returns jsonb language sql as $$
+ with bounds as (
+  select edge,i from unnest(array[50,100,200,300,500,750,1000,1500,2000,3000,
+    3300,3600,3900,4200,4500,4800,5000,5100,5400,5700,6000,6300,6600,6900,7200,7500,
+    10000,20000,30000,600000]) with ordinality as b(edge,i)
+ ), events as (
+  select ms,pos,(select min(i) from bounds where edge>=ms) bin from unnest(samples) with ordinality e(ms,pos)
+ )
+ select ingest_batch(repeat('0',64),jsonb_build_object('batch_id',gen_random_uuid(),'app_version','v1',
+  'stats',jsonb_build_array(jsonb_build_object('method','GET','route',route,
+   'bucket',date_bin('5 minutes',now()-age,'epoch'),'total',cardinality(samples),'failures',failed,
+   'client_errors',0,'duration_sum_ms',(select sum(ms) from events),
+   'hist',array(select (select count(*) from events where bin=i) from bounds order by i),
+   'timings',(select jsonb_agg(jsonb_build_array(pos,ms,pos>failed) order by pos) from events)))));
+$$;
+
+select pg_temp.record('/long',array(select 6000+round(i*500.0/29)::int from generate_series(0,29) i));
+select pg_temp.record('/short',array(select 3000+round(i*600.0/29)::int from generate_series(0,29) i));
+-- A second 30-request fixture matches the reported 6350 ms mean (median 6300 ms).
+select pg_temp.record('/field',array[6000,6000,6000,6100]||array_fill(6300,array[13])||array_fill(6500,array[13]));
+select pg_temp.record('/edge',array[5000,5000,5000,5001,5001,5001]);
+select pg_temp.record('/below',array[5000,5000,5000,5000,5001,5001]);
+create temp view speeds as select f.route,s.metric,s.breached from private.evaluation_signals s
+ join features f on f.id=s.feature_id where s.kind='slow';
+select results_eq('select route,(metric->>''p50'')::int,breached from speeds order by route',
+ $$values ('/below',5000,false),('/edge',5000,true),('/field',6300,true),('/long',6300,true),('/short',3300,false)$$,
+ '30-sample medians and strict >5s on exactly half the requests');
+select evaluate_all();
+select is((select (metric_at_open->>'p50')::int from incidents join features on features.id=feature_id
+ where route='/long' and incidents.kind='slow'),6300,'opening snapshot uses refined success p50');
+
+-- Failed calls in the same bucket cannot move the success median.
+select pg_temp.record('/long',array_fill(50,array[31]),'5 minutes',31);
+select is((select (metric->>'p50')::int from speeds where route='/long'),6300,'only successes contribute');
+select pg_temp.record('/baseline',array_fill(3300,array[30]),'4 days');
+select pg_temp.record('/baseline',array_fill(6300,array[5]));
+select evaluate_all();
+select results_eq($$select p50_ms,p90_ms from baselines join features on features.id=feature_id where route='/baseline'$$,
+ 'select 3300,6300','seven-day baseline reads refined bins');
+select is((select breached from speeds where route='/baseline'),false,'6300 is below twice 3300');
+select pg_temp.record('/baseline',array_fill(6600,array[6]));
+select is((select breached from speeds where route='/baseline'),true,'6600 reaches twice 3300');
+
+with h as (select array_fill(0,array[11])||array[3,0,0,0,0] old,
+ array_fill(0,array[21])||array[2]||array_fill(0,array[8]) fine)
+select ok(private.hist_percentile(old,0.5)=7500
+ and private.hist_percentile(private.add_hist(old,fine),0.5)=7500
+ and private.add_hist(old,fine)=private.add_hist(fine,old)
+ and private.hist_percentile(private.add_hist(old,fine),0.25)=6300,
+ 'mixed rollups retain old upper bounds and fine counts in either order') from h;
+select is(private.hist_percentile(array_fill(0,array[30]),0.5),null::int,'empty histogram');
+select is(private.hist_above(array_fill(0,array[10])||array[3,0,0,0,0,0],3300),0::bigint,
+ 'changed custom threshold stays conservative with old counts');
+select is(private.hist_above(array_fill(0,array[10])||array[2,3]||array_fill(0,array[18]),3300),3::bigint,
+ 'changed custom threshold excludes the boundary itself with refined counts');
+select * from finish();
+rollback;

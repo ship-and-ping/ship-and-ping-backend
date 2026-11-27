@@ -32,7 +32,7 @@ export default {
     if(url.hostname==="hooks.slack.com" || url.hostname==="api.resend.com") {
       const payload=await request.json();
       report.safe &&= ![sensitive,"private-body","private-route",hook].some(value=>payload.text.includes(value))
-        && payload.text.includes("평소 1.1초. 최근 30분 보통 3.4초") && !payload.text.includes("0.0초")
+        && payload.text.includes("평소 약 1.1초. 최근 30분 보통 약 3.4초") && !payload.text.includes("0.0초")
         && (round===3 ? !payload.text.includes("쉽앤핑에서 보기") : [1,2].every(n=>payload.text.includes("https://web.test/apps/"+id(4)+"/issues/"+id(n))));
       if(url.hostname==="hooks.slack.com"){ report.slack++; return new Response("action_prohibited",{status:403}); }
       report.safe &&= payload.to[0]==="member@example.invalid" && payload.subject==="[쉽앤핑] 모아 둔 알림 14건이에요"

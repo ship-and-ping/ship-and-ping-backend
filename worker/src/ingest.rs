@@ -8,8 +8,9 @@ use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
 pub const MAX_BYTES: usize = 65536;
-const BOUNDS: [u32; 15] = [
-    50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000, 7500, 10000, 20000, 30000,
+const BOUNDS: [u32; 29] = [
+    50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 3300, 3600, 3900, 4200, 4500, 4800, 5000,
+    5100, 5400, 5700, 6000, 6300, 6600, 6900, 7200, 7500, 10000, 20000, 30000,
 ];
 static PRIVATE: LazyLock<Vec<Regex>> =
     LazyLock::new(|| {
@@ -196,9 +197,26 @@ struct Stats {
     failures: u32,
     client_errors: u32,
     duration_sum_ms: u64,
-    hist: [u32; 16],
+    #[serde(serialize_with = "serialize_hist")]
+    hist: [u32; BOUNDS.len() + 1],
     // Transient inputs for DB-side aggregation with the feature's current threshold.
     timings: Vec<(usize, u32, Option<bool>)>,
+}
+
+// A batch without measurements in (3s, 7.5s] can use the smaller wire and DB layout.
+fn serialize_hist<S: serde::Serializer>(
+    hist: &[u32; BOUNDS.len() + 1],
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let start = BOUNDS.partition_point(|&ms| ms <= 3000);
+    let end = BOUNDS.partition_point(|&ms| ms <= 7500);
+    if hist[start..end].iter().any(|&n| n > 0) {
+        return hist.serialize(serializer);
+    }
+    let mut compact = [0; 16];
+    compact[..start].copy_from_slice(&hist[..start]);
+    compact[start + 2..].copy_from_slice(&hist[end..]);
+    compact.serialize(serializer)
 }
 
 fn require(ok: bool) -> Result<(), ApiError> {

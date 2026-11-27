@@ -32,8 +32,8 @@ it("느림 문제의 감지 당시 값과 가장 나빴을 때 값을 구분한�
     });
   });
   const summary = await screen.findByRole("region", { name: "앱 상태 요약" });
-  expect(within(summary).getByText(/최근 30분 6초 \(5건\)/)).toBeTruthy();
-  expect(screen.getByText(/가장 나빴을 때.*최근 30분 12초 \(20건\)/)).toBeTruthy();
+  expect(within(summary).getByText(/최근 30분 약 6초 \(5건\)/)).toBeTruthy();
+  expect(screen.getByText(/가장 나빴을 때.*최근 30분 약 12초 \(20건\)/)).toBeTruthy();
 });
 it("문제가 없으면 정상과 기록 부족을 구별한다", async () => {
   setup("/apps/a", [], rows => { rows.incidents = []; rows.stats_5m = []; });
@@ -68,7 +68,7 @@ it("빈 시간은 0건으로 표시하고 사용과 걸린 시간에 각각 눈�
   expect(Array.from(table.tBodies[0].rows).filter(row => row.cells[1].textContent === "0").length).toBeGreaterThanOrEqual(23);
   const mark = within(usage).getByRole("slider", { name: "사용과 실패" });
   expect(usage.querySelector('rect[fill="var(--sp-chart)"][height="75%"]')).toBeTruthy();
-  expect(within(duration).getByText("선택한 기간 보통 0.1초")).toBeTruthy();
+  expect(within(duration).getByText("선택한 기간 보통 약 0.1초")).toBeTruthy();
   for (const figure of [usage, duration]) {
     const grid = figure.querySelectorAll('line[stroke-dasharray="2 4"]');
     expect(grid.length).toBeGreaterThanOrEqual(3);
@@ -77,8 +77,8 @@ it("빈 시간은 0건으로 표시하고 사용과 걸린 시간에 각각 눈�
   expect(duration.querySelector(".flow-key")).toBeNull();
   fireEvent.focus(mark);
   const tip = within(usage).getByRole("tooltip");
-  expect(tip.textContent).toMatch(/(오전|오후).*사용 4건.*실패 1건.*보통 시간 0.1초/);
-  expect(within(duration).getByText("0.1초", {selector: ".isolated-value"})).toBeTruthy();
+  expect(tip.textContent).toMatch(/(오전|오후).*사용 4건.*실패 1건.*보통 시간 약 0.1초/);
+  expect(within(duration).getByText("약 0.1초", {selector: ".isolated-value"})).toBeTruthy();
   fireEvent.keyDown(mark, { key: "Escape" });
   expect(within(usage).queryByRole("tooltip")).toBeNull();
   fireEvent.keyDown(mark, { key: "ArrowLeft" });
@@ -166,7 +166,7 @@ it("시간 기록 사이의 빈 구간에서 선을 끊는다", async () => {
   expect(lines).toHaveLength(2);
   for (const line of lines) expect(line.getAttribute("d")).toMatch(/^M[^M]+L[^ML]+$/);
   expect(screen.queryByText(/아직 사용 기록이 적어요/)).toBeNull();
-  expect(within(duration).getByText("선택한 기간 보통 0.1초")).toBeTruthy();
+  expect(within(duration).getByText("선택한 기간 보통 약 0.1초")).toBeTruthy();
 });
 it("앱 홈의 기능 목록에 기능 지도의 이름을 바로 표시한다", async () => {
   setup("/apps/a#features", [], rows => {
@@ -404,10 +404,10 @@ it.each([
 it.each([
   ["failure", "open", { total: 6, failures: 2 }, "신청 6건 중 2건 실패", "감지 구간 · 최근 30분", "진행 중"],
   ["failure", "open", { total: 3, failures: 3, consecutive: true }, "신청에서 3건 연속 실패했어요", "최근 30분 3건 중 실패 3건", "진행 중"],
-  ["slow", "open", { p50: 6000 }, "신청이 느려졌어요", "기준 5초 → 최근 30분 6초", "진행 중"],
+  ["slow", "open", { p50: 6000 }, "신청이 느려졌어요", "기준 5초 → 최근 30분 약 6초", "진행 중"],
   ["unconfirmed", "open", { unconfirmed: 3 }, "신청의 기록 전송이 끊겼을 수 있어요", "사용 결과를 확인하지 못한 기록 3건", "진행 중"],
   ["failure", "resolved", { total: 6, failures: 2 }, "업데이트 후 신청 최근 5건이 모두 성공했어요.", "해결 전 기록 · 최근 30분 6건 중 실패 2건", "해결됐어요"],
-  ["slow", "resolved", { p50: 6000 }, "업데이트 후 신청 최근 5건이 모두 평소 속도로 끝났어요.", "해결 전 기록 · 기준 5초 → 최근 30분 6초", "해결됐어요"],
+  ["slow", "resolved", { p50: 6000 }, "업데이트 후 신청 최근 5건이 모두 평소 속도로 끝났어요.", "해결 전 기록 · 기준 5초 → 최근 30분 약 6초", "해결됐어요"],
   ["failure", "quiet", null, "신청에서 실패가 늘었어요", "부터", "잠잠해졌어요"],
   ["failure", "dismissed", null, "신청에서 실패가 늘었어요", "까지 다시 알리지 않아요.", "문제 아님으로 닫았어요"],
 ] as const)("문제 상세 요약 %s · %s · %j", async (kind, status, metric, title, detail, badge) => {
