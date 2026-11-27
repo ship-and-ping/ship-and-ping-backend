@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -15,6 +16,46 @@ import { gateway } from "./data";
 import vectors from "../../docs/specs/sanitize-vectors.json";
 
 afterEach(cleanup);
+it("빈 시간은 0건으로 표시하고 사용과 걸린 시간에 각각 눈금을 붙인다", async () => {
+  setup("/apps/a/features/f");
+  const usage = await screen.findByRole("figure", { name: "사용과 실패" });
+  const duration = screen.getByRole("figure", { name: "걸린 시간" });
+  expect(within(usage).getByText("4건")).toBeTruthy();
+  expect(within(usage).getByText("0건")).toBeTruthy();
+  expect(within(duration).getByText("0초")).toBeTruthy();
+  expect(within(usage).getAllByText(/^(오전|오후) \d+시$/).length).toBeGreaterThanOrEqual(5);
+  expect(screen.getByText("아직 사용 기록이 적어요. 쌓이면 흐름이 보여요.")).toBeTruthy();
+  const table = screen.getByText("최근 24시간 기록").closest("table")!;
+  expect(Array.from(table.tBodies[0].rows).filter(row => row.cells[1].textContent === "0").length).toBeGreaterThanOrEqual(23);
+  const mark = within(usage).getByRole("button", { name: /사용 4건.*실패 1건/ });
+  expect(usage.querySelector('rect[fill="var(--sp-chart)"][height="75%"]')).toBeTruthy();
+  expect(within(duration).getByText("최근 1시간 보통 0.1초")).toBeTruthy();
+  fireEvent.focus(mark);
+  const tip = within(usage).getByRole("tooltip");
+  expect(tip.textContent).toMatch(/(오전|오후).*사용 4건.*실패 1건.*보통 시간 0.1초/);
+  expect(within(duration).getByText("0.1초", {selector: ".isolated-value"})).toBeTruthy();
+  fireEvent.keyDown(mark, { key: "Escape" });
+  expect(within(usage).queryByRole("tooltip")).toBeNull();
+  fireEvent.click(mark);
+  expect(within(usage).getByRole("tooltip").textContent).toBe(mark.getAttribute("aria-label"));
+  fireEvent.click(screen.getByRole("button", { name: "7일" }));
+  const week = screen.getByRole("figure", { name: "사용과 실패" });
+  expect(within(week).getAllByText(/\d+일.*[월화수목금토일]/).length).toBeGreaterThanOrEqual(4);
+});
+it("시간 기록 사이의 빈 구간에서 선을 끊는다", async () => {
+  setup("/apps/a/features/f", [], rows => {
+    const stat = (rows.stats_5m as object[])[0];
+    rows.stats_5m = [1.25, 2.25, 5.25, 6.25].map(hours => ({
+      ...stat, bucket: new Date(Date.now() - hours * 3600000).toISOString(),
+    }));
+  });
+  const duration = await screen.findByRole("figure", { name: "걸린 시간" });
+  const lines = duration.querySelectorAll("path.duration-run");
+  expect(lines).toHaveLength(2);
+  for (const line of lines) expect(line.getAttribute("d")).toMatch(/^M[^M]+L[^ML]+$/);
+  expect(screen.queryByText(/아직 사용 기록이 적어요/)).toBeNull();
+  expect(within(duration).getByText("최근 1시간에 걸린 시간 기록이 없어요.")).toBeTruthy();
+});
 it("앱 홈의 기능 목록에 기능 지도의 이름을 바로 표시한다", async () => {
   setup("/apps/a#features", [], rows => {
     Object.assign((rows.features as object[])[0], {kind:"auto", name:"참가 신청", name_source:"ai"});

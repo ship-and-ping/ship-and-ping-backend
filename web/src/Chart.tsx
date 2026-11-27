@@ -1,0 +1,167 @@
+import { useId, useState } from "react";
+import { formatDuration, summarize, type Stat } from "./monitor-data";
+import "./styles/chart.css";
+
+const hour = 3600000;
+const day = 24 * hour;
+function koreanDate(options: Intl.DateTimeFormatOptions) {
+  return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", ...options });
+}
+const dateTime = koreanDate({ month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
+const clockMinute = koreanDate({ hour: "numeric", minute: "2-digit" });
+const clock = koreanDate({ hour: "numeric" });
+const weekday = koreanDate({ month: "short", day: "numeric", weekday: "short" });
+
+function buckets(rows: Stat[], start: number, now: number, count: number) {
+  const width = (now - start) / count;
+  const groups = Array.from({ length: count }, (): Stat[] => []);
+  for (const row of rows) {
+    const at = Date.parse(row.bucket);
+    if (at >= start && at <= now) groups[Math.min(count - 1, Math.floor((at - start) / width))].push(row);
+  }
+  return groups.map((group, i) => {
+    const from = start + i * width;
+    const until = from + width;
+    const endLabel = weekday.format(from) === weekday.format(until) ? clockMinute : dateTime;
+    return { label: dateTime.format(from) + " ~ " + endLabel.format(until), ...summarize(group) };
+  });
+}
+type Bucket = ReturnType<typeof buckets>[number];
+
+function ticks(start: number, now: number, hourly: boolean) {
+  const step = hourly ? 4 * hour : day;
+  // Place ticks at Korean clock hours or civil midnights, independent of the query minute.
+  const offset = 9 * hour;
+  const first = Math.ceil((start + offset) / step) * step - offset;
+  const labels = [];
+  for (let at = first; at < now; at += step) {
+    const left = 100 * (at - start) / (now - start);
+    labels.push({ left, label: (hourly ? clock : weekday).format(at) });
+  }
+  return labels;
+}
+
+const percent = (n: number) => n + "%";
+const center = (i: number, count: number) => 100 * (i + 0.5) / count;
+const height = 100;
+const y = (value: number, max: number) => height - height * value / max;
+const plotTime = (ms: number) => ms === Infinity ? 30001 : ms;
+
+function DurationMarks({ points, max, baseline }: { points: Bucket[]; max: number; baseline: number | null }) {
+  const runs: string[][] = [];
+  points.forEach(({ median }, i) => {
+    if (median === null) return;
+    if (i === 0 || points[i - 1].median === null) runs.push([]);
+    const run = runs[runs.length - 1];
+    run.push((run.length ? "L" : "M") + center(i, points.length) + " " + y(plotTime(median), max));
+  });
+  return <>
+    {baseline !== null && <line className="usual-duration" x1="0" x2="100%"
+      y1={percent(y(plotTime(baseline), max))} y2={percent(y(plotTime(baseline), max))} />}
+    <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+      {runs.filter(run => run.length > 1).map(run =>
+        <path key={run[0]} className="duration-run" d={run.join(" ")} vectorEffect="non-scaling-stroke" />)}
+    </svg>
+    {points.map(({ median }, i) => median !== null && <circle key={i}
+      cx={percent(center(i, points.length))} cy={percent(y(plotTime(median), max))} r="3" />)}
+  </>;
+}
+
+function CountMarks({ points, max }: { points: Bucket[]; max: number }) {
+  const stripes = useId();
+  const slot = 100 / points.length;
+  return <>
+    <defs><pattern id={stripes} width="6" height="6" patternUnits="userSpaceOnUse">
+      <rect width="6" height="6" fill="var(--sp-chart-failure)" />
+      <path d="M-1 1L1 -1 M0 6L6 0 M5 7L7 5" stroke="var(--sp-surface)" />
+    </pattern></defs>
+    {points.map((p, i) => {
+      const left = percent((i + 0.18) * slot);
+      const width = percent(0.64 * slot);
+      const excluded = p.total - p.eligible;
+      return <g key={i}>
+        {p.failures > 0 && <rect x={percent(i * slot)} width={percent(slot)} height="100%" fill="var(--sp-bad-soft)" />}
+        <rect x={left} width={width} y={percent(y(p.successes, max))} height={percent(100 * p.successes / max)} fill="var(--sp-chart)" />
+        <rect x={left} width={width} y={percent(y(p.eligible, max))} height={percent(100 * p.failures / max)} fill={`url(#${stripes})`} />
+        {excluded > 0 && <rect x={left} width={width} y={percent(y(p.total, max))} height={percent(100 * excluded / max)} fill="var(--sp-line-strong)" />}
+      </g>;
+    })}
+  </>;
+}
+
+function description(p: Bucket) {
+  return p.label + " · 사용 " + p.total + "건 · 실패 " + p.failures + "건 · 보통 시간 " + formatDuration(p.median);
+}
+
+function Plot({ points, labels, duration, baseline, summary }: {
+  points: Bucket[]; labels: ReturnType<typeof ticks>; duration?: boolean; baseline: number | null; summary?: string;
+}) {
+  const id = useId();
+  const [active, setActive] = useState<number | null>(null);
+  const peak = duration
+    ? Math.max(plotTime(baseline ?? 0), ...points.map(p => plotTime(p.median ?? 0)))
+    : Math.max(...points.map(p => p.total));
+  const max = peak || (duration ? 1000 : 1);
+  const measurements = points.filter(p => p.median !== null);
+  const title = duration ? "걸린 시간" : "사용과 실패";
+  const top = duration ? formatDuration(max === 30001 ? Infinity : max) : max.toLocaleString("ko-KR") + "건";
+  return <figure className="flow-figure" aria-labelledby={id}>
+    <figcaption id={id}>{title}</figcaption>
+    {summary && <p className="flow-summary">{summary}</p>}
+    <div className="flow-key">{duration ? <>
+      <span className="median-key">보통 시간</span>
+      {baseline !== null && <span className="baseline-key">평소 {formatDuration(baseline)}</span>}
+    </> : <>
+      <span className="success-key">성공</span><span className="failure-key">실패</span>
+      {points.some(p => p.total > p.eligible) && <span className="excluded-key">판정 제외</span>}
+    </>}</div>
+    <div className="flow-coordinates">
+      <div className="flow-y"><span>{top}</span><span>{duration ? "0초" : "0건"}</span></div>
+      <div className="flow-plot">
+        <svg className="flow-marks" aria-hidden="true">
+          {duration ? <DurationMarks points={points} max={max} baseline={baseline} /> : <CountMarks points={points} max={max} />}
+        </svg>
+        {points.map((p, i) => {
+          if (duration ? p.median === null : p.total === 0) return null;
+          return <button type="button" className="flow-hit" key={i} aria-label={description(p)}
+            aria-describedby={active === i ? id + "-tip" : undefined}
+            style={{ left: percent(i * 100 / points.length), width: percent(100 / points.length) }}
+            onPointerEnter={() => setActive(i)} onPointerLeave={() => setActive(null)}
+            onFocus={() => setActive(i)} onBlur={() => setActive(null)} onClick={() => setActive(i)}
+            onKeyDown={e => { if (e.key === "Escape") setActive(null); }} />;
+        })}
+        {duration && measurements.length === 1 && <span className="isolated-value"
+          style={{ left: percent(Math.max(9, Math.min(91, center(points.indexOf(measurements[0]), points.length)))),
+            top: percent(y(plotTime(measurements[0].median!), max)) }}>{formatDuration(measurements[0].median)}</span>}
+        {active !== null && <div role="tooltip" className="flow-tip" id={id + "-tip"}>{description(points[active])}</div>}
+      </div>
+      <div className="flow-x">{labels.map(({ left, label }) => <span key={label}
+        style={{ left: `clamp(0%, calc(${left}% - var(--tick-width) / 2), calc(100% - var(--tick-width)))` }}>{label}</span>)}</div>
+    </div>
+  </figure>;
+}
+
+export function Chart({ rows, days, now, baseline }: { rows: Stat[]; days: number; now: number; baseline: number | null }) {
+  const start = now - days * day;
+  const hourly = days === 1;
+  const points = buckets(rows, start, now, hourly ? 24 : 7);
+  const labels = ticks(start, now, hourly);
+  const latest = summarize(rows.filter(r => Date.parse(r.bucket) >= now - hour && Date.parse(r.bucket) <= now));
+  const worst = points.reduce((a, b) => a.failures >= b.failures ? a : b);
+  const occupied = points.filter(p => p.total > 0).length;
+  return <>
+    <p className="flow-range">{dateTime.format(start)} ~ {dateTime.format(now)} · 한국 시간</p>
+    {occupied <= 3 && <p className="flow-note">{occupied ? "아직 사용 기록이 적어요. 쌓이면 흐름이 보여요." : "이 기간에는 표시할 사용 기록이 없어요."}</p>}
+    <Plot points={points} labels={labels} baseline={null}
+      summary={worst.failures ? worst.label + " 구간에 실패 " + worst.failures + "건이 있었어요." : undefined} />
+    <Plot points={points} labels={labels} duration baseline={baseline}
+      summary={latest.median === null ? "최근 1시간에 걸린 시간 기록이 없어요." : "최근 1시간 보통 " + formatDuration(latest.median)} />
+    <details><summary>표로 보기</summary>
+      <table><caption>최근 {hourly ? "24시간" : "7일"} 기록</caption>
+        <thead><tr>{["시간 구간", "사용", "실패", "보통 시간"].map(h => <th scope="col" key={h}>{h}</th>)}</tr></thead>
+        <tbody>{points.map(p => <tr key={p.label}><th scope="row">{p.label}</th>
+          <td>{p.total}</td><td>{p.failures}</td><td>{formatDuration(p.median)}</td></tr>)}</tbody>
+      </table>
+    </details>
+  </>;
+}

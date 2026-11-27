@@ -1,0 +1,68 @@
+[
+  {
+    "title": "사용 흐름",
+    "state": "many",
+    "width": 1440,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "00-many-1440-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "사용 흐름",
+    "state": "few",
+    "width": 1440,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "01-few-1440-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "사용 흐름",
+    "state": "cluster",
+    "width": 1440,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": false,
+    "file": "02-cluster-1440-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "사용 흐름",
+    "state": "many",
+    "width": 390,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": true,
+    "file": "00-many-390-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "사용 흐름",
+    "state": "few",
+    "width": 390,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": true,
+    "file": "01-few-390-light.jpg",
+    "overflow": 0,
+    "issues": []
+  },
+  {
+    "title": "사용 흐름",
+    "state": "cluster",
+    "width": 390,
+    "colorScheme": "light",
+    "scale": 1,
+    "reduced": true,
+    "file": "02-cluster-390-light.jpg",
+    "overflow": 0,
+    "issues": []
+  }
+]

@@ -8,7 +8,8 @@ import { exampleEmail, mockPage, now } from "./fixtures.mjs";
 
 const phase = process.argv[2] ?? "screens";
 const require = createRequire(import.meta.url);
-if (!["screens", "before", "after","qa3-before","qa3-after"].includes(phase)) throw Error("Unknown QA phase");
+if (!["screens", "before", "after","qa3-before","qa3-after","chart-before","chart-after"].includes(phase)) throw Error("Unknown QA phase");
+const chart = phase.startsWith("chart-");
 const qa3 = phase.startsWith("qa3-");
 const gallery = phase === "screens";
 const dir = gallery ? resolve("../docs/design/screens") : resolve("../docs/design/qa", phase);
@@ -74,11 +75,12 @@ const flow = [
   const [,path,state,ready] = cases[index];
   return [title,path,variant ?? state,ready];
 });
-const profiles = qa3 ? [[1440,"light",1,false],[1440,"dark",1,false],[390,"light",1,false],[390,"dark",1,true]] : gallery ? [[1440,"light",1,false],[390,"light",1,false]] : [
+const profiles = chart ? [[1440,"light",1,false],[390,"light",1,true]] : qa3 ? [[1440,"light",1,false],[1440,"dark",1,false],[390,"light",1,false],[390,"dark",1,true]] : gallery ? [[1440,"light",1,false],[390,"light",1,false]] : [
   [1440,"light",1,false], [1280,"dark",1,false], [390,"light",1,false], [390,"dark",2,true],
 ];
 const selected = process.argv.slice(3);
-const scenes = gallery || qa3 ? flow : cases;
+const scenes = chart ? ["many","few","cluster"].map(state =>
+  ["사용 흐름", "/apps/demo/features/apply", state, ".chart-period"]) : gallery || qa3 ? flow : cases;
 if (selected.some(id => !scenes[Number(id)] || String(Number(id)) !== id)) throw Error("Unknown screen index");
 const server = await createServer({server:{host:"127.0.0.1",port:4179,strictPort:true,hmr:false},
   define: { "import.meta.env.VITE_SUPABASE_URL": JSON.stringify("https://example.supabase.co"),
@@ -135,12 +137,38 @@ try {
             throw Error("Dismiss action hierarchy");
         }
         const overflow = await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth);
+        if (phase === "chart-after" && overflow > 0) throw Error("Chart overflow at " + width);
+        if (phase === "chart-after") {
+          const hero = page.locator(".hero-card");
+          const contained = await hero.evaluate(card => {
+            const frame = card.getBoundingClientRect();
+            const sheep = card.querySelector(".sheep").getBoundingClientRect();
+            return sheep.top >= frame.top && sheep.bottom <= frame.bottom && sheep.right <= frame.right;
+          });
+          if (!contained) throw Error("Feature summary clips its sheep");
+          const usage = page.getByRole("figure", {name:"사용과 실패"});
+          const mark = usage.getByRole("button").first();
+          await tabTo(page, mark);
+          await usage.getByRole("tooltip").waitFor();
+          await page.keyboard.press("Escape");
+          await usage.getByRole("tooltip").waitFor({state:"hidden"});
+          await mark.evaluate(el => el.blur());
+          await page.getByRole("button", {name:"7일",exact:true}).click();
+          await page.getByText("표로 보기", {exact:true}).click();
+          if (await page.evaluate(()=>document.documentElement.scrollWidth > innerWidth))
+            throw Error("Seven-day chart table overflow");
+          await page.getByText("표로 보기", {exact:true}).click();
+          await page.getByRole("button", {name:"24시간",exact:true}).click();
+          await page.getByRole("button", {name:"24시간",exact:true}).evaluate(el=>el.blur());
+          await page.mouse.move(0,0);
+          await page.evaluate(()=>window.scrollTo(0,0));
+        }
         if ((gallery || phase === "after" || qa3) && scale === 1 && (gallery || width === 390)) {
           const endings = await page.evaluate(shortKoreanEndings);
           if (endings.length) console.warn("Short last lines", index, endings);
         }
         const issues = [];
-        if (phase === "after" || phase === "qa3-after") {
+        if (phase === "after" || phase === "qa3-after" || phase === "chart-after") {
           await page.addScriptTag({path:require.resolve("axe-core/axe.min.js")});
           const violations = await page.evaluate(async () => (await window.axe.run(document, {
             runOnly:{type:"tag",values:["wcag2a","wcag2aa","wcag21aa"]},
@@ -212,7 +240,7 @@ try {
   console.log(entries.length+" views checked, "+entries.filter(entry=>entry.capture !== false).length+" screenshots in "+dir);
   if (phase === "qa3-after" && entries.some(entry=>entry.smallTargets.length))
     throw Error("Review targets smaller than 44px in results.json");
-  if ((phase === "after" || phase === "qa3-after") && entries.some(entry=>entry.issues.length || entry.overflow > 1))
+  if ((phase === "after" || phase === "qa3-after" || phase === "chart-after") && entries.some(entry=>entry.issues.length || entry.overflow > 1))
     throw Error("Review overflow or axe findings in results.json");
 } finally { await browser?.close(); await server.close(); }
 
