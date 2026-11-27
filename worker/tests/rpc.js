@@ -12,6 +12,13 @@ let round=0;
 let stateIssued=false;
 function rows() {
   round++;
+  if (round === 4) {
+    return ['busy','sparse'].map((feature,i)=>({
+      id:id(i+1),claim_token:id(3),app:id(4),incident:id(i+1),event:'open',
+      app_name:'트루바',kind:'slow',feature,metric:{total:i===0?10:5,p50:1400,baseline:200},
+      channel:'email',email:'member@example.invalid',digest:false
+    }));
+  }
   const result = [1,2].map(n=>({id:id(n),claim_token:id(3),app:id(4),incident:id(n),event:"open",
     app_name:"트루바",kind:"slow",feature:"신청 "+sensitive,metric:{total:10,p50:n===1?3400.5:null,baseline:n===1?1100:null,raw:"private-body"},raw_route:"/private-route",
     channel:round===2?"email":"slack",hook,destination:"T/C",secret_id:id(7),email:"member@example.invalid",digest:round>1}));
@@ -31,6 +38,13 @@ export default {
     if(url.pathname==="/fixture-report") return Response.json(report);
     if(url.hostname==="hooks.slack.com" || url.hostname==="api.resend.com") {
       const payload=await request.json();
+      if (round === 4 && url.hostname === 'api.resend.com') {
+        (report.immediateMail ??= []).push({
+          to:payload.to,
+          features:['busy','sparse'].filter(feature=>payload.text.includes(feature))
+        });
+        return Response.json({});
+      }
       report.safe &&= ![sensitive,"private-body","private-route",hook].some(value=>payload.text.includes(value))
         && payload.text.includes("평소 약 1.1초. 최근 30분 보통 약 3.4초") && !payload.text.includes("0.0초")
         && (round===3 ? !payload.text.includes("쉽앤핑에서 보기") : [1,2].every(n=>payload.text.includes("https://web.test/apps/"+id(4)+"/issues/"+id(n))));
