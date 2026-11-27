@@ -150,5 +150,6 @@
   overflow-wrap: anywhere;
 }
 .speed-insights p { margin: 0; }
+.speed-insights strong { display: inline-block; }
 .speed-insights .speed-faster { color: var(--sp-ok-ink); }
 .speed-insights .speed-slower { color: var(--sp-change-slower); }

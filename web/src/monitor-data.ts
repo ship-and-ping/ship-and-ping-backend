@@ -319,6 +319,12 @@ export function approximateDuration(ms: number | null) {
   return (ms !== null && Number.isFinite(ms) ? "약 " : "") + formatDuration(ms);
 }
 
+// The database stores the automatic histogram's open-ended bin using the
+// ingestion ceiling. Deep timings at the same value are actual measurements.
+export function displayMeasuredMs(ms: number | null, automatic: boolean) {
+  return automatic && ms === 600000 ? Infinity : ms;
+}
+
 export function usualDuration(p50: number, p95?: number | null) {
   return "평소 " + approximateDuration(p50) + (p95 == null ? "" : " (보통 " + formatDuration(p95) + " 안)");
 }

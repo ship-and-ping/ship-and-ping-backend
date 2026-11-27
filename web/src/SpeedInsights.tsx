@@ -8,12 +8,12 @@ export function SpeedInsights({data, featureId}: {data:Monitor; featureId?:strin
   const rows = (data.insights ?? []).filter(r => features.has(r.feature_id) && (!featureId || r.feature_id === featureId));
   const speed = satisfaction(rows);
   const changes = rows.flatMap(row => {
-    const change = compareVersions(row);
-    return change && (featureId || change.direction !== "similar") ? [{...change, id:row.feature_id}] : [];
+    const change = compareVersions(row, features.get(row.feature_id)?.kind !== "deep");
+    return change && (featureId || ["faster","slower"].includes(change.direction)) ? [{...change, id:row.feature_id}] : [];
   });
   const change = changes.sort((a,b) => b.ratio - a.ratio)[0];
   if (!speed && !change) return null;
-  const factor = change && Number.isFinite(change.ratio) ? change.ratio.toLocaleString("ko-KR",{maximumFractionDigits:1}) + "배 " : "";
+  const factor = change && !change.bounded && Number.isFinite(change.ratio) ? change.ratio.toLocaleString("ko-KR",{maximumFractionDigits:1}) + "배 " : "";
   return <div className="speed-insights">
     {speed && <div>
       {speed.percent !== null && <p>최근 1시간 성공 요청의 <strong>{speed.percent}%</strong>가 평소처럼 빨랐어요</p>}
@@ -24,7 +24,7 @@ export function SpeedInsights({data, featureId}: {data:Monitor; featureId?:strin
         {data.versions.length >= 2 && <> · {displayVersion(data.versions[1].version)} → {displayVersion(data.versions[0].version)}</>}</small>
       <p>업데이트 후 {approximateDuration(change.before)} → {approximateDuration(change.after)},{' '}
         <strong className={"speed-" + change.direction}><span aria-hidden="true">{change.direction === "faster" ? "↗" : change.direction === "slower" ? "↘" : "≈"}</span>{' '}
-          {change.direction === "similar" ? "비슷해요" : factor + (change.direction === "faster" ? "빨라졌어요" : "느려졌어요")}</strong></p>
+          {change.direction === "unknown" ? "변화 폭을 알기 어려워요" : change.direction === "similar" ? "비슷해요" : factor + (change.direction === "faster" ? "빨라졌어요" : "느려졌어요")}</strong></p>
     </div>}
   </div>;
 }

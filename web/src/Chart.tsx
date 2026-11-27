@@ -68,7 +68,7 @@ function DurationMarks({ points, max, baseline, p95 }: { points: Bucket[]; max: 
   });
   return <>
     {baseline !== null && top !== null && <rect className="usual-band" x="0" width="100%"
-      y={percent(top)} height={percent(y(plotTime(baseline),max) - top)} />}
+      y={percent(top)} height={baseline === p95 ? 2 : percent(y(plotTime(baseline),max) - top)} />}
     {baseline !== null && <line className="usual-duration" x1="0" x2="100%"
       y1={percent(y(plotTime(baseline), max))} y2={percent(y(plotTime(baseline), max))} />}
     <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">

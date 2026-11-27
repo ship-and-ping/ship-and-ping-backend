@@ -74,10 +74,12 @@ try {
           await page.keyboard.press("Enter");
         }
         const slider = page.getByRole("slider",{name:"걸린 시간"});
+        if (await page.locator("rect.usual-band").evaluate(el => el.getBBox().height <= 0)) throw Error("Missing range band");
         await slider.focus();
         await page.keyboard.press("End");
         if ((await slider.getAttribute("aria-valuetext")).includes("평소 범위 초과") !== (stage === "load")) throw Error("Wrong range announcement");
         await page.keyboard.press("Tab");
+        await page.locator("h1").focus();
       }
       await page.evaluate(async () => { await document.fonts.ready; window.scrollTo(0,0); });
       if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw Error("Horizontal overflow");

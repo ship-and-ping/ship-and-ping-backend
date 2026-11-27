@@ -35,3 +35,10 @@ it("draws the band, highlights above it and explains a missing range", () => {
   expect(view.container.querySelector(".usual-band")).toBeNull();
   expect(view.getByText("평소 범위는 성공 30번 뒤에 생겨요 (지금 12번)")).toBeTruthy();
 });
+
+it("distinguishes the automatic overflow bin from a measured ten-minute duration", () => {
+  const overflow = {...row, current_ms:600000};
+  expect(compareVersions(overflow,true)).toMatchObject({after:Infinity, direction:"slower", bounded:true});
+  expect(compareVersions({...overflow,previous_ms:30000},true)?.direction).toBe("unknown");
+  expect(compareVersions(overflow,false)).toMatchObject({after:600000, bounded:false});
+});

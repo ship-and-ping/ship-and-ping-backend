@@ -17,8 +17,10 @@ insert into attempts(app_id,feature_id,version,attempt_id,status,started_at,ende
 insert into features(app_id,kind,name,route,method) select id,'auto','목록','/list','GET' from apps;
 insert into baselines(feature_id,sample_count,p50_ms,p95_ms) select id,30,300,300 from features where kind='auto';
 insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist)
- select app_id,id,'v2',date_bin('5 minutes',now(),'epoch'),10,0,0,3100,
- array[0,0,0,9,1,0,0,0,0,0,0,0,0,0,0,0] from features where kind='auto';
+ select app_id,id,'v2',date_bin('5 minutes',now(),'epoch'),23,12,1,3750,
+ array[13,0,0,9,1,0,0,0,0,0,0,0,0,0,0,0] from features where kind='auto';
+insert into private.evaluation_buckets(app_id,feature_id,version,bucket,success_hist,min_ms,max_ms,result_count,slow_count,threshold_ms)
+ select app_id,feature_id,version,bucket,array[0,0,0,9,1,0,0,0,0,0,0,0,0,0,0,0],50,500,22,0,5000 from stats_5m;
 select set_config('test.app',(select id::text from apps),true);
 select ok(not has_function_privilege('anon','demo_insights(uuid)','execute'),'anonymous access denied');
 set local role authenticated;
@@ -29,8 +31,8 @@ select results_eq($$select fast,measured,failures,previous_ms,current_ms,previou
  from demo_insights(current_setting('test.app')::uuid) join features on id=feature_id where kind='deep'$$,
  'select 9::bigint,10::bigint,2::bigint,1400::numeric,300::numeric,10::bigint,10::bigint',
  'p95 is inclusive, failed requests stay separate and the prior day only affects version comparison');
-select results_eq($$select fast,measured,current_ms from demo_insights(current_setting('test.app')::uuid)
- join features on id=feature_id where kind='auto'$$,'select 9::bigint,10::bigint,300::numeric',
- 'automatic timings include the bucket ending exactly at p95');
+select results_eq($$select fast,measured,failures,current_ms from demo_insights(current_setting('test.app')::uuid)
+ join features on id=feature_id where kind='auto'$$,'select 9::bigint,10::bigint,12::bigint,300::numeric',
+ 'automatic timings include the p95 boundary and use only successes even when failures dominate');
 select * from finish();
 rollback;

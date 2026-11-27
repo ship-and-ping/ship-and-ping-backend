@@ -13,6 +13,7 @@ import { buildIssuePrompt, displayVersion, noErrorSamples } from "./issue-prompt
 import {
   summarize,
   formatDuration,
+  displayMeasuredMs,
   approximateDuration,
   usualDuration,
   type Monitor,
@@ -332,8 +333,8 @@ function FeaturePage({
             {d === 1 ? "24시간" : "7일"}
           </button>
         ))}</div>
-        <Chart key={days} rows={rows} days={days} now={data.now} baseline={f.baselines?.p50_ms ?? null}
-          p95={f.baselines?.p95_ms ?? null} samples={f.baselines?.sample_count ?? summarize(data.stats.filter(r => r.feature_id === f.id)).successes} />
+        <Chart key={days} rows={rows} days={days} now={data.now} baseline={displayMeasuredMs(f.baselines?.p50_ms ?? null, f.kind !== "deep")}
+          p95={displayMeasuredMs(f.baselines?.p95_ms ?? null, f.kind !== "deep")} samples={f.baselines?.sample_count ?? summarize(data.stats.filter(r => r.feature_id === f.id)).successes} />
         </details>
       </section>
       <section>
