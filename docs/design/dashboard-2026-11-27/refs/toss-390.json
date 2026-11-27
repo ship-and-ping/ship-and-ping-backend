@@ -1,0 +1,120 @@
+{
+  "id": "toss",
+  "url": "https://toss.im/",
+  "width": 390,
+  "sampled": {
+    "headings": [
+      {
+        "tag": "h2",
+        "label": "금융부터 일상까지 마침내 토스 하나로",
+        "x": 20,
+        "y": 650,
+        "width": 350,
+        "height": 154,
+        "font": "40px",
+        "line": "46px",
+        "weight": "700",
+        "padding": "0px",
+        "gap": "normal",
+        "radius": "0px",
+        "shadow": "none"
+      }
+    ],
+    "text": [
+      {
+        "tag": "span",
+        "label": "금융부터 일상까지",
+        "x": 20,
+        "y": 650,
+        "width": 350,
+        "height": 51,
+        "font": "40px",
+        "line": "51.2px",
+        "weight": "700",
+        "padding": "0px",
+        "gap": "normal",
+        "radius": "0px",
+        "shadow": "none"
+      },
+      {
+        "tag": "span",
+        "label": "마침내",
+        "x": 20,
+        "y": 702,
+        "width": 350,
+        "height": 51,
+        "font": "40px",
+        "line": "51.2px",
+        "weight": "700",
+        "padding": "0px",
+        "gap": "normal",
+        "radius": "0px",
+        "shadow": "none"
+      },
+      {
+        "tag": "span",
+        "label": "토스 하나로",
+        "x": 20,
+        "y": 753,
+        "width": 350,
+        "height": 51,
+        "font": "40px",
+        "line": "51.2px",
+        "weight": "700",
+        "padding": "0px",
+        "gap": "normal",
+        "radius": "0px",
+        "shadow": "none"
+      }
+    ],
+    "panels": [
+      {
+        "tag": "div",
+        "label": "",
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844,
+        "font": "16px",
+        "line": "18.4px",
+        "weight": "400",
+        "padding": "0px",
+        "gap": "normal",
+        "radius": "40px",
+        "shadow": "none"
+      }
+    ],
+    "images": [
+      {
+        "tag": "img",
+        "label": "Toss 홈",
+        "x": 20,
+        "y": 16,
+        "width": 79,
+        "height": 24,
+        "font": "16px",
+        "line": "18.4px",
+        "weight": "400",
+        "padding": "0px",
+        "gap": "normal",
+        "radius": "0px",
+        "shadow": "none"
+      },
+      {
+        "tag": "video",
+        "label": "",
+        "x": -39,
+        "y": -84,
+        "width": 468,
+        "height": 1013,
+        "font": "16px",
+        "line": "18.4px",
+        "weight": "400",
+        "padding": "0px",
+        "gap": "normal",
+        "radius": "0px",
+        "shadow": "none"
+      }
+    ]
+  }
+}
