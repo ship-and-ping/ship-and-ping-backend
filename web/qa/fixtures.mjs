@@ -71,7 +71,8 @@ export async function mockPage(page, state, member, origin) {
       stats_5m: waiting ? [] : [{ feature_id: "apply", version: "1.0", bucket: at, total: 20,
         failures: state === "failure" ? 6 : 0, hist: [0,0,0,0,14] }],
       feature_map_suggestions: [], error_samples: [], attempts: [], app_key_list: [],
-      notification_settings: { email: true, connected: false, broken: false, channel: null },
+      notification_settings: { email: true, connected: false, broken: false, channel: null, push:true, subscribed:false },
+      push_subscriptions: [],
       incident_verification: { version: null, consecutive_successes: 0 },
     };
     if (!Object.hasOwn(rows, name)) throw Error("Missing QA fixture: " + name);

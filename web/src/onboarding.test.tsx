@@ -50,6 +50,8 @@ function fake(user: string | null = "member"): Gateway {
     deepCounts: vi.fn(),
     firstResult: vi.fn(),
     emailSetting: vi.fn(),
+    devices: vi.fn(async () => []), registerPush: vi.fn(), removeDevice: vi.fn(),
+    pushEnabled: vi.fn(), testPush: vi.fn(),
     testSlack: vi.fn(),
     disconnectSlack: vi.fn(),
     slack: vi.fn(),
@@ -342,11 +344,10 @@ it("슬랙 연결을 시작할 수 없으면 알림 설정에 서버 안내를 �
   fireEvent.click(await screen.findByRole("button", { name: "Slack에 추가" }));
   expect(await screen.findByText(message)).toBeTruthy();
 });
-it("알림 설정은 푸시 예고, 이메일, 선택형 슬랙 순서로 읽는다", async () => {
+it("알림 설정은 앱 푸시, 이메일, 선택형 슬랙 순서로 읽는다", async () => {
   open("/apps/a/notifications", fake());
   const push = (await screen.findByRole("heading", {name:"앱 푸시"})).closest("section")!;
-  expect(push.textContent).toContain("곧 제공");
-  expect(push.querySelector("button, input, a")).toBeNull();
+  expect(push.textContent).toContain("홈 화면");
   expect(push.nextElementSibling?.querySelector("h2")?.textContent).toBe("이메일");
   expect(push.nextElementSibling?.nextElementSibling?.querySelector("h2")?.textContent).toBe("슬랙");
 });

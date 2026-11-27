@@ -6,6 +6,10 @@ const env = {
   VITE_INGEST_URL: "https://ship-and-ping-ingest.fixture.workers.dev",
 };
 
+it("serves the root worker with a JavaScript type and revalidation", () => {
+  expect(renderPagesHeaders("",env)).toContain("/sw.js\n  Cache-Control: no-cache\n  Content-Type: application/javascript");
+});
+
 it.each([
   ["VITE_SUPABASE_URL", "https://fixture.supabase.co.example.org"],
   ["VITE_INGEST_URL", "https://ship-and-ping-ingest.fixture.workers.dev/path"],
