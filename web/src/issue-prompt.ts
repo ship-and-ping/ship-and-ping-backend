@@ -1,3 +1,4 @@
+import { approximateDuration } from "./monitor-data";
 import { errorName, errorKind, stepName, displayText, normalizePromptInput, maskVersion, sanitizeRoute } from "./normalize";
 
 function hasVersionFormat(raw: string) {
@@ -91,9 +92,9 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
     input.consecutive && "문제 감지 때 3건 연속 실패",
     Number.isFinite(input.unconfirmed) && "결과 미확인 " + Number(input.unconfirmed) + "건",
     Number.isFinite(input.failures) && "실패 " + Number(input.failures) + "건",
-    Number.isFinite(input.p50) && "보통 " + Number(input.p50) / 1000 + "초",
+    Number.isFinite(input.p50) && "보통 " + approximateDuration(Number(input.p50)),
     Number.isFinite(input.baseline) &&
-      "평소 " + Number(input.baseline) / 1000 + "초",
+      "평소 " + approximateDuration(Number(input.baseline)),
   ]
     .filter(Boolean)
     .join(", ");

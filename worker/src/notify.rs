@@ -51,10 +51,10 @@ fn sentence(n: &Notice) -> String {
         (_, Some("slow")) => {
             let mut text = format!("{name} 기능이 느려졌어요.");
             if let Some(ms) = n.metric["baseline"].as_f64() {
-                text.push_str(&format!(" 평소 {:.1}초.", ms / 1000.0));
+                text.push_str(&format!(" 평소 약 {:.1}초.", ms / 1000.0));
             }
             if let Some(ms) = n.metric["p50"].as_f64() {
-                text.push_str(&format!(" 최근 30분 보통 {:.1}초.", ms / 1000.0));
+                text.push_str(&format!(" 최근 30분 보통 약 {:.1}초.", ms / 1000.0));
             }
             format!("{text} ({}건)", count("total"))
         }
@@ -119,7 +119,7 @@ fn metric_summary(n: &Notice) -> String {
             let mut times = Vec::new();
             for (label, key) in [("평소", "baseline"), ("최근", "p50")] {
                 if let Some(ms) = n.metric[key].as_f64() {
-                    times.push(format!("{label} {:.1}초", ms / 1000.0));
+                    times.push(format!("{label} 약 {:.1}초", ms / 1000.0));
                 }
             }
             if times.is_empty() {
@@ -412,7 +412,9 @@ mod tests {
             mail.html
                 .contains("앱(0)&lt;script&gt;&amp;&quot;&#39; · 기능</strong>")
         );
-        assert!(mail.html.contains("3건 더") && mail.html.contains("평소 1.1초 → 최근 3.4초"));
+        assert!(
+            mail.html.contains("3건 더") && mail.html.contains("평소 약 1.1초 → 최근 약 3.4초")
+        );
         assert_eq!(mail.html.matches("쉽앤핑에서 자세히 보기").count(), 1);
         assert!(mail.html.contains("href=\"https://web.test/apps\""));
     }

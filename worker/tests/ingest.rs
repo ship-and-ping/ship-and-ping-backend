@@ -273,6 +273,46 @@ fn assigns_time_bins_and_classifies_errors() {
     );
 }
 #[test]
+fn refined_histogram_uses_inclusive_upper_bounds() {
+    let rows = [3000, 3001, 3300, 5000, 5001, 6300, 6301, 7500, 7501]
+        .into_iter()
+        .map(|ms| {
+            let mut row = request();
+            row["duration_ms"] = json!(ms);
+            row
+        })
+        .collect();
+    let (bytes, _) = prepare(&key(), &serde_json::to_vec(&batch(rows)).unwrap(), NOW).unwrap();
+    let rpc: Value = serde_json::from_slice(&bytes).unwrap();
+    let stat = &rpc["payload"]["stats"][0];
+    assert_eq!(
+        stat["hist"],
+        json!([0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 4, 1, 0, 0, 0])
+    );
+    let hist = stat["hist_30"].as_array().unwrap();
+    let occupied: Vec<_> = hist
+        .iter()
+        .enumerate()
+        .filter_map(|(i, n)| {
+            let count = n.as_u64().unwrap();
+            (count > 0).then_some((i, count))
+        })
+        .collect();
+    assert_eq!(
+        occupied,
+        [
+            (9, 1),
+            (10, 2),
+            (16, 1),
+            (17, 1),
+            (21, 1),
+            (22, 1),
+            (25, 1),
+            (26, 1)
+        ]
+    );
+}
+#[test]
 fn timestamps_include_both_24h_edges() {
     let mut rows = Vec::new();
     for offset in [-86_400_001, -86_400_000, 86_400_000, 86_400_001] {

@@ -8,8 +8,9 @@ use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
 pub const MAX_BYTES: usize = 65536;
-const BOUNDS: [u32; 15] = [
-    50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000, 7500, 10000, 20000, 30000,
+const BOUNDS: [u32; 29] = [
+    50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 3300, 3600, 3900, 4200, 4500, 4800, 5000,
+    5100, 5400, 5700, 6000, 6300, 6600, 6900, 7200, 7500, 10000, 20000, 30000,
 ];
 static PRIVATE: LazyLock<Vec<Regex>> =
     LazyLock::new(|| {
@@ -196,9 +197,26 @@ struct Stats {
     failures: u32,
     client_errors: u32,
     duration_sum_ms: u64,
-    hist: [u32; 16],
+    #[serde(rename = "hist_30", skip_serializing_if = "no_refined_samples")]
+    hist: [u32; BOUNDS.len() + 1],
     // Transient inputs for DB-side aggregation with the feature's current threshold.
     timings: Vec<(usize, u32, Option<bool>)>,
+}
+
+fn no_refined_samples(hist: &[u32; BOUNDS.len() + 1]) -> bool {
+    hist[10..26].iter().all(|&count| count == 0)
+}
+
+impl Stats {
+    // Older databases always read hist. They ignore the optional hist_30 field.
+    fn legacy_hist(&self) -> [u32; 16] {
+        let mut compact = [0; 16];
+        compact[..10].copy_from_slice(&self.hist[..10]);
+        compact[10] = self.hist[10..17].iter().sum(); // (3000, 5000]
+        compact[11] = self.hist[17..26].iter().sum(); // (5000, 7500]
+        compact[12..].copy_from_slice(&self.hist[26..]);
+        compact
+    }
 }
 
 fn require(ok: bool) -> Result<(), ApiError> {
@@ -829,6 +847,7 @@ pub fn prepare_ingest(
         .into_iter()
         .map(|((seconds, method, path), row)| {
             let mut value = json!(row);
+            value["hist"] = json!(row.legacy_hist());
             value["bucket"] = json!(DateTime::<Utc>::from_timestamp_secs(seconds));
             value["method"] = json!(method);
             value["route"] = json!(path);
