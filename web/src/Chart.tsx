@@ -47,6 +47,15 @@ const height = 100;
 const y = (value: number, max: number) => height - height * value / max;
 const plotTime = (ms: number) => ms === Infinity ? 30001 : ms;
 
+function verticalTicks(peak: number, duration: boolean) {
+  const required = Math.max(peak / 5, duration ? 10 : 1);
+  const power = 10 ** Math.floor(Math.log10(required));
+  const step = [1, 2, 2.5, 5, 10].map(n => n * power)
+    .find(n => n >= required && (duration || Number.isInteger(n)))!;
+  const count = Math.max(3, Math.ceil(peak / step));
+  return Array.from({length:count + 1}, (_, index) => index * step);
+}
+
 function DurationMarks({ points, max, baseline }: { points: Bucket[]; max: number; baseline: number | null }) {
   const runs: string[][] = [];
   points.forEach(({ median }, i) => {
@@ -126,25 +135,29 @@ function Plot({ points, labels, duration, baseline, summary }: {
   const peak = duration
     ? Math.max(plotTime(baseline ?? 0), ...points.map(p => plotTime(p.median ?? 0)))
     : Math.max(...points.map(p => p.total));
-  const max = peak || (duration ? 1000 : 1);
+  const levels = verticalTicks(peak || (duration ? 1000 : 1), !!duration);
+  const max = levels[levels.length - 1];
   const measurements = points.filter(p => p.median !== null);
   const isolatedX = measurements.length === 1 ? center(points.indexOf(measurements[0]), points.length) : null;
   const title = duration ? "걸린 시간" : "사용과 실패";
-  const top = duration ? formatDuration(max === 30001 ? Infinity : max) : max.toLocaleString("ko-KR") + "건";
   return <figure className="flow-figure" aria-labelledby={id}>
     <figcaption id={id}>{title}</figcaption>
     {summary && <p className="flow-summary">{summary}</p>}
-    <div className="flow-key">{duration ? <>
+    {(!duration || baseline !== null) && <div className="flow-key">{duration ? <>
       <span className="median-key">보통 시간</span>
       {baseline !== null && <span className="baseline-key">평소 {formatDuration(baseline)}</span>}
     </> : <>
       <span className="success-key">성공</span><span className="failure-key">실패</span>
       {points.some(p => p.total > p.eligible) && <span className="excluded-key">판정 제외</span>}
-    </>}</div>
+    </>}</div>}
     <div className="flow-coordinates">
-      <div className="flow-y"><span>{top}</span><span>{duration ? "0초" : "0건"}</span></div>
+      <div className="flow-y">{levels.map(level => <span key={level} style={{top:percent(y(level,max))}}>
+        {duration ? (level / 1000).toLocaleString("ko-KR",{maximumFractionDigits:3}) + "초" : level.toLocaleString("ko-KR") + "건"}
+      </span>)}</div>
       <div className="flow-plot">
         <svg className="flow-marks" aria-hidden="true">
+          {levels.slice(1).map(level => <line key={level} x1="0" x2="100%" y1={percent(y(level,max))} y2={percent(y(level,max))}
+            stroke="var(--sp-line-strong)" strokeDasharray="2 4" />)}
           {duration ? <DurationMarks points={points} max={max} baseline={baseline} /> : <CountMarks points={points} max={max} />}
         </svg>
         <div role="slider" tabIndex={0} className="flow-hit" aria-labelledby={id}
@@ -191,16 +204,16 @@ export function Chart({ rows, days, now, baseline }: { rows: Stat[]; days: numbe
   const hourly = days === 1;
   const points = buckets(rows, start, now, hourly ? 24 : 7);
   const labels = ticks(start, now, hourly);
-  const latest = summarize(rows.filter(r => Date.parse(r.bucket) >= now - hour && Date.parse(r.bucket) <= now));
+  const period = summarize(rows.filter(r => Date.parse(r.bucket) >= start && Date.parse(r.bucket) <= now));
   const worst = points.reduce((a, b) => a.failures >= b.failures ? a : b);
   const occupied = points.filter(p => p.total > 0).length;
   return <>
     <p className="flow-range">{dateTime.format(start)} ~ {dateTime.format(now)} · 한국 시간</p>
     {occupied <= 3 && <p className="flow-note">{occupied ? "아직 사용 기록이 적어요. 쌓이면 흐름이 보여요." : "이 기간에는 표시할 사용 기록이 없어요."}</p>}
-    <Plot points={points} labels={labels} baseline={null}
+    <div className="flow-plots"><Plot points={points} labels={labels} baseline={null}
       summary={worst.failures ? worst.label + " 구간에 실패 " + worst.failures + "건이 있었어요." : undefined} />
     <Plot points={points} labels={labels} duration baseline={baseline}
-      summary={latest.median === null ? "최근 1시간에 걸린 시간 기록이 없어요." : "최근 1시간 보통 " + formatDuration(latest.median)} />
+      summary={period.median === null ? "선택한 기간에 걸린 시간 측정값이 없어요." : "선택한 기간 보통 " + formatDuration(period.median)} /></div>
     <details><summary>표로 보기</summary>
       <table><caption>최근 {hourly ? "24시간" : "7일"} 기록</caption>
         <thead><tr>{["시간 구간", "사용", "실패", "보통 시간"].map(h => <th scope="col" key={h}>{h}</th>)}</tr></thead>

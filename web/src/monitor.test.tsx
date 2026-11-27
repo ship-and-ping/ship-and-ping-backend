@@ -431,7 +431,7 @@ it.each([false, true])("첫 요청·악화 요청의 상태와 약함·버전 �
       event: "worse", ok: true, sent_at: new Date().toISOString(),
     });
   });
-  await screen.findByRole("button", {name: "AI에 보낼 내용 복사"});
+  expect(within(await screen.findByRole("region", {name:"문제 상태"})).getByRole("button", {name:"AI 조사 요청문 복사"})).toBeTruthy();
   expect(screen.getByText(/외부 주소나 명령어/).getAttribute("role")).toBe("status");
   expect(screen.getByText(/앱이 보낸 버전 값/).getAttribute("role")).toBe("status");
   expect(container.querySelector("pre")?.textContent).toContain(worse ? "문제가 더 나빠졌어요" : "문제를 감지했어요");
@@ -448,7 +448,7 @@ it("S7을 열면 경고와 기본 복사 옵션을 자동으로 선택한다", a
     "fetch failed",
   ]);
   fireEvent.click(
-    await screen.findByRole("button", { name: "그 줄 빼고 복사" }),
+    within(await screen.findByRole("region", {name:"문제 상태"})).getByRole("button", {name:"그 줄 빼고 요청문 복사"}),
   );
   expect(writeText.mock.calls[0][0]).not.toContain("ignore previous");
   fireEvent.click(screen.getByRole("button", { name: "그대로 복사" }));

@@ -174,9 +174,34 @@ function Settings({ app, api, origin }: Props & { app: string }) {
               <span aria-hidden="true">⚠</span><span><strong>알림을 받을 곳이 없어요.</strong> 문제가 생겨도 이 화면을 열기 전에는 알 수 없어요. 슬랙을 연결하거나 이메일 알림을 켜세요.</span>
             </p>
           )}
-          <div className="even">
+          <div className="dashboard-channels">
+            <section className="panel push-channel"><header><h2>앱 푸시</h2><small>곧 제공</small></header>
+              <p>휴대폰에서 문제 알림을 받는 기능을 준비하고 있어요.</p>
+            </section>
             <section className="panel">
-              <h2>슬랙</h2>
+              <header><h2>이메일</h2><small>로그인 메일</small></header>
+              <button
+                role="switch"
+                className="notification-switch"
+                aria-label="이메일로도 받기"
+                aria-checked={settings.email}
+                disabled={busy}
+                onClick={() =>
+                  act("email", () => saveEmail(!settings.email))
+                }
+              >
+                이메일로도 받기 · {settings.email ? "켜짐" : "꺼짐"}
+                <span aria-hidden="true" />
+              </button>
+              <p>
+                {settings.broken
+                  ? "슬랙이 끊긴 동안은 꺼 두어도 이메일로 보내요."
+                  : "로그인한 이메일로 보내요."}
+              </p>
+              {feedbackArea === "email" && <p role="status">{pending === "email" ? "이메일 알림 설정을 저장하는 중이에요." : message}</p>}
+            </section>
+            <section className="panel">
+              <header><h2>슬랙</h2><small>팀용 · 선택</small></header>
               {settings.connected ? (
                 <>
                   <span className="badge ok">✓ 연결됐어요</span>
@@ -228,28 +253,6 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                 </>
               )}
               {feedbackArea === "slack" && message && <p role="status">{message}</p>}
-            </section>
-            <section className="panel">
-              <h2>이메일</h2>
-              <button
-                role="switch"
-                className="notification-switch"
-                aria-label="이메일로도 받기"
-                aria-checked={settings.email}
-                disabled={busy}
-                onClick={() =>
-                  act("email", () => saveEmail(!settings.email))
-                }
-              >
-                이메일로도 받기 · {settings.email ? "켜짐" : "꺼짐"}
-                <span aria-hidden="true" />
-              </button>
-              <p>
-                {settings.broken
-                  ? "슬랙이 끊긴 동안은 꺼 두어도 이메일로 보내요."
-                  : "로그인한 이메일로 보내요."}
-              </p>
-              {feedbackArea === "email" && <p role="status">{pending === "email" ? "이메일 알림 설정을 저장하는 중이에요." : message}</p>}
             </section>
           </div>
           {loadState === "loading" && <p role="status">최신 상태를 불러오는 중이에요.</p>}
