@@ -23,6 +23,18 @@ it("열린 문제와 감지 당시 실패 건수를 독립된 단위로 표시�
   expect(within(summary).getByText("실패 건수").nextElementSibling?.textContent).toBe("2건");
   expect(within(summary).getByRole("link", {name:"문제 보기"}).getAttribute("href")).toBe("/apps/a/issues/i");
 });
+it("느림 문제의 감지 당시 값과 가장 나빴을 때 값을 구분한다", async () => {
+  setup("/apps/a", [], rows => {
+    Object.assign((rows.incidents as object[])[0], {
+      kind: "slow",
+      metric_at_open: { p50: 6000, total: 5 },
+      metric_worst: { p50: 12000, total: 20 },
+    });
+  });
+  const summary = await screen.findByRole("region", { name: "앱 상태 요약" });
+  expect(within(summary).getByText(/최근 30분 6초 \(5건\)/)).toBeTruthy();
+  expect(screen.getByText(/가장 나빴을 때.*최근 30분 12초 \(20건\)/)).toBeTruthy();
+});
 it("문제가 없으면 정상과 기록 부족을 구별한다", async () => {
   setup("/apps/a", [], rows => { rows.incidents = []; rows.stats_5m = []; });
   expect(screen.getByRole("status").getAttribute("aria-busy")).toBe("true");
@@ -212,7 +224,7 @@ it("깊게 보기 카드는 네 결과를 구분하고 확정 결과만 실패�
   });
   expect((await screen.findByText(/성공 1건 · 실패 1건 · 중단 1건 · 결과 미확인 1건/)).textContent).toContain("실패율 50%");
   expect(screen.getAllByText(/3건 연속 실패/).length).toBeGreaterThan(0);
-  expect(screen.getByText(/사용 4건 중 1건/)).toBeTruthy();
+  expect(screen.getByText("4건 사용")).toBeTruthy();
 });
 it("대기 중인 시도만 있는 기능은 사용을 기다린다", async () => {
   setup("/apps/a", [], rows => {
@@ -220,7 +232,7 @@ it("대기 중인 시도만 있는 기능은 사용을 기다린다", async () =
     rows.incidents = [];
     rows.attempts = [{ status: "pending", feature_id: "f", started_at: new Date().toISOString() }];
   });
-  expect(await screen.findByText(/사용 0건 중 0건/)).toBeTruthy();
+  expect(await screen.findByText("0건 사용")).toBeTruthy();
   expect(screen.getByText(/사용을 기다려요/)).toBeTruthy();
 });
 function setup(
@@ -333,7 +345,12 @@ function setup(
 }
 it("앱 홈에서 기능 상세까지 가린 JSX를 쓰고 기간과 느림 기준을 바꾼다", async () => {
   const { key, container, requests } = setup("/apps/a");
-  const link = await screen.findByRole("link", { name: /지금까지 4건/ });
+  const counts = /4건 사용 1건 실패$/;
+  const link = await screen.findByRole("link", { name: counts });
+  fireEvent.click(screen.getByRole("button", { name: "기능별 속도 보기", expanded: false }));
+  expect(screen.getByRole("link", { name: /4건 사용 1건 실패 보통 걸린 시간.*지금까지 4건/ })).toBe(link);
+  fireEvent.click(screen.getByRole("button", { name: "기능별 속도 접기", expanded: true }));
+  expect(screen.getByRole("link", { name: counts })).toBe(link);
   expect(link.textContent).toContain("<b>&lt;b&gt; [가림]");
   expect(container.textContent).toContain("(형식 확인 필요)");
   fireEvent.click(link);

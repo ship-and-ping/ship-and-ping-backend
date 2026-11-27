@@ -50,6 +50,35 @@ async function fixture(page, state) {
     return route.fulfill({json:tables[name], headers:{"content-range":"*/"+Number(!empty && state !== "healthy")}});
   });
 }
+async function checkLastAction(page, action) {
+  await page.evaluate(() => window.scrollTo({top:document.documentElement.scrollHeight, behavior:"instant"}));
+  const reachable = await action.evaluate(el => {
+    const {left, top, right, bottom} = el.getBoundingClientRect();
+    return top >= 0 && bottom <= innerHeight && [top + 1, bottom - 1].every(y =>
+      el.contains(document.elementFromPoint((left + right) / 2, y)));
+  });
+  if (!reachable) throw Error("Last action is covered: " + await action.textContent());
+}
+
+async function checkChart(page, width) {
+  const usage = page.getByRole("figure", {name:"사용과 실패"});
+  const gap = await usage.locator('g rect[fill="var(--sp-chart)"]').evaluateAll(rects => {
+    // Empty buckets have zero height but still have x and width in SVG coordinates.
+    const [a,b] = rects.map(rect => rect.getBBox());
+    return b.x - (a.x + a.width);
+  });
+  if (Math.abs(gap - 2) > 0.05) throw Error("Bar gap: " + gap);
+  const duration = page.getByRole("figure", {name:"걸린 시간"});
+  const validDots = await duration.locator("circle").evaluateAll(dots => dots.length > 0 && dots.every(dot => {
+    const css = getComputedStyle(dot);
+    return dot.getBBox().width === 10 && css.strokeWidth === "2px" &&
+      css.stroke === getComputedStyle(dot.closest(".usage-panel")).backgroundColor;
+  }));
+  if (!validDots) throw Error("Duration markers differ from the design");
+  if (width === 1440 && !await page.locator(".flow-x span").evaluateAll(labels =>
+    labels.every(el => el.getBoundingClientRect().bottom <= innerHeight))) throw Error("Time axis below first viewport");
+}
+
 const screens = [
   ["home","/apps/demo","problem"], ["healthy","/apps/demo","healthy"], ["empty","/apps/demo","empty"],
   ["feature","/apps/demo/features/other","problem"], ["issue","/apps/demo/issues/example","problem"],
@@ -87,6 +116,8 @@ try {
             throw Error("Expected one visible action to open the incident");
         }
         if (screen === "issue") {
+          const close = page.getByRole("button",{name:"문제 아님으로 닫기"});
+          if (width === 390) await checkLastAction(page,close);
           await page.context().grantPermissions(["clipboard-read","clipboard-write"],{origin});
           const copy = page.getByRole("button",{name:/요청문 복사/}).last();
           await copy.focus();
@@ -95,7 +126,20 @@ try {
           const clipboard = await page.evaluate(() => navigator.clipboard.readText());
           if (clipboard.replaceAll("\r\n","\n") !== await page.locator("pre").first().textContent())
             throw Error("Clipboard differs from the preview");
+          if (width === 390) {
+            await checkLastAction(page,close);
+            await page.evaluate(() => {
+              navigator.clipboard.writeText = async () => { throw new DOMException("Denied", "NotAllowedError"); };
+              document.execCommand = () => false;
+            });
+            await page.locator(".issue-dock").getByRole("button",{name:/요청문 복사/}).click();
+            await page.locator(".issue-dock textarea").waitFor();
+            await checkLastAction(page,close);
+            await capture("copy-denied");
+            await close.click({trial:true});
+          }
         }
+        if (screen === "feature" && width === 1440) await checkChart(page,width);
       }
       if (screen === "feature" && width === 390 && phase === "after") {
         const toggle = page.getByText("그래프와 표 보기",{exact:true});
@@ -106,7 +150,9 @@ try {
         await page.keyboard.press("End");
         await page.keyboard.press("Escape");
         await page.locator(".usage-panel").evaluate(el => el.scrollIntoView());
+        await checkChart(page,width);
         await capture("expanded");
+        await checkLastAction(page,page.getByRole("button",{name:"저장",exact:true}));
       }
       if (errors.length) throw Error(errors.join("\n"));
       await page.close();
@@ -117,9 +163,14 @@ try {
       const page = await browser.newPage({viewport:{width:3*width+96,height:width===390?980:1040}});
       await page.goto(new URL("../index.html",output).href);
       await page.selectOption("#width",String(width));
+      await page.selectOption("#scene",width === 390 ? "expanded" : "feature");
       await page.addStyleTag({content:"body{max-width:none}.panels{gap:16px}.panels img{width:100%;height:"+(width===390?844:900)+"px;object-fit:cover;object-position:top}"});
-      await page.waitForFunction(() => [...document.images].every(img => img.complete && img.naturalWidth));
-      await page.locator(".panels").screenshot({path:fileURLToPath(new URL("../comparison-"+width+".png",output))});
+      for (const theme of ["light","dark"]) {
+        await page.selectOption("#theme",theme);
+        await page.waitForFunction(() => [...document.images].every(img => img.complete && img.naturalWidth));
+        const suffix = theme === "dark" ? "-dark" : "";
+        await page.locator(".panels").screenshot({path:fileURLToPath(new URL("../comparison-"+width+suffix+".png",output))});
+      }
       await page.close();
     }
   }

@@ -67,7 +67,6 @@
 .row-next { font-size: 1.35rem; color: var(--sp-ink-2); }
 .feature-row p, .feature-row .row-metrics { grid-column: 1/-1; }
 .feature-list .speed-toggle { margin-top: 4px; font-size: .875rem; }
-.feature-row .sr-only { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; }
 .hour-row { display: grid; grid-template-columns: 4.4em 1fr; gap: 8px; padding-block: 14px; font-size: .94rem; }
 .hour-row + .hour-row { border-top: 1px solid var(--sp-line); }
 .hour-row:last-child { padding-bottom: 0; }
@@ -97,6 +96,12 @@
 .flow-plots .flow-plot { border-top: 0; }
 .flow-plots .flow-figure .flow-plot { height: 168px; }
 @media (min-width: 761px) {
+  .monitor .dashboard-state:has(+ .usage-panel) {
+    display: grid; grid-template-columns: auto minmax(0,1fr) auto;
+    align-items: center; gap: 4px 18px; padding: 20px 28px;
+  }
+  .dashboard-state:has(+ .usage-panel) p { grid-column: 2; }
+  .dashboard-state:has(+ .usage-panel) .button { grid-column: 3; grid-row: 1 / 3; }
   .flow-plots .flow-figure { display: grid; grid-template-rows: subgrid; grid-row: span 4; row-gap: 4px; }
   .flow-plots .flow-figure .flow-coordinates { grid-row: 4; margin-top: 8px; }
   .flow-plots .flow-figure .flow-key { grid-row: 3; margin: 0; }
@@ -109,7 +114,7 @@
   .dashboard-tabs a { font-size: .83rem; min-height: 50px; }
   .dashboard-shell .workspace { padding: 24px 16px calc(88px + env(safe-area-inset-bottom)); }
   .dashboard-shell .monitor { gap: 12px; }
-  .dashboard-shell .workspace:has(.dashboard-dock, .issue-copy) { scroll-padding-bottom: 84px; }
+  .dashboard-shell .workspace:has(.dashboard-dock) { padding-bottom: 0; }
   .dashboard-shell .workspace :focus-visible { scroll-margin-block: 16px 84px; }
   .monitor .dashboard-title h1 { font-size: 1.75rem; }
   .dashboard-shell .dashboard-title { margin: 0; }
@@ -125,11 +130,12 @@
   .feature-row .row-next { grid-column: 3; grid-row: 1/3; }
   .monitor .dashboard-state, .monitor .issue-overview { padding: 22px 18px; }
   .dashboard-dock {
-    display: grid; position: fixed; inset: auto 0 0; z-index: 3; padding: 8px 16px max(8px,env(safe-area-inset-bottom));
+    display: grid; position: sticky; bottom: 0; z-index: 3; margin-inline: -16px;
+    padding: 8px 16px max(8px,env(safe-area-inset-bottom));
     background: var(--sp-surface); border-top: 1px solid var(--sp-line);
   }
   .dashboard-dock .button, .issue-copy, .issue-copy .sp-copy button, .issue-dock button { width: 100%; min-height: 48px; }
-  .issue-dock { max-height: 55dvh; overflow: auto; }
+  .issue-dock:has(textarea) { position: static; }
   .issue-dock .sp-copy > :empty { display: none; }
   .monitor .chart-fold > summary { display: list-item; }
   .dashboard-channels .panel { padding: 20px; }

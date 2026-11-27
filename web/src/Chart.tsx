@@ -72,7 +72,8 @@ function DurationMarks({ points, max, baseline }: { points: Bucket[]; max: numbe
         <path key={run[0]} className="duration-run" d={run.join(" ")} vectorEffect="non-scaling-stroke" />)}
     </svg>
     {points.map(({ median }, i) => median !== null && <circle key={i}
-      cx={percent(center(i, points.length))} cy={percent(y(plotTime(median), max))} r="3" />)}
+      cx={percent(center(i, points.length))} cy={percent(y(plotTime(median), max))} r="5"
+      stroke="var(--sp-surface)" strokeWidth="2" />)}
   </>;
 }
 
@@ -85,14 +86,18 @@ function CountMarks({ points, max }: { points: Bucket[]; max: number }) {
       <path d="M-1 1L1 -1 M0 6L6 0 M5 7L7 5" stroke="var(--sp-surface)" />
     </pattern></defs>
     {points.map((p, i) => {
-      const left = percent((i + 0.18) * slot);
-      const width = percent(0.64 * slot);
+      const left = `calc(${percent(i * slot)} + 1px)`;
+      const width = `calc(${percent(slot)} - 2px)`;
       const excluded = p.total - p.eligible;
       return <g key={i}>
         {p.failures > 0 && <rect x={percent(i * slot)} width={percent(slot)} height="100%" fill="var(--sp-bad-soft)" />}
         <rect x={left} width={width} y={percent(y(p.successes, max))} height={percent(100 * p.successes / max)} fill="var(--sp-chart)" />
         <rect x={left} width={width} y={percent(y(p.eligible, max))} height={percent(100 * p.failures / max)} fill={`url(#${stripes})`} />
         {excluded > 0 && <rect x={left} width={width} y={percent(y(p.total, max))} height={percent(100 * excluded / max)} fill="var(--sp-line-strong)" />}
+        {p.successes > 0 && p.failures > 0 && <rect x={left} width={width} y={percent(y(p.successes, max))}
+          height={`min(2px, ${percent(50 * p.successes / max)})`} fill="var(--sp-surface)" />}
+        {p.eligible > 0 && excluded > 0 && <rect x={left} width={width} y={percent(y(p.eligible, max))}
+          height={`min(2px, ${percent(50 * (p.failures || p.successes) / max)})`} fill="var(--sp-surface)" />}
       </g>;
     })}
   </>;
