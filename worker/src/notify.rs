@@ -381,7 +381,10 @@ mod tests {
         let mut row = notice("open", "failure");
         assert_eq!(context(&row), "트루바 · 기타");
         row.is_overflow = true;
-        assert_eq!(context(&row), "트루바 · 기타 (따로 지켜보지 않는 기능 묶음)");
+        assert_eq!(
+            context(&row),
+            "트루바 · 기타 (따로 지켜보지 않는 기능 묶음)"
+        );
     }
 
     #[test]
@@ -405,7 +408,10 @@ mod tests {
         );
         assert!(mail.html.contains(escaped_item));
         assert!(!mail.html.contains("<script>"));
-        assert!(mail.html.contains("앱(0)&lt;script&gt;&amp;&quot;&#39; · 기능</strong>"));
+        assert!(
+            mail.html
+                .contains("앱(0)&lt;script&gt;&amp;&quot;&#39; · 기능</strong>")
+        );
         assert!(mail.html.contains("3건 더") && mail.html.contains("평소 1.1초 → 최근 3.4초"));
         assert_eq!(mail.html.matches("쉽앤핑에서 자세히 보기").count(), 1);
         assert!(mail.html.contains("href=\"https://web.test/apps\""));
