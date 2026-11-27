@@ -41,6 +41,11 @@ update features set slow_threshold_ms=1000 where name='cap';
 update baselines set p50_ms=1000,p95_ms=1500 where feature_id=(select id from features where name='cap');
 select pg_temp.samples('cap',10,1100,'1 minute');
 select is((select breached from speeds where name='cap'),true,'custom absolute limit overrides normal range');
+update attempts set duration_ms=900 where attempt_id in
+ (select attempt_id from attempts join features on id=feature_id where name='cap' and duration_ms=1100 limit 5);
+update attempts set duration_ms=1050 where duration_ms=1100 and feature_id=(select id from features where name='cap');
+select results_eq($$select breached,(metric->>'p50')::int,(metric->>'slow')::int from speeds where name='cap'$$,
+ 'select true,975,5','deep cap counts five of ten successes even with median below the threshold');
 select pg_temp.samples('sparse',9,1400,'2 minutes');
 select pg_temp.samples('sparse',1,1400,'20 minutes');
 select results_eq($$select breached,(metric->>'window')::int,(metric->>'total')::int from speeds where name='sparse'$$,

@@ -163,6 +163,13 @@ select ok((select max(ms)>630 and min(ms)<604 and sum(n)=34
  where f.route='/many-times'),'interpolation retains the observed spread for estimating p95');
 
 -- Existing Truva routes use a one-second cap before and after baseline activation.
+-- CI mutation only. The test transaction rolls back this view definition.
+do $$ declare original text := pg_get_viewdef('private.evaluation_signals'::regclass);
+ mutated text := replace(original,'r.slow *','(r.slow - 0.01) *');
+begin
+ if mutated=original then raise exception 'cap mutation did not apply'; end if;
+ execute 'create or replace view private.evaluation_signals as '||mutated;
+end $$;
 select pg_temp.record(route,array_fill(900,array[80]),'10 minutes')
  from unnest(array['/places','/trips','/bookmarks']) route;
 update features set slow_threshold_ms=1000 where route in ('/places','/trips','/bookmarks');
@@ -178,11 +185,17 @@ select results_eq('select * from truva',
 -- Pre-T46 successes have the original counter and no exact-time dictionary.
 update private.evaluation_buckets set duration_counts='{}' where feature_id in
  (select id from features where route in ('/places','/trips'));
+-- The old mixed counter also included the two slow failures.
+update private.evaluation_buckets set duration_counts='{}',slow_count=6 where
+ feature_id=(select id from features where route='/bookmarks') and bucket=date_bin('5 minutes',now(),'epoch');
 insert into baselines(feature_id,p50_ms,p95_ms,sample_count)
  select id,1000,1500,30 from features where route in ('/places','/trips','/bookmarks');
 select results_eq('select * from truva',
  $$values ('/bookmarks',false,4,10,10),('/places',true,5,10,10),('/trips',true,5,10,10)$$,
  'a learned baseline preserves the same one-second cap and excludes slow failures');
+select pg_temp.record('/bookmarks',array[1000],'0 minutes');
+select results_eq($$select breached,slow,successes from truva where route='/bookmarks'$$,
+ 'select false,4,11','adding a new success to a legacy mixed counter still excludes its failed requests');
 
 -- The short cap still wins with five successes amid healthy older traffic.
 select pg_temp.record('/sparse-cap',array_fill(900,array[80]),'10 minutes');
