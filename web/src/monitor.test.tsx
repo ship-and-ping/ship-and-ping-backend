@@ -16,6 +16,33 @@ import { gateway } from "./data";
 import vectors from "../../docs/specs/sanitize-vectors.json";
 
 afterEach(cleanup);
+it("열린 문제와 감지 당시 실패 건수를 독립된 단위로 표시한다", async () => {
+  setup("/apps/a");
+  const summary = await screen.findByRole("region", { name: "앱 상태 요약" });
+  expect(within(summary).getByText("열린 문제 수").nextElementSibling?.textContent).toBe("1개");
+  expect(within(summary).getByText("실패 건수").nextElementSibling?.textContent).toBe("2건");
+  expect(within(summary).getByRole("link", {name:"문제 보기"}).getAttribute("href")).toBe("/apps/a/issues/i");
+});
+it("문제가 없으면 정상과 기록 부족을 구별한다", async () => {
+  setup("/apps/a", [], rows => { rows.incidents = []; rows.stats_5m = []; });
+  expect(screen.getByRole("status").getAttribute("aria-busy")).toBe("true");
+  expect(await screen.findByRole("heading", {name:"최근 사용 기록이 적어요"})).toBeTruthy();
+  cleanup();
+  setup("/apps/a", [], rows => { rows.incidents = []; });
+  expect(await screen.findByRole("heading", {name:"모두 괜찮아요"})).toBeTruthy();
+});
+it("조회 오류에서 다시 불러올 수 있다", async () => {
+  setup("/apps/a", [], rows => { rows.apps = null; });
+  expect(within(await screen.findByRole("alert")).getByRole("button", {name:"다시 불러오기"})).toBeTruthy();
+});
+it("문제 상단에서 현재 옵션으로 요청문을 복사한다", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {configurable:true, value:{writeText}});
+  setup("/apps/a/issues/i");
+  const summary = await screen.findByRole("region", {name:"문제 상태"});
+  fireEvent.click(within(summary).getByRole("button", {name:/요청문 복사/}));
+  expect(writeText).toHaveBeenCalledWith(screen.getByText("보낼 내용 미리 보기").parentElement?.querySelector("pre")?.textContent);
+});
 it("빈 시간은 0건으로 표시하고 사용과 걸린 시간에 각각 눈금을 붙인다", async () => {
   setup("/apps/a/features/f");
   const usage = await screen.findByRole("figure", { name: "사용과 실패" });
@@ -29,7 +56,13 @@ it("빈 시간은 0건으로 표시하고 사용과 걸린 시간에 각각 눈�
   expect(Array.from(table.tBodies[0].rows).filter(row => row.cells[1].textContent === "0").length).toBeGreaterThanOrEqual(23);
   const mark = within(usage).getByRole("slider", { name: "사용과 실패" });
   expect(usage.querySelector('rect[fill="var(--sp-chart)"][height="75%"]')).toBeTruthy();
-  expect(within(duration).getByText("최근 1시간 보통 0.1초")).toBeTruthy();
+  expect(within(duration).getByText("선택한 기간 보통 0.1초")).toBeTruthy();
+  for (const figure of [usage, duration]) {
+    const grid = figure.querySelectorAll('line[stroke-dasharray="2 4"]');
+    expect(grid.length).toBeGreaterThanOrEqual(3);
+    expect(grid.length).toBeLessThanOrEqual(5);
+  }
+  expect(duration.querySelector(".flow-key")).toBeNull();
   fireEvent.focus(mark);
   const tip = within(usage).getByRole("tooltip");
   expect(tip.textContent).toMatch(/(오전|오후).*사용 4건.*실패 1건.*보통 시간 0.1초/);
@@ -121,7 +154,7 @@ it("시간 기록 사이의 빈 구간에서 선을 끊는다", async () => {
   expect(lines).toHaveLength(2);
   for (const line of lines) expect(line.getAttribute("d")).toMatch(/^M[^M]+L[^ML]+$/);
   expect(screen.queryByText(/아직 사용 기록이 적어요/)).toBeNull();
-  expect(within(duration).getByText("최근 1시간에 걸린 시간 기록이 없어요.")).toBeTruthy();
+  expect(within(duration).getByText("선택한 기간 보통 0.1초")).toBeTruthy();
 });
 it("앱 홈의 기능 목록에 기능 지도의 이름을 바로 표시한다", async () => {
   setup("/apps/a#features", [], rows => {
