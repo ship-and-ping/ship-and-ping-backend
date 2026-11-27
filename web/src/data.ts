@@ -49,7 +49,7 @@ export interface Gateway {
     origin: string,
     params: Record<string, string>,
   ): Promise<{ url?: string; state?: string; app?: string }>;
-  monitor(app: string, feature?: string, issue?: string): Promise<Monitor>;
+  monitor(app: string, feature?: string, issue?: string, days?: number): Promise<Monitor>;
   threshold(app: string, feature: string, ms: number): Promise<void>;
   dismiss(issue: string): Promise<void>;
   session(): Promise<string | null>;
@@ -218,7 +218,7 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       if (!response.ok) throw new Error(payload.error);
       return payload;
     },
-    monitor: (app, feature, issue) => loadMonitor(client, app, feature, issue),
+    monitor: (app, feature, issue, days) => loadMonitor(client, app, feature, issue, days),
     async threshold(app, feature, ms) {
       value(
         await client

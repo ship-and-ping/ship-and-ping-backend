@@ -70,7 +70,7 @@ export async function mockPage(page, state, member, origin) {
       incidents: problem ? [incident] : [],
       stats_5m: waiting ? [] : [{ feature_id: "apply", version: "1.0", bucket: at, total: 20,
         failures: state === "failure" ? 6 : 0, hist: [0,0,0,0,14] }],
-      feature_map_suggestions: [], error_samples: [], attempts: [], app_key_list: [],
+      feature_map_suggestions: [], error_samples: [], attempts: [], app_key_list: [], demo_insights: [],
       notification_settings: { email: true, connected: false, broken: false, channel: null },
       incident_verification: { version: null, consecutive_successes: 0 },
     };

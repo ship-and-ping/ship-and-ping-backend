@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Insight } from "./insights";
 
 export interface Feature {
   kind?: "auto" | "deep";
@@ -53,6 +54,7 @@ export interface Incident {
   notifications: { event: string; sent_at: string; ok: boolean }[];
 }
 export interface Monitor {
+  insights?: Insight[];
   verificationIncidentId?: string;
   verification?: {
     version: string | null;
@@ -90,6 +92,7 @@ export async function loadMonitor(
   app: string,
   featureId?: string,
   issueId?: string,
+  days = 1,
 ): Promise<Monitor> {
   const now = Date.now();
   const [header, features, incidents, versions] = await Promise.all([
@@ -137,7 +140,7 @@ export async function loadMonitor(
   const cutoff = new Date(
     incident
       ? Date.parse(incident.opened_at) - (incident.kind === "unconfirmed" ? 3600000 : 1800000)
-      : now - (selected ? 7 : 1) * 86400000,
+      : now - (selected ? 7 : days) * 86400000,
   ).toISOString();
   const stats = pages<Stat>((a, b) => {
     let q = client
@@ -201,7 +204,7 @@ export async function loadMonitor(
           .range(a, b),
       )
     : [];
-  const [rows, deepRows, errorKinds, samples, steps, proof] = await Promise.all([
+  const [rows, deepRows, errorKinds, samples, steps, proof, insights] = await Promise.all([
     stats,
     attempts,
     kindRows,
@@ -224,6 +227,7 @@ export async function loadMonitor(
     verificationIssue
       ? client.rpc("incident_verification", { incident_id: verificationIssue.id })
       : undefined,
+    issueId ? undefined : client.rpc("demo_insights", {target_app:app}),
   ]);
   const deepIds = new Set(deep.map((f) => f.id));
   const visibleRows = rows.filter((row) => !deepIds.has(row.feature_id));
@@ -248,6 +252,7 @@ export async function loadMonitor(
   }
   return {
     name: read(header).name,
+    insights: insights ? read<Insight[]>(insights) : [],
     verificationIncidentId: verificationIssue?.id,
     verification: proof ? read<NonNullable<Monitor["verification"]>>(proof) : undefined,
     features: read(features),
@@ -272,13 +277,14 @@ function intervals(edges: number[]) {
 const legacyIntervals = intervals(legacyBounds);
 const refinedIntervals = intervals(bounds);
 const mixedIntervals = [...refinedIntervals, ...legacyIntervals.slice(10, 12)];
-export function summarize(rows: Stat[]) {
+export function summarize(rows: Stat[], thresholds?: ReadonlyMap<string, number>) {
   let abandoned = 0, unconfirmed = 0;
   let total = 0,
     failures = 0,
     excluded = 0;
   const hist = bounds.map(() => 0);
   const durations = new Map<number, number>();
+  let measuredForScore = 0, fast = 0;
   let min = Infinity;
   for (const row of rows) {
     if (row.attemptStatus === "abandon") abandoned++;
@@ -287,8 +293,16 @@ export function summarize(rows: Stat[]) {
     total += row.total;
     failures += row.failures;
     const bins = row.hist.length === legacyBounds.length ? legacyIntervals : mixedIntervals;
+    const threshold = thresholds?.get(row.feature_id);
+    function addDuration(ms:number, n:number) {
+      durations.set(ms, (durations.get(ms) ?? 0) + n);
+      if (threshold !== undefined) {
+        measuredForScore += n;
+        if (ms <= threshold) fast += n;
+      }
+    }
     for (const [ms, n] of Object.entries(row.success_durations ?? {})) {
-      durations.set(Number(ms), (durations.get(Number(ms)) ?? 0) + n);
+      addDuration(Number(ms), n);
     }
     row.hist.forEach((n, i) => {
       if (n > 0) {
@@ -296,7 +310,7 @@ export function summarize(rows: Stat[]) {
         hist[bins[i].index] += n;
         if (!row.success_durations) {
           const ms = bounds[bins[i].index];
-          durations.set(ms, (durations.get(ms) ?? 0) + n);
+          addDuration(ms,n);
         }
       }
     });
@@ -312,6 +326,7 @@ export function summarize(rows: Stat[]) {
     return Infinity;
   }
   return {
+    satisfaction: measuredForScore ? Math.round(100*fast/measuredForScore) : null,
     abandoned, unconfirmed,
     total,
     failures,

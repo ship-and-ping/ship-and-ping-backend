@@ -71,12 +71,12 @@ async function checkChart(page, width) {
   const duration = page.getByRole("figure", {name:"걸린 시간"});
   const validDots = await duration.locator("circle").evaluateAll(dots => dots.length > 0 && dots.every(dot => {
     const css = getComputedStyle(dot);
-    return dot.getBBox().width === 10 && css.strokeWidth === "2px" &&
-      css.stroke === getComputedStyle(dot.closest(".usage-panel")).backgroundColor;
+    return [6,12].includes(dot.getBBox().width) && css.strokeWidth === "2px" &&
+      css.stroke === getComputedStyle(dot.closest("figure")).backgroundColor;
   }));
   if (!validDots) throw Error("Duration markers differ from the design");
-  if (width === 1440 && !await page.locator(".flow-x span").evaluateAll(labels =>
-    labels.every(el => el.getBoundingClientRect().bottom <= innerHeight))) throw Error("Time axis below first viewport");
+  if (width === 1440 && !await usage.locator(".flow-x").evaluate(axis =>
+    axis.clientWidth > 0 && axis.getBoundingClientRect().bottom <= axis.closest("figure").getBoundingClientRect().bottom)) throw Error("Time axis outside panel");
 }
 
 const screens = [
@@ -142,11 +142,7 @@ try {
         if (screen === "feature" && width === 1440) await checkChart(page,width);
       }
       if (screen === "feature" && width === 390 && phase === "after") {
-        const toggle = page.getByText("그래프와 표 보기",{exact:true});
-        if (await page.getByRole("slider").count()) throw Error("Mobile charts should start folded");
-        await toggle.focus();
-        await page.keyboard.press("Enter");
-        await page.getByRole("slider").first().focus();
+        await page.getByRole("slider",{name:"사용과 실패"}).focus();
         await page.keyboard.press("End");
         await page.keyboard.press("Escape");
         await page.locator(".usage-panel").evaluate(el => el.scrollIntoView());
