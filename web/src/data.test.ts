@@ -266,6 +266,105 @@ it("reclaims an existing browser subscription after sign-in without prompting or
     await vi.waitFor(() => expect(put).toHaveBeenCalledOnce());
     expect(rpc).toHaveBeenCalledWith("register_push",{app:null,p_endpoint:sub.endpoint,p_key:sub.keys.p256dh,
       p_auth:sub.keys.auth,p_agent:"PC",p_fingerprint:null});
-    expect(await (put.mock.calls[0][1] as Response).text()).toBe("new-binding");
+    expect(await (put.mock.calls[0][1] as Response).json()).toEqual({owner:"next-member",device:"new-binding"});
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it("closes already displayed notifications even if logout has no subscription", async () => {
+  const notices = [{close:vi.fn()},{close:vi.fn()}];
+  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:async () => ({
+    getNotifications:async () => notices, pushManager:{getSubscription:async () => null},
+  })}});
+  const signOut = vi.fn(async () => ({error:null}));
+  try {
+    await gateway({auth:{signOut}} as unknown as SupabaseClient).logout();
+    for (const notice of notices) expect(notice.close).toHaveBeenCalledOnce();
+    expect(signOut).toHaveBeenCalledWith({scope:"local"});
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it.each(["registration","notification center","binding","subscription"])("withdrawal signs out after %s cleanup fails", async step => {
+  const fail = () => { throw Error("unavailable"); };
+  const unsubscribe = vi.fn(step === "subscription" ? fail : async () => true);
+  const reg = {getNotifications:step === "notification center" ? fail : async () => [],
+    pushManager:{getSubscription:async () => ({unsubscribe})}};
+  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:step === "registration" ? fail : async () => reg}});
+  vi.stubGlobal("caches",{open:async () => ({delete:step === "binding" ? fail : vi.fn()})});
+  const signOut = vi.fn(async () => ({error:null}));
+  try {
+    await gateway({auth:{signOut}} as unknown as SupabaseClient).logout(true);
+    expect(signOut).toHaveBeenCalledExactlyOnceWith({scope:"local"});
+    if (step !== "registration") expect(unsubscribe).toHaveBeenCalledOnce();
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it("closes a previous member's notices on account change without a subscription", async () => {
+  vi.useFakeTimers();
+  const close = vi.fn();
+  const session = {user:{id:"next"}};
+  const reg = {getNotifications:async () => [{close}],pushManager:{getSubscription:async () => null}};
+  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:async () => reg}});
+  const remove = vi.fn();
+  vi.stubGlobal("caches",{open:async () => ({match:async () => Response.json({device:"old",owner:"former"}),delete:remove})});
+  const client = {auth:{getSession:async () => ({data:{session}}),
+    onAuthStateChange:(fn:(event:string,s:typeof session)=>void) => {
+      fn("SIGNED_IN",session); return {data:{subscription:{unsubscribe:vi.fn()}}};
+    }}};
+  try {
+    const stop = gateway(client as unknown as SupabaseClient).listen(vi.fn());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(close).toHaveBeenCalledOnce();
+    expect(remove).toHaveBeenCalledWith("/.push-device");
+    stop();
+  } finally { vi.useRealTimers(); vi.unstubAllGlobals(); }
+});
+
+it("signals an invalid binding on restore failure and retries the same member without another auth event", async () => {
+  vi.useFakeTimers();
+  const session = {user:{id:"member"}};
+  const sub = {options:{applicationServerKey:null},toJSON:() => ({endpoint:"device",keys:{}})};
+  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:async () => ({pushManager:{getSubscription:async () => sub}})}});
+  const put = vi.fn(), remove = vi.fn(), changed = vi.fn();
+  vi.stubGlobal("caches",{open:async () => ({match:async () => Response.json({device:"same",owner:"member"}),delete:remove,put})});
+  const rpc = vi.fn().mockResolvedValueOnce({error:Error("offline")}).mockResolvedValue({data:"same"});
+  const client = {rpc,auth:{getSession:async () => ({data:{session}}),
+    onAuthStateChange:(fn:(event:string,s:typeof session)=>void) => {
+      fn("INITIAL_SESSION",session); return {data:{subscription:{unsubscribe:vi.fn()}}};
+    }}};
+  window.addEventListener("push-device-change",changed);
+  try {
+    const stop = gateway(client as unknown as SupabaseClient).listen(vi.fn());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(remove).toHaveBeenCalledOnce();
+    expect(changed).toHaveBeenCalledOnce();
+    expect(put).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(await put.mock.calls[0][1].json()).toEqual({device:"same",owner:"member"});
+    stop();
+  } finally { window.removeEventListener("push-device-change",changed); vi.useRealTimers(); vi.unstubAllGlobals(); }
+});
+
+it.each([
+  ["member","member","device",true], ["next","next","device",false],
+  ["member","next","device",false], ["member","member",null,false],
+] as const)("confirms a worker notification only for a currently owned RLS row (%s, %s, %s)", async (before,after,row,expected) => {
+  const controller = {};
+  const addEventListener = vi.fn();
+  vi.stubGlobal("navigator",{serviceWorker:{controller,addEventListener}});
+  const getSession = vi.fn()
+    .mockResolvedValueOnce({data:{session:{user:{id:before}}}})
+    .mockResolvedValueOnce({data:{session:{user:{id:after}}}});
+  const eq = vi.fn(() => ({maybeSingle:async () => ({data:row ? {id:row} : null})}));
+  const client = {from:() => ({select:() => ({eq})}),auth:{getSession,
+    onAuthStateChange:() => ({data:{subscription:{unsubscribe:vi.fn()}}})}};
+  try {
+    const stop = gateway(client as unknown as SupabaseClient).listen(vi.fn());
+    const postMessage = vi.fn();
+    addEventListener.mock.calls[0][1]({source:controller,ports:[{postMessage}],
+      data:{type:"confirm-push-owner",device:"device",owner:"member"}});
+    await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith(expected));
+    if (before === "member") expect(eq).toHaveBeenCalledWith("id","device");
+    stop();
   } finally { vi.unstubAllGlobals(); }
 });

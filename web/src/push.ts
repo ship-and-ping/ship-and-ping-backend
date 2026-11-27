@@ -32,10 +32,35 @@ export function standalone() {
 const bindingCache = "ship-ping-push-device";
 const bindingPath = "/.push-device";
 
-export async function setPushBinding(device: string | null) {
+export function notifyPushChange() {
+  window.dispatchEvent(new Event("push-device-change"));
+  if (window.BroadcastChannel) {
+    const channel = new BroadcastChannel("push-device-change");
+    channel.postMessage(null);
+    channel.close();
+  }
+}
+
+type PushBinding = { device: string; owner: string };
+
+export async function getPushBinding(): Promise<PushBinding | null> {
+  const cache = await globalThis.caches?.open(bindingCache);
+  const response = await cache?.match(bindingPath);
+  // Older releases only stored the device id, without a verified owner.
+  const binding = await response?.json().catch(() => null);
+  return typeof binding?.device === "string" && typeof binding.owner === "string" ? binding : null;
+}
+
+export async function setPushBinding(binding: PushBinding | null) {
+  if (!binding && !globalThis.caches) return;
   const cache = await caches.open(bindingCache);
-  if (device) await cache.put(bindingPath, new Response(device));
+  if (binding) await cache.put(bindingPath, new Response(JSON.stringify(binding)));
   else await cache.delete(bindingPath);
+}
+export async function closePushNotifications() {
+  const registration = await navigator.serviceWorker?.getRegistration("/");
+  const notices = await registration?.getNotifications?.();
+  notices?.forEach(notice => notice.close());
 }
 export async function currentSubscription() {
   const registration = await navigator.serviceWorker?.getRegistration("/");

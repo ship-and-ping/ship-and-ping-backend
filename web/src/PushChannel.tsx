@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AlertSettings, Gateway, PushDevice } from "./data";
-import { canInstall, configuredKey, deniedHelp, deviceType, fingerprint, install, setPushBinding, standalone, subscribe } from "./push";
+import { canInstall, configuredKey, deniedHelp, deviceType, fingerprint, getPushBinding, install, notifyPushChange, setPushBinding, standalone, subscribe } from "./push";
 
 type Props = { api: Gateway; app: string; settings: AlertSettings; reload(): void };
 export function PushChannel({api, app, settings, reload}: Props) {
@@ -8,6 +8,7 @@ export function PushChannel({api, app, settings, reload}: Props) {
   const [endpoint, setEndpoint] = useState("");
   const [keyHash, setKeyHash] = useState<string | null>(null);
   const [browserHash, setBrowserHash] = useState<string | null>(null);
+  const [boundDevice, setBoundDevice] = useState<string | null>(null);
   const [installable, setInstallable] = useState(canInstall);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
@@ -17,14 +18,18 @@ export function PushChannel({api, app, settings, reload}: Props) {
   const home = standalone();
   const supported = "Notification" in window && "PushManager" in window && "serviceWorker" in navigator;
   const current = devices.find(d => d.endpoint === endpoint);
-  const stale = Boolean(current && (!keyHash || current.vapid_fingerprint !== keyHash ||
-    (browserHash && browserHash !== keyHash)));
+  const missingBinding = endpoint && (!boundDevice || (current && current.id !== boundDevice));
+  const keyChanged = current && (!keyHash || current.vapid_fingerprint !== keyHash || (browserHash && browserHash !== keyHash));
+  const stale = missingBinding || keyChanged;
   useEffect(() => {
     const update = () => setInstallable(canInstall());
     const updateDevices = () => setVersion(v => v + 1);
+    const channel = window.BroadcastChannel ? new BroadcastChannel("push-device-change") : null;
+    if (channel) channel.onmessage = updateDevices;
     window.addEventListener("push-install-change", update);
     window.addEventListener("push-device-change", updateDevices);
     return () => {
+      channel?.close();
       window.removeEventListener("push-install-change", update);
       window.removeEventListener("push-device-change", updateDevices);
     };
@@ -39,7 +44,8 @@ export function PushChannel({api, app, settings, reload}: Props) {
       .then(reg => reg?.pushManager.getSubscription())
       .then(async sub => {
         const hash = await fingerprint(sub?.options?.applicationServerKey);
-        if (active) { setBrowserHash(hash); setEndpoint(sub?.endpoint ?? ""); }
+        const binding = await getPushBinding().catch(() => null);
+        if (active) { setBrowserHash(hash); setEndpoint(sub?.endpoint ?? ""); setBoundDevice(binding?.device ?? null); }
       }).catch(() => {});
     return () => { active = false; };
   }, [api, supported, version]);
@@ -72,6 +78,7 @@ export function PushChannel({api, app, settings, reload}: Props) {
       if (sub?.endpoint === device.endpoint) {
         await setPushBinding(null);
         await sub.unsubscribe();
+        notifyPushChange();
       }
     }
     setMessage("이 기기를 알림 목록에서 삭제했어요.");
@@ -86,7 +93,7 @@ export function PushChannel({api, app, settings, reload}: Props) {
       {!home && (installable ? <button disabled={pending} onClick={() => act(install)}>쉽앤핑 설치</button>
         : <p>브라우저 메뉴에서 ‘앱 설치’ 또는 ‘홈 화면에 추가’를 선택하세요.</p>)}
       {supported ? Notification.permission === "denied" ? <p>{deniedHelp()}</p>
-        : stale ? <><p>푸시 발송 키가 바뀌었어요. 이 기기의 구독을 갱신해 주세요.</p>
+        : stale ? <><p>이 기기에서 다시 알림을 받으려면 푸시를 켜 주세요.</p>
           <button disabled={pending} onClick={() => act(enable)}>푸시 다시 켜기</button></>
         : current && settings.push ? <>
           <p>이 기기로 {type === "PC" ? "데스크톱" : "홈 화면"} 알림을 받아요.</p>

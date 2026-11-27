@@ -41,7 +41,11 @@ try {
       let notice;
       const source = await readFile(new URL("../public/sw.js",import.meta.url),"utf8");
       const events = {};
-      runInNewContext(source,{URL,caches:{open:async()=>({match:async()=>({text:async()=>"one"})})},self:{location:{origin},addEventListener:(name,fn)=>{events[name]=fn;},
+      const binding = JSON.stringify({device:"one",owner:"fixture-member"});
+      const client = {focused:true,postMessage:(_message,ports)=>ports[0].postMessage(true)};
+      runInNewContext(source,{URL,MessageChannel,setTimeout,clearTimeout,caches:{open:async()=>({match:async()=>({text:async()=>binding})})},self:{
+        navigator:{locks:{request:(_name,action)=>action()}},clients:{matchAll:async()=>[client]},
+        location:{origin},addEventListener:(name,fn)=>{events[name]=fn;},
         registration:{showNotification:(title,options)=>{notice={title,...options};}}}});
       let displayed;
       events.push({data:{json:()=>({device:"one",title:"[쉽앤핑] 트루바 · 장소 목록 보기가 느려졌어요",body:"평소 약 0.2초 → 지금 약 1.4초"})},waitUntil(promise){displayed=promise;}});

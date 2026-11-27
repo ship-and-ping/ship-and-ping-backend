@@ -16,6 +16,7 @@ type Stage =
   | "confirm"
   | "deleting"
   | "checking"
+  | "signout_failed"
   | "failed"
   | "limited"
   | "offline";
@@ -30,7 +31,7 @@ export function Account({
   api: Gateway;
   origin: string;
   logout: () => Promise<void>;
-  done: (result?: "unauthorized" | "login_required") => void;
+  done: (result?: "unauthorized" | "login_required") => Promise<void>;
   pending: (active: boolean) => void;
 }) {
   const [info, setInfo] = useState<Awaited<ReturnType<typeof loadAccount>>>();
@@ -41,13 +42,14 @@ export function Account({
   const passwordButton = useRef<HTMLButtonElement>(null);
   const [error, setError] = useState(false);
   const [logoutError, setLogoutError] = useState(false);
+  const exitResult = useRef<"unauthorized" | "login_required" | undefined>(undefined);
   const [attempt, retry] = useState(0);
   const title = useRef<HTMLHeadingElement>(null);
   const retryButton = useRef<HTMLButtonElement>(null);
   const progress = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (stage === "confirm" || stage === "account") title.current?.focus();
-    if (stage === "failed" || stage === "limited" || stage === "offline") retryButton.current?.focus();
+    if (stage === "failed" || stage === "limited" || stage === "offline" || stage === "signout_failed") retryButton.current?.focus();
     if (stage === "checking" || stage === "deleting") progress.current?.focus();
   }, [stage]);
   useEffect(() => {
@@ -88,7 +90,10 @@ export function Account({
       }
       running = false;
       if (!active) return;
-      if (result === "deleted") done();
+      if (result === "deleted") {
+        setStage("deleting");
+        void done().catch(() => setStage("signout_failed"));
+      }
       else if (Date.now() >= deadline)
         setStage(result === "exists" ? "failed" : "offline");
     }, 10000);
@@ -103,8 +108,10 @@ export function Account({
     setStage("deleting");
     try {
       const result = await api.withdraw(origin);
-      if (result === "done") done();
-      else if (result === "unauthorized" || result === "login_required") done(result);
+      if (result === "done" || result === "unauthorized" || result === "login_required") {
+        exitResult.current = result === "done" ? undefined : result;
+        await done(exitResult.current).catch(() => setStage("signout_failed"));
+      }
       else if (result === "limited") setStage("limited");
       else setStage(result === "unknown" ? "checking" : "failed");
     } catch {
@@ -285,6 +292,13 @@ export function Account({
               <button ref={retryButton} onClick={remove}>다시 시도</button>
             </>
           )}
+          {stage === "signout_failed" && <div role="alert">
+            이 기기의 로그아웃을 마치지 못했어요. 다시 시도해 주세요.
+            <button ref={retryButton} onClick={() => {
+              setStage("deleting");
+              void done(exitResult.current).catch(() => setStage("signout_failed"));
+            }}>로그아웃 다시 시도</button>
+          </div>}
         </section>
       )}
     </div>

@@ -4,7 +4,7 @@ import { loginRequests, type LoginRequest } from "./login-requests";
 import { loadMonitor, type Monitor } from "./monitor-data";
 import type { DeepFeature, Definitions, FirstResult } from "./deep";
 import { resultKinds } from "./deep";
-import { configuredKey, currentSubscription, deviceType, fingerprint, setPushBinding } from "./push";
+import { closePushNotifications, configuredKey, currentSubscription, deviceType, fingerprint, getPushBinding, notifyPushChange, setPushBinding } from "./push";
 
 interface AppRow {
   url?: string | null;
@@ -131,16 +131,33 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
   }
   async function restorePush(user: string | null) {
     await deviceOperation(async () => {
-      const sub = await currentSubscription();
-      if (!sub) return;
       const {data} = await client.auth.getSession();
       if ((data.session?.user.id ?? null) !== user) return;
-      await setPushBinding(null);
-      if (!user) return;
-      const device = await savePush(null, sub.toJSON(), deviceType(), await fingerprint(sub.options.applicationServerKey));
-      if (device) await setPushBinding(device);
-      window.dispatchEvent(new Event("push-device-change"));
+      try {
+        const previous = await getPushBinding().catch(() => null);
+        try {
+          if (!user || previous?.owner !== user) await closePushNotifications();
+        } finally {
+          await setPushBinding(null);
+        }
+        if (!user) return;
+        const sub = await currentSubscription();
+        if (!sub) return;
+        const device = await savePush(null, sub.toJSON(), deviceType(), await fingerprint(sub.options.applicationServerKey));
+        if (device) await setPushBinding({device, owner:user});
+      } finally {
+        notifyPushChange();
+      }
     });
+  }
+  // The worker cannot read the Supabase session. Only attest to a device visible
+  // under the current session's RLS policy, with the same user before and after.
+  async function confirmPushOwner(device: string, owner: string) {
+    const session = await client.auth.getSession();
+    if (session.error || session.data.session?.user.id !== owner) return false;
+    const row = await client.from("push_subscriptions").select("id").eq("id",device).maybeSingle();
+    const latest = await client.auth.getSession();
+    return !row.error && row.data?.id === device && !latest.error && latest.data.session?.user.id === owner;
   }
   return {
     requests,
@@ -239,8 +256,15 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
     },
     async registerPush(app, sub, agent) {
       await deviceOperation(async () => {
+        const {data} = await client.auth.getSession();
+        const owner = data.session?.user.id;
+        if (!owner) throw Error("로그인이 필요해요.");
+        const previous = await getPushBinding().catch(() => null);
+        if (previous?.owner !== owner) await closePushNotifications();
         const device = await savePush(app, sub, agent, await fingerprint(configuredKey()?.buffer));
-        await setPushBinding(device);
+        if (!device) throw Error("기기 등록 실패");
+        await setPushBinding({device,owner});
+        notifyPushChange();
       });
     },
     async removeDevice(id) {
@@ -308,15 +332,31 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
     },
     listen(fn) {
       let restored: string | null | undefined;
+      let timer: ReturnType<typeof setTimeout>;
+      let generation = 0;
+      function restore(user: string | null, attempt: number, retry = true) {
+        void restorePush(user).catch(() => {
+          if (generation !== attempt) return;
+          if (retry) timer = setTimeout(() => restore(user, attempt, false), 5000);
+          else restored = undefined;
+        });
+      }
+      const confirm = (event: MessageEvent) => {
+        if (event.data?.type !== "confirm-push-owner" || !event.ports[0] || !event.source ||
+          event.source !== navigator.serviceWorker.controller) return;
+        const {device, owner} = event.data;
+        void confirmPushOwner(device, owner).catch(() => false).then(ok => event.ports[0].postMessage(ok));
+      };
+      navigator.serviceWorker?.addEventListener?.("message", confirm);
       const { data } = client.auth.onAuthStateChange((event, session) => {
         fn(session?.user.id ?? null, event === "PASSWORD_RECOVERY");
         const user = session?.user.id ?? null;
         if (user !== restored) {
           restored = user;
           // Supabase releases its auth lock after the callback returns.
-          setTimeout(() => { void restorePush(user).catch(() => {
-            if (restored === user) restored = undefined;
-          }); }, 0);
+          clearTimeout(timer);
+          const attempt = ++generation;
+          timer = setTimeout(() => restore(user, attempt), 0);
         }
       });
       earlyListener?.unsubscribe();
@@ -324,7 +364,12 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
         fn(initialRecovery, true);
         initialRecovery = undefined;
       }
-      return () => data.subscription.unsubscribe();
+      return () => {
+        generation++;
+        clearTimeout(timer);
+        navigator.serviceWorker?.removeEventListener?.("message", confirm);
+        data.subscription.unsubscribe();
+      };
     },
     async passwordLogin(email, password) {
       const { error } = await client.auth.signInWithPassword({ email, password });
@@ -371,18 +416,16 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
     },
     async logout(accountDeleted = false) {
       await deviceOperation(async () => {
+        await closePushNotifications().catch(() => {});
+        await setPushBinding(null).catch(() => {});
         const sub = await currentSubscription();
         if (sub) {
-          await setPushBinding(null);
-          const registration = await navigator.serviceWorker.getRegistration("/");
-          const notices = await registration?.getNotifications?.();
-          notices?.forEach(notice => notice.close());
-          if (!accountDeleted) await removeEndpoint(sub.endpoint);
-          if (!await sub.unsubscribe() && await currentSubscription()) throw Error("기기 구독 해제 실패");
+          if (!accountDeleted) await removeEndpoint(sub.endpoint).catch(() => {});
+          await sub.unsubscribe();
         }
-        const { error } = await client.auth.signOut({ scope: "local" });
-        if (error) throw error;
-      });
+      }).catch(() => {});
+      const { error } = await client.auth.signOut({ scope: "local" });
+      if (error) throw error;
     },
     async firstVisit() {
       const { data, error } = await client.auth.getUser();

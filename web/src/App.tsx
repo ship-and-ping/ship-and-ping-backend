@@ -322,7 +322,8 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     setNotice("로그아웃했어요");
     navigate("/login",{replace:true});
   }
-  const finishWithdrawal = useCallback((result: "done" | "unauthorized" | "login_required" = "done") => {
+  const finishWithdrawal = useCallback(async (result: "done" | "unauthorized" | "login_required" = "done") => {
+    await api.logout(result === "done");
     deleting.current=false; issued.current=null;
     setNotice({
       done: "탈퇴를 마쳤어요",
@@ -330,7 +331,6 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
       login_required: "다시 로그인해 주세요.",
     }[result]);
     setUser(null);
-    void api.logout(result === "done").catch(()=>{});
     navigate("/login",{replace:true});
   },[api,navigate]);
   useEffect(() => {

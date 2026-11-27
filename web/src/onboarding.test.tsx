@@ -225,6 +225,23 @@ it("S11 lets the member log out after a failed withdrawal", async () => {
   fireEvent.click(screen.getByRole("button",{name:"로그아웃"}));
   await screen.findByText("로그아웃했어요");
 });
+it("waits for local sign-out and retries it without repeating the withdrawal", async () => {
+  const api = fake();
+  let finish!: () => void;
+  vi.mocked(api.logout).mockRejectedValueOnce(Error("sign-out unavailable"))
+    .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  open("/account",api);
+  fireEvent.click(await screen.findByRole("button",{name:"회원 탈퇴"}));
+  fireEvent.change(screen.getByLabelText("로그인 이메일 다시 입력"),{target:{value:"<me>@example.invalid"}});
+  fireEvent.click(screen.getByRole("button",{name:"모든 앱과 기록을 지우고 탈퇴"}));
+  fireEvent.click(await screen.findByRole("button",{name:"로그아웃 다시 시도"}));
+  expect(screen.queryByText("탈퇴를 마쳤어요")).toBeNull();
+  await act(async () => finish());
+  await screen.findByText("탈퇴를 마쳤어요");
+  expect(api.logout).toHaveBeenCalledTimes(2);
+  expect(api.logout).toHaveBeenLastCalledWith(true);
+  expect(api.withdraw).toHaveBeenCalledOnce();
+});
 it("S11 sends an invalid session after retry to the login notice", async () => {
   const api = fake();
   vi.mocked(api.withdraw).mockResolvedValueOnce("failed").mockResolvedValueOnce("unauthorized");

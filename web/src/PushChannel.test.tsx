@@ -5,11 +5,11 @@ import {PushChannel} from "./PushChannel";
 import {startPwa} from "./push";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
-function setup(home: boolean, permission: NotificationPermission = "granted", agent = "iPhone", rotated = false) {
+function setup(home: boolean, permission: NotificationPermission = "granted", agent = "iPhone", rotated = false, unbound = false) {
   vi.stubGlobal("crypto", {subtle:{digest:async (_algorithm: string, bytes: ArrayBuffer) => bytes}});
   const sub = {endpoint:"https://web.push.apple.com/device",toJSON:() => ({endpoint:"https://web.push.apple.com/device",keys:{p256dh:"fixture",auth:"fixture"}})};
-  const old = {...sub,options:{applicationServerKey:Uint8Array.of(3).buffer},unsubscribe:vi.fn(async () => true)};
-  const manager = {getSubscription:vi.fn(async () => rotated ? old : null),subscribe:vi.fn(async () => sub)};
+  const old = {...sub,options:{applicationServerKey:Uint8Array.of(rotated ? 3 : 4).buffer},unsubscribe:vi.fn(async () => true)};
+  const manager = {getSubscription:vi.fn(async () => rotated || unbound ? old : null),subscribe:vi.fn(async () => sub)};
   const reg = {pushManager:manager};
   const register = vi.fn(async () => reg);
   vi.stubGlobal("navigator", {userAgent:agent,standalone:home,serviceWorker:{register,getRegistration:register,ready:Promise.resolve(reg)}});
@@ -17,8 +17,11 @@ function setup(home: boolean, permission: NotificationPermission = "granted", ag
   vi.stubGlobal("Notification",{permission:"default",requestPermission});
   vi.stubGlobal("PushManager",class {});
   vi.stubEnv("VITE_VAPID_PUBLIC_KEY","BA");
-  const api = {devices:vi.fn(async () => rotated ? [{id:"old",endpoint:sub.endpoint,user_agent:"iPhone",
-    created_at:"2026-11-27",vapid_fingerprint:"03"}] : []),registerPush:vi.fn(),removeEndpoint:vi.fn()};
+  let bound = !unbound;
+  vi.stubGlobal("caches",{open:async () => ({match:async () => bound ? Response.json({device:"old",owner:"member"}) : undefined})});
+  const api = {devices:vi.fn(async () => rotated || unbound ? [{id:"old",endpoint:sub.endpoint,user_agent:"iPhone",
+    created_at:"2026-11-27",vapid_fingerprint:rotated ? "03" : "04"}] : []),
+    registerPush:vi.fn(async () => { bound = true; }),removeEndpoint:vi.fn()};
   render(<PushChannel api={api as unknown as Gateway} app="mine" settings={{push:true,email:false,connected:false,broken:false,channel:null}} reload={vi.fn()}/>);
   return {api,manager,sub,old,requestPermission};
 }
@@ -51,6 +54,16 @@ it("explains how to restore denied iPhone permission", async () => {
   await screen.findByText(/설정 → 알림 → 쉽앤핑/);
   expect(manager.subscribe).not.toHaveBeenCalled();
   expect(api.registerPush).not.toHaveBeenCalled();
+});
+it("requires re-enabling an unbound device with a matching server row and key, then reuses its subscription", async () => {
+  const {api,manager,old} = setup(true,"granted","PC",false,true);
+  await screen.findByText("다시 켜기 필요");
+  expect(screen.queryByText("켜짐")).toBeNull();
+  expect(screen.queryByRole("button",{name:"시험 푸시 보내기"})).toBeNull();
+  fireEvent.click(screen.getByRole("button",{name:"푸시 다시 켜기"}));
+  await screen.findByText("켜짐");
+  expect(api.registerPush).toHaveBeenCalledWith("mine",old.toJSON(),"PC");
+  expect(manager.subscribe).not.toHaveBeenCalled();
 });
 it("prompts Android users to install using the deferred install event", async () => {
   setup(false,"granted","Android");
