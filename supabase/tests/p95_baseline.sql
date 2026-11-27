@@ -4,10 +4,11 @@ set search_path=public,extensions;
 select no_plan();
 
 insert into auth.users(id) values ('00000000-0000-0000-0000-000000000046');
-insert into apps(owner_id,name) select id,'T46' from auth.users;
+insert into apps(owner_id,name) select id,label from auth.users cross join unnest(array['T46','outages']) label;
 insert into app_versions(app_id,version) select id,'v1' from apps;
 insert into features(app_id,kind,feature_key,name)
-select id,'deep',label,label from apps cross join unnest(array['search','fast','cap','sparse','failure','slow']) label;
+select id,'deep',label,label from apps cross join unnest(array['search','fast','cap','sparse','failure','slow']) label
+where (name='outages')=(label in ('failure','slow'));
 
 create function pg_temp.samples(label text, n int, ms int, age interval) returns void language sql as $$
  insert into attempts(app_id,feature_id,version,attempt_id,status,started_at,ended_at,duration_ms)
@@ -44,5 +45,27 @@ select pg_temp.samples('sparse',9,1400,'2 minutes');
 select pg_temp.samples('sparse',1,1400,'20 minutes');
 select results_eq($$select breached,(metric->>'window')::int,(metric->>'total')::int from speeds where name='sparse'$$,
  'select true,30,10','nine recent successes use the longer window');
+
+-- Automatic timings are five-minute histograms. A closed outage continues to
+-- exclude the overlapping bucket, while later healthy traffic can be learned.
+insert into features(app_id,kind,name,route,method) select id,'auto','auto','/auto','GET' from apps where name='T46';
+insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist)
+ select app_id,id,'v1',date_bin('5 minutes',now(),'epoch')-age,n,0,0,n*ms,
+ array_fill(0,array[bin-1])||array[n]||array_fill(0,array[16-bin])
+ from features cross join (values (interval '1 day',25,200,3),(interval '2 hours',100,2000,9),
+ (interval '1 hour',5,500,5),(interval '8 days',50,3000,10)) b(age,n,ms,bin) where name='auto';
+insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version)
+ select app_id,id,'failure','resolved',date_bin('5 minutes',now(),'epoch')-interval '119 minutes',
+ now()-interval '90 minutes','v1' from features where name='auto';
+select private.refresh_baselines();
+select results_eq($$select sample_count,p50_ms,p95_ms from baselines join features on id=feature_id where name='auto'$$,
+ 'select 30,200,500','auto excludes a partially overlapping bucket, resumes learning, and respects the seven-day cutoff');
+insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist)
+ select app_id,id,'v1',date_bin('5 minutes',now(),'epoch')-age,n,0,0,n*ms,
+ array_fill(0,array[bin-1])||array[n]||array_fill(0,array[16-bin])
+ from features cross join (values (interval '20 minutes',25,200,3),(interval '0 minutes',10,1400,8)) b(age,n,ms,bin)
+ where name='auto';
+select results_eq($$select breached,(metric->>'window')::int,(metric->>'p50')::int from speeds where name='auto'$$,
+ 'select true,10,1500','auto short window uses the T45 histogram upper bound');
 select * from finish();
 rollback;

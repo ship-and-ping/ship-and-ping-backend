@@ -90,7 +90,7 @@ create or replace view private.evaluation_signals as
  select f.app_id,f.id feature_id,k.kind,
   case k.kind when 'failure' then (r.results>=5 and r.failures*5>=r.results) or r.consecutive
    when 'slow' then (r.timed>=5 and b.p95_ms is null and r.slow*2>=r.timed)
-    or (r.successes>=5 and (r.over_cap or (b.p95_ms is not null and r.p50>b.p95_ms and r.p50>b.p50_ms::bigint+500)))
+    or (r.successes>=5 and (r.over_cap or (b.p95_ms is not null and r.p50>b.p95_ms and r.p50>=b.p50_ms::bigint+500)))
    else m.tried>=10 and m.missing*2>=m.tried end as breached,
   case k.kind when 'failure' then r.failures::numeric/nullif(r.results,0)
    when 'slow' then r.p50::numeric/nullif(coalesce(b.p50_ms,f.slow_threshold_ms),0)
