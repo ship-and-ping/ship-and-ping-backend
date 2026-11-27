@@ -20,6 +20,7 @@ function rows() {
     }));
   }
   const result = [1,2].map(n=>({id:id(n),claim_token:id(3),app:id(4),incident:id(n),event:"open",
+    app_version:n===1 ? "2026-11-27T04:21:09.780Z-1d79c156-5e7e-43e2-9cc6-08b34e145f4e" : sensitive,
     app_name:"트루바",kind:"slow",feature:"신청 "+sensitive,metric:{total:10,p50:n===1?3400.5:null,baseline:n===1?1100:null,raw:"private-body"},raw_route:"/private-route",
     channel:round===2?"email":"slack",hook,destination:"T/C",secret_id:id(7),email:"member@example.invalid",digest:round>1}));
   // This address sorts before the healthy digest, so a batch-wide return loses both.
@@ -50,6 +51,7 @@ export default {
         && (round===3 ? !payload.text.includes("쉽앤핑에서 보기") : [1,2].every(n=>payload.text.includes("https://web.test/apps/"+id(4)+"/issues/"+id(n))));
       if(url.hostname==="hooks.slack.com"){ report.slack++; return new Response("action_prohibited",{status:403}); }
       report.safe &&= payload.to[0]==="member@example.invalid" && payload.subject==="[쉽앤핑] 모아 둔 알림 14건이에요"
+        && [payload.html, payload.text].every(body=>body.includes("11/27 13:21 배포 · 1d79c156") && !body.includes("9cc6-08b34e145f4e"))
         && payload.text.includes("12건 더") && payload.text.includes("트루바")
         && payload.html.includes("트루바") && payload.html.includes('href="https://web.test/apps"')
         && ![sensitive,"private-body","private-route",hook].some(value=>payload.html.includes(value));
@@ -94,7 +96,7 @@ export default {
         if(body.p_action==="poll" && body.p_secret==="pc-only" && pcGrant){ const grant=pcGrant; pcGrant=null; return Response.json({status:"approved",token_hash:grant}); }
         return Response.json({status:"missing"});
       case "evaluate_all": return new Response(null,{status:503});
-      case "claim_notifications": return Response.json(rows());
+      case "claim_notification_payloads": return Response.json(rows());
       case "slack_failed": report.broken++;return Response.json(null);
       case "complete_notification": if (!body.ok) report.retry.push([body.id.slice(-1),body.error,body.token===id(3)]);
         if(body.id===id(1)) return new Response(null,{status:503});

@@ -34,23 +34,25 @@ export function Copy({
   onCopy,
   compact = false,
 }: {
-  text: string;
+  text: string | (() => Promise<string>);
   title: string;
   secret?: boolean;
   previewKey?: string;
   onCopy?: () => void;
   compact?: boolean;
 }) {
-  const [state, setState] = useState<"ready" | "busy" | "done" | "fail" | "revealed">(
+  const [state, setState] = useState<"ready" | "busy" | "done" | "fail" | "revealed" | "unavailable">(
     "ready",
   );
   const area = useRef<HTMLTextAreaElement>(null);
   const copyButton = useRef<HTMLButtonElement>(null);
   const fallbackOpen = state === "fail" || state === "revealed";
   const locked = useRef(false);
+  const [loadedText, setLoadedText] = useState("");
+  const content = typeof text === "string" ? text : loadedText;
   const preview = previewKey
-    ? text.replaceAll(previewKey, "••••")
-    : text;
+    ? content.replaceAll(previewKey, "••••")
+    : content;
   useEffect(() => {
     if (state !== "done") return;
     const timer = setTimeout(() => {
@@ -69,10 +71,21 @@ export function Copy({
     if (locked.current) return;
     locked.current = true;
     setState("busy");
+    let value: string;
+    if (typeof text === "function") {
+      try {
+        value = await text();
+        setLoadedText(value);
+      } catch {
+        locked.current = false;
+        setState("unavailable");
+        return;
+      }
+    } else value = text;
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(value);
     } catch {
-      if (!copyWithEvent(text)) {
+      if (!copyWithEvent(value)) {
         locked.current = false;
         setState("fail");
         return;
@@ -104,6 +117,7 @@ export function Copy({
             : "복사했어요. 코딩 AI 대화창에 붙여넣으세요."
           : fallbackOpen
             ? "자동 복사가 막혔어요. 주소창 옆 사이트 설정에서 클립보드 권한을 허용한 뒤 다시 복사해 주세요."
+            : state === "unavailable" ? "문제 기록을 불러오지 못했어요. 다시 눌러 주세요."
             : ""}
       </span>
       {fallbackOpen && previewKey && (
@@ -126,7 +140,7 @@ export function Copy({
           ref={area}
           className="preview"
           readOnly
-          value={state === "revealed" ? text : preview}
+          value={state === "revealed" ? content : preview}
           onFocus={(e) => {
             if (fallbackOpen) e.target.select();
           }}

@@ -165,6 +165,13 @@ function MonitorPage({
   }, [loaded, hash]);
   const retry = () => void reload();
   const base = "/apps/" + encodeURIComponent(id);
+  async function loadPrompt(issueId: string) {
+    const detail = await api.monitor(id, undefined, issueId);
+    const incident = detail.incidents.find(item => item.id === issueId);
+    const feature = detail.features.find(item => item.id === incident?.feature_id);
+    if (!incident || !feature) throw Error("문제 기록을 찾지 못했어요");
+    return buildIssuePrompt(issueContext(detail, feature, incident).input).text;
+  }
   if (error && !data)
     return (
       <section className="load-state" role="alert">
@@ -202,13 +209,14 @@ function MonitorPage({
         />
       ) : selected ? (
         <FeaturePage
+          loadPrompt={loadPrompt}
           days={days} toolbar={toolbar}
           data={data}
           feature={selected}
           save={(ms) => api.threshold(id, selected.id, ms)}
         />
       ) : (
-        <Home data={data} base={base} days={days} toolbar={toolbar} />
+        <Home data={data} base={base} days={days} toolbar={toolbar} loadPrompt={loadPrompt} />
       )}
     </div>
   );
@@ -217,7 +225,7 @@ function Outcomes({stats}: {stats:ReturnType<typeof summarize>}) {
   const rate = stats.eligible ? Math.round(stats.failures / stats.eligible * 100) + "%" : "기록 없음";
   return <p>성공 {stats.successes}건 · 실패 {stats.failures}건 · 중단 {stats.abandoned}건 · 결과 미확인 {stats.unconfirmed}건 · 실패율 {rate}</p>;
 }
-function Home({ data, base, days, toolbar }: { data: Monitor; base: string; days:number; toolbar:ReactNode }) {
+function Home({ data, base, days, toolbar, loadPrompt }: { data: Monitor; base: string; days:number; toolbar:ReactNode; loadPrompt: (id: string) => Promise<string> }) {
   const [showSpeed, setShowSpeed] = useState(false);
   const open = data.incidents.filter((i) => i.status === "open");
   const find = (i: Incident) =>
@@ -269,7 +277,10 @@ function Home({ data, base, days, toolbar }: { data: Monitor; base: string; days
             {first.kind === "failure" && failed != null ? <dl><dt>실패 건수</dt><dd>{failed}건</dd></dl> : <p>{details(first, first.metric_at_open, find(first))}</p>}
           </div></div>
           <p>처음 감지 · <time dateTime={first.opened_at}>{when(first.opened_at)}</time></p>
-          <Link className="button dashboard-primary" to={action.to}>{action.label}</Link>
+          <div className="incident-actions">
+            <Copy key={first.id} compact text={() => loadPrompt(first.id)} title="AI 조사 요청문 복사" />
+            <Link className="dashboard-primary" to={action.to}>{action.label}</Link>
+          </div>
         </div>
       </section> : <section className="panel dashboard-state hero-card" aria-label="앱 상태 요약">
         {sparse ? <span className="status-badge waiting">기록 적음</span> : <StatusBadge state={hasRecords ? "healthy" : "waiting"} />}<h2>{stateTitle}</h2>
@@ -346,11 +357,13 @@ function FeaturePage({
   data,
   feature: f,
   save,
+  loadPrompt,
   days, toolbar,
 }: {
   data: Monitor;
   feature: Feature;
   save: (ms: number) => Promise<void>;
+  loadPrompt: (id: string) => Promise<string>;
   days:number; toolbar:ReactNode;
 }) {
   const [seconds, setSeconds] = useState(String(f.slow_threshold_ms / 1000)),
@@ -394,7 +407,10 @@ function FeaturePage({
         <h2>{problem ? title(f, problem) : summary.total ? displayText(f.name) + " 기능은 괜찮아요" : "이 기간에는 사용 기록이 없어요"}</h2>
         <p>최근 {periodName(days)} 사용 {summary.total}건 중 {summary.failures}건 실패 · 보통 시간 {approximateDuration(summary.median)}</p>
         {f.baselines?.p50_ms != null && <p>{usualDuration(f.baselines.p50_ms, f.baselines.p95_ms)}</p>}
-        <Link className="button dashboard-primary" to={destination}>{action}</Link>
+        {problem ? <div className="incident-actions">
+          <Copy key={problem.id} compact text={() => loadPrompt(problem.id)} title="AI 조사 요청문 복사" />
+          <Link className="dashboard-primary" to={destination}>{action}</Link>
+        </div> : <Link className="button dashboard-primary" to={destination}>{action}</Link>}
       </section>
       <DashboardPanels data={data} days={days} feature={f} />
       <section>
@@ -477,20 +493,7 @@ function Samples({ data }: { data: Monitor }) {
     <p>{noErrorSamples}</p>
   );
 }
-function Issue({
-  data,
-  feature: f,
-  issue: i,
-  dismiss,
-}: {
-  data: Monitor;
-  feature: Feature;
-  issue: Incident;
-  dismiss: () => Promise<void>;
-}) {
-  const [feedback, setFeedback] = useState(""),
-    [busy, setBusy] = useState(false),
-    [dismissed, setDismissed] = useState(false);
+function issueContext(data: Monitor, f: Feature, i: Incident) {
   const proof = data.verification;
   const version = i.resolved_version ?? proof?.version;
   const fresh = data.versions.find((v) => v.version === version);
@@ -509,42 +512,6 @@ function Issue({
   const threshold = Math.min(f.slow_threshold_ms, p95 + 500, Math.max(p95, (normal?.p50_ms ?? Infinity) + 499));
   const slow = i.kind === "slow" && duration != null && duration > threshold;
   const again = (proof?.latest_success === false || slow) && i.status === "open";
-  function verificationMessage() {
-    if (i.status === "resolved") {
-      const result = i.kind === "slow" ? "평소 속도로 끝났어요." : "성공했어요.";
-      return "업데이트 후 " + displayText(f.name) + " 최근 5건이 모두 " + result;
-    }
-    if (version == null) return "고친 버전을 배포하면 여기서 확인해 드려요";
-    if (proof?.latest_success == null) return "업데이트 후 첫 사용을 기다리고 있어요";
-    if (slow) return "업데이트 후에도 최근 사용이 " + time(duration ?? null) + " 걸렸어요.";
-    if (!proof.latest_success) {
-      return after.failures
-        ? "업데이트 후에도 " + after.eligible + "건 중 " + after.failures + "건 실패했어요"
-        : "업데이트 후 최근 사용이 실패했어요";
-    }
-    return "업데이트 후 " + streak + "건 성공, " +
-      (streak < 5 ? 5 - streak + "건 더 확인할게요" : "해결 판정을 기다리고 있어요");
-  }
-  const events = [
-    {
-      at: i.opened_at,
-      text: "버전 " + displayVersion(i.opened_version) + "에서 처음 감지했어요",
-    },
-    ...i.notifications
-      .filter((n) => n.ok)
-      .map((n) => ({
-        at: n.sent_at,
-        text: n.event === "worse" ? "더 나빠짐 · 알림 보냄" : "알림 보냄",
-      })),
-  ];
-  const observed = fresh && observedAt(fresh, i);
-  if (fresh && observed && (!i.closed_at || Date.parse(observed) <= Date.parse(i.closed_at)))
-    events.push({
-      at: observed,
-      text: "새 버전 감지 · " + displayVersion(fresh.version),
-    });
-  if (i.closed_at) events.push({ at: i.closed_at, text: status[i.status] +
-    (i.resolved_version != null ? " · 버전 " + displayVersion(i.resolved_version) : "") });
   const versions = version != null
     ? [version, i.opened_version]
     : [
@@ -581,6 +548,59 @@ function Issue({
     window: metric?.window,
     errors: data.samples,
   };
+  return { proof, version, fresh, after, streak, duration, slow, again, metric, input };
+}
+function Issue({
+  data,
+  feature: f,
+  issue: i,
+  dismiss,
+}: {
+  data: Monitor;
+  feature: Feature;
+  issue: Incident;
+  dismiss: () => Promise<void>;
+}) {
+  const [feedback, setFeedback] = useState(""),
+    [busy, setBusy] = useState(false),
+    [dismissed, setDismissed] = useState(false);
+  const { proof, version, fresh, after, streak, duration, slow, again, metric, input } = issueContext(data, f, i);
+  function verificationMessage() {
+    if (i.status === "resolved") {
+      const result = i.kind === "slow" ? "평소 속도로 끝났어요." : "성공했어요.";
+      return "업데이트 후 " + displayText(f.name) + " 최근 5건이 모두 " + result;
+    }
+    if (version == null) return "고친 버전을 배포하면 여기서 확인해 드려요";
+    if (proof?.latest_success == null) return "업데이트 후 첫 사용을 기다리고 있어요";
+    if (slow) return "업데이트 후에도 최근 사용이 " + time(duration ?? null) + " 걸렸어요.";
+    if (!proof.latest_success) {
+      return after.failures
+        ? "업데이트 후에도 " + after.eligible + "건 중 " + after.failures + "건 실패했어요"
+        : "업데이트 후 최근 사용이 실패했어요";
+    }
+    return "업데이트 후 " + streak + "건 성공, " +
+      (streak < 5 ? 5 - streak + "건 더 확인할게요" : "해결 판정을 기다리고 있어요");
+  }
+  const events = [
+    {
+      at: i.opened_at,
+      text: "버전 " + displayVersion(i.opened_version) + "에서 처음 감지했어요",
+    },
+    ...i.notifications
+      .filter((n) => n.ok)
+      .map((n) => ({
+        at: n.sent_at,
+        text: n.event === "worse" ? "더 나빠짐 · 알림 보냄" : "알림 보냄",
+      })),
+  ];
+  const observed = fresh && observedAt(fresh, i);
+  if (fresh && observed && (!i.closed_at || Date.parse(observed) <= Date.parse(i.closed_at)))
+    events.push({
+      at: observed,
+      text: "새 버전 감지 · " + displayVersion(fresh.version),
+    });
+  if (i.closed_at) events.push({ at: i.closed_at, text: status[i.status] +
+    (i.resolved_version != null ? " · 버전 " + displayVersion(i.resolved_version) : "") });
   const prompt = buildIssuePrompt(input);
   const copyTitle = prompt.strongCount ? "그 줄 빼고 요청문 복사" : again ? "다시 보낼 요청문 복사" : "AI 조사 요청문 복사";
   const hasFailureCounts = i.kind === "failure" && metric?.total != null && metric.failures != null;
@@ -619,7 +639,13 @@ function Issue({
       <Hero showSheep={false} badge={<StatusBadge state={i.status} />}
         mood={i.status === "open" ? "worried" : "relieved"} arrived={i.status === "resolved"}
         title={summaryTitle()} detail={summaryDetail()} />
-      <div className="issue-copy"><Copy compact text={prompt.text} title={copyTitle} /></div>
+      <div className="issue-copy">
+        <div className="incident-actions"><Copy compact text={prompt.text} title={copyTitle} />
+          <span>코딩 AI에 붙여 넣으세요</span></div>
+        <ol aria-label="요청문 복사 후 다음 단계" className="issue-steps">
+          <li>요청문 붙여 넣기</li><li>고친 뒤 배포</li><li>새 버전에서 5번 연속 정상이면 해결</li>
+        </ol>
+      </div>
       </section>
       {f.kind === "deep" && <section><h2>문제 감지 구간부터의 결과</h2><Outcomes stats={summarize(data.stats.filter(r => r.feature_id === f.id && Date.parse(r.bucket) <= Date.parse(i.closed_at ?? new Date(data.now).toISOString())))} /></section>}
       <div className="issue-columns">

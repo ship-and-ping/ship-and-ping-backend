@@ -52,8 +52,24 @@ it("문제 상단에서 현재 옵션으로 요청문을 복사한다", async ()
   Object.defineProperty(navigator, "clipboard", {configurable:true, value:{writeText}});
   setup("/apps/a/issues/i");
   const summary = await screen.findByRole("region", {name:"문제 상태"});
+  expect(within(summary).getByText("코딩 AI에 붙여 넣으세요")).toBeTruthy();
+  expect(within(summary).getAllByRole("listitem").map(item => item.textContent)).toEqual([
+    "요청문 붙여 넣기", "고친 뒤 배포", "새 버전에서 5번 연속 정상이면 해결",
+  ]);
   fireEvent.click(within(summary).getByRole("button", {name:/요청문 복사/}));
   expect(writeText).toHaveBeenCalledWith(screen.getByText("보낼 내용 미리 보기").parentElement?.querySelector("pre")?.textContent);
+});
+it.each(["/apps/a", "/apps/a/features/f"])("%s에서 문제 상세와 같은 안전한 요청문을 바로 복사한다", async path => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {configurable:true, value:{writeText}});
+  const {key} = setup(path);
+  fireEvent.click(await screen.findByRole("button", {name:"AI 조사 요청문 복사"}));
+  await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+  const copied = writeText.mock.calls[0][0];
+  expect(copied).not.toContain(key);
+  fireEvent.click(screen.getAllByRole("link", {name:"문제 보기"})[0]);
+  const preview = await screen.findByText("보낼 내용 미리 보기");
+  expect(copied).toBe(preview.parentElement?.querySelector("pre")?.textContent);
 });
 it("빈 시간은 0건으로 표시하고 사용과 걸린 시간에 각각 눈금을 붙인다", async () => {
   setup("/apps/a/features/f");
@@ -507,8 +523,8 @@ it("되돌린 버전으로 홈 띠와 문제 흐름, 확인 결과, 요청문을
   expect(link.parentElement?.textContent).toContain("새 버전 v0 감지");
   fireEvent.click(link);
   await screen.findByText("업데이트 후 4건 성공, 1건 더 확인할게요");
-  expect(container.querySelector("ol li:last-child time")?.getAttribute("datetime")).toBeTruthy();
-  expect(container.querySelector("ol li:last-child")?.textContent).toContain("새 버전 감지 · v0");
+  expect(container.querySelector(".timeline li:last-child time")?.getAttribute("datetime")).toBeTruthy();
+  expect(container.querySelector(".timeline li:last-child")?.textContent).toContain("새 버전 감지 · v0");
   expect(container.querySelector("pre")?.textContent).toContain("v0");
   expect(container.querySelector("pre")?.textContent).not.toContain("v3");
 });

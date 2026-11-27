@@ -22,6 +22,8 @@ export const connectRestriction =
 
 export const keyWarning = "이 요청문에는 앱의 키가 들어 있어요. 내 코딩 AI에만 붙여 넣고 다른 사람에게 보내지 마세요. 새어 나갔다면 앱 설정에서 [폐기] 후 [재발급]하세요.";
 
+const versionRule = "app_version에는 배포한 git 커밋 짧은 해시(없으면 배포 버전 번호)를 넣고, 서버 시작 시각이나 무작위 값은 쓰지 마세요 — 재시작만으로 새 버전이 되면 '해결' 판정이 틀어져요.";
+
 function keyInstructions(key: string) {
   if (key.length !== 71 || !/^sp_(?:pub|srv)_[a-f0-9]{64}$/.test(key))
     throw new Error("쉽앤핑 키를 확인해 주세요");
@@ -40,6 +42,7 @@ export function buildReplacementPrompt(key: string) {
   return `쉽앤핑 키를 새 키로 바꿔 줘.
 이 앱의 새 쉽앤핑 키: ${key}
 코드는 바꾸지 말고 로컬과 배포 환경의 SHIP_AND_PING_KEY 값만 바꾼 뒤 다시 배포하거나 재시작해. 이전 키는 24시간 뒤(폐기했다면 이미) 막히니 오늘 안에 바꿔야 해.
+${versionRule}
 ${keyInstructions(key)}
 ${connectRestriction}`;
 }
@@ -52,7 +55,8 @@ export function buildConnectPrompt(key: string, endpoint: string) {
 
 1. 서버가 있으면 API 요청마다, 없으면 브라우저의 저장·조회 요청마다 주소 형태, method, status, 걸린 시간(ms)을 기록해. error_kind에는 오류 종류 코드만 넣어. error_message에는 오류 클래스 이름만 보내.
 2. 30초마다 또는 50건이 모이면 POST "${base}/v1/ingest" 로 비동기 전송해. Content-Type은 application/json, Authorization은 Bearer 인증이야. 위 키를 지정한 환경 변수에서 읽어.
-3. 묶음 예시의 자리표시자를 실제 UUID·현재 ISO 시각·배포마다 바뀌는 커밋 해시 또는 빌드 시각으로 채워. 서버에서 보내면 platform을 server로 바꿔.
+3. 묶음마다 batch_id에는 새 UUID를, sent_at에는 현재 ISO 시각을 넣어. 서버에서 보내면 platform을 server로 바꿔.
+${versionRule}
 {"spec":"sp-1","batch_id":"<UUID>","app_version":"<빌드 버전>","platform":"browser","sent_at":"<ISO 시각>","records":[{"type":"request","route":"/meetings/:id","method":"GET","status":200,"duration_ms":80,"ts":"<ISO 시각>"}]}
 4. 이름·전화·이메일 같은 입력값, 사용자 계정 ID, 요청·응답 본문, 쿠키·토큰·쿼리 문자열은 보내지 마. 주소 안의 실제 값은 :id로 바꾸고 오류에서 개인정보를 지워.
 5. 쉽앤핑 주소로 가는 요청은 기록하지 말고 전송 오류가 앱 동작을 막지 않게 해. 묶음은 64KB·100건 이내로 나눠. 페이지를 떠날 때도 인증 헤더를 유지해 남은 기록을 보내.

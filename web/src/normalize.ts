@@ -1,4 +1,4 @@
-
+import { redactVersionTokens } from "../../worker/src/version.js";
 /** 요청문에 들어갈 외부 문자열의 검사와 표시가 같은 문자를 보도록 한다. */
 function normalizeText(value: string): string {
   return value
@@ -124,9 +124,7 @@ function redact(text: string, spans: Span[]) {
 }
 
 export function maskVersion(raw: string) {
-  const text = normalizeText(raw);
-  const pattern = /(?:sp_pub_|sp_srv_|sb_secret_|sb_publishable_)[a-z0-9_.=-]+|(?<![a-z0-9])(?:sk|pk|rk)_[a-z0-9_]{16,}/gi;
-  return text.replace(pattern, "[가림]");
+  return redactVersionTokens(normalizeText(raw));
 }
 
 export function maskText(value: string): string {
