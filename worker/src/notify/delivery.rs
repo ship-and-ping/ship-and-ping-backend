@@ -170,6 +170,20 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
     let origin = setting(env, "WEB_ORIGIN");
     for (_, rows) in groups {
         let first = &rows[0];
+        if first.channel == "push" {
+            let result = super::push::send(first, env).await;
+            if rpc(
+                db,
+                "complete_push",
+                json!({"id":first.id,"token":first.claim_token,"result":result}),
+            )
+            .await
+            .is_err()
+            {
+                console_error!("Push completion failed");
+            }
+            continue;
+        }
         let outcome = {
             if first.channel == "email" {
                 if let Some(to) = &first.email {

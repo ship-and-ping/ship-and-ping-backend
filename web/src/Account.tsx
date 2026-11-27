@@ -171,6 +171,7 @@ export function Account({
                   {displayText(name)}
                 </Link>
                 <br />
+                {settings.push && settings.subscribed && <>앱 푸시 켜짐<br /></>}
                 {settings.connected
                   ? "슬랙 " + displayText(settings.channel ?? "")
                   : settings.broken
@@ -180,7 +181,7 @@ export function Account({
                 {settings.email || settings.broken
                   ? "이메일 켜짐"
                   : "이메일 꺼짐"}
-                {!settings.connected &&
+                {!(settings.push && settings.subscribed) && !settings.connected &&
                   !settings.email &&
                   !settings.broken &&
                   <small> 받을 곳을 설정해 주세요.</small>}

@@ -41,6 +41,11 @@ export interface Gateway {
   deepCounts(app: string, feature: string): Promise<number[]>;
   firstResult(app: string, feature: string): Promise<FirstResult | null>;
   settings(app: string): Promise<AlertSettings>;
+  devices(): Promise<PushDevice[]>;
+  registerPush(app: string, sub: PushSubscriptionJSON, agent: string): Promise<void>;
+  removeDevice(id: string): Promise<void>;
+  pushEnabled(app: string, enabled: boolean): Promise<void>;
+  testPush(app: string, device: string): Promise<boolean>;
   emailSetting(app: string, enabled: boolean): Promise<void>;
   disconnectSlack(app: string): Promise<void>;
   testSlack(app: string): Promise<boolean>;
@@ -76,10 +81,19 @@ export interface KeySummary {
   expires_at: string | null;
 }
 export interface AlertSettings {
+  push?: boolean;
+  subscribed?: boolean;
   email: boolean;
   channel: string | null;
   connected: boolean;
   broken: boolean;
+}
+
+export interface PushDevice {
+  id: string;
+  endpoint: string;
+  user_agent: string;
+  created_at: string;
 }
 
 function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
@@ -188,6 +202,25 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
     },
     async settings(app) {
       return value(await client.rpc("notification_settings", { app }));
+    },
+    async devices() {
+      return value(await client.from("push_subscriptions").select("id,endpoint,user_agent,created_at").order("created_at"));
+    },
+    async registerPush(app, sub, agent) {
+      const {error} = await client.rpc("register_push", {app,p_endpoint:sub.endpoint,
+        p_key:sub.keys?.p256dh,p_auth:sub.keys?.auth,p_agent:agent});
+      if (error) throw error;
+    },
+    async removeDevice(id) {
+      const {error} = await client.from("push_subscriptions").delete().eq("id",id);
+      if (error) throw error;
+    },
+    async pushEnabled(app, enabled) {
+      const {error} = await client.rpc("set_push_enabled",{app,enabled});
+      if (error) throw error;
+    },
+    async testPush(app, device) {
+      return value(await client.rpc("queue_test_push",{app,device}));
     },
     async emailSetting(app, enabled) {
       const { error } = await client.rpc("set_notification_email", {
