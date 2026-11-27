@@ -16,7 +16,7 @@ export default defineConfig({
         return source.replace("const stale = missingBinding || keyChanged;", "const stale = keyChanged;");
       }
       if (id.endsWith("/src/data.ts")) {
-        return source.replace(/\}\)\.catch\(\(\) => \{\}\);(\s+const \{ error \} = await client.auth.signOut)/, "});$1")
+        return source.replace("accountDeleted === undefined ? step : step.catch(() => {})", "step")
           .replace("if (retry) timer = setTimeout(() => restore(user, attempt, false), 5000);", "if (retry) return;");
       }
     },

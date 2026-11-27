@@ -283,6 +283,22 @@ it("closes already displayed notifications even if logout has no subscription", 
   } finally { vi.unstubAllGlobals(); }
 });
 
+it("keeps ordinary logout retryable when the server fails to remove the current device", async () => {
+  const sub = {endpoint:"device",unsubscribe:vi.fn(async () => true)};
+  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:async () => ({pushManager:{getSubscription:async () => sub}})}});
+  const eq = vi.fn().mockResolvedValueOnce({error:Error("offline")}).mockResolvedValue({error:null});
+  const signOut = vi.fn(async () => ({error:null}));
+  const api = gateway({from:() => ({delete:() => ({eq})}),auth:{signOut}} as unknown as SupabaseClient);
+  try {
+    await expect(api.logout()).rejects.toThrow("offline");
+    expect(signOut).not.toHaveBeenCalled();
+    expect(sub.unsubscribe).not.toHaveBeenCalled();
+    await api.logout();
+    expect(sub.unsubscribe).toHaveBeenCalledOnce();
+    expect(signOut).toHaveBeenCalledOnce();
+  } finally { vi.unstubAllGlobals(); }
+});
+
 it.each(["registration","notification center","binding","subscription"])("withdrawal signs out after %s cleanup fails", async step => {
   const fail = () => { throw Error("unavailable"); };
   const unsubscribe = vi.fn(step === "subscription" ? fail : async () => true);

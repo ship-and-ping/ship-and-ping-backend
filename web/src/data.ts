@@ -414,16 +414,21 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       if (result.error) throw result.error;
       return request;
     },
-    async logout(accountDeleted = false) {
-      await deviceOperation(async () => {
-        await closePushNotifications().catch(() => {});
-        await setPushBinding(null).catch(() => {});
+    async logout(accountDeleted) {
+      // An ordinary logout can retry device removal while still authenticated.
+      // Every terminal withdrawal result must attempt local sign-out.
+      function cleanup(step: Promise<unknown>) {
+        return accountDeleted === undefined ? step : step.catch(() => {});
+      }
+      await cleanup(deviceOperation(async () => {
+        await cleanup(closePushNotifications());
+        await cleanup(setPushBinding(null));
         const sub = await currentSubscription();
         if (sub) {
-          if (!accountDeleted) await removeEndpoint(sub.endpoint).catch(() => {});
-          await sub.unsubscribe();
+          if (!accountDeleted) await cleanup(removeEndpoint(sub.endpoint));
+          if (!await sub.unsubscribe() && await currentSubscription()) throw Error("기기 구독 해제 실패");
         }
-      }).catch(() => {});
+      }));
       const { error } = await client.auth.signOut({ scope: "local" });
       if (error) throw error;
     },
