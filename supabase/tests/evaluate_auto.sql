@@ -20,7 +20,7 @@ $$;
 select ingest_batch(repeat('0',64),pg_temp.batch('old',81,19,'5 minutes'));
 update features set slow_threshold_ms=8000;
 select is(evaluate_all(),'[]'::jsonb,'19 percent below failure threshold');
-select is((select p50_ms from baselines),null::int,'81 successes before three days');
+select is((select p95_ms from baselines),7500,'81 recent successes establish a one-day baseline');
 select results_eq('select sample_count,observed_min_ms,observed_max_ms from baselines','select 81,7000,7000','failed durations excluded');
 select ingest_batch(repeat('0',64),pg_temp.batch('old',81,21,'4 minutes'));
 -- Legacy mixed data must produce only the auto signal even when both inputs breach.

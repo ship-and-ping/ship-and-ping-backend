@@ -49,9 +49,9 @@ select pg_temp.record('/baseline',array_fill(6300,array[5]));
 select evaluate_all();
 select results_eq($$select p50_ms,p90_ms from baselines join features on features.id=feature_id where route='/baseline'$$,
  'select 3300,6300','seven-day baseline reads refined bins');
-select is((select breached from speeds where route='/baseline'),false,'6300 is below twice 3300');
+select is((select breached from speeds where route='/baseline'),true,'6300 exceeds the absolute 5000ms cap');
 select pg_temp.record('/baseline',array_fill(6600,array[6]));
-select is((select breached from speeds where route='/baseline'),true,'6600 reaches twice 3300');
+select is((select breached from speeds where route='/baseline'),true,'6600 exceeds baseline p95 and the cap');
 
 with h as (select array_fill(0,array[11])||array[3,0,0,0,0] old,
  array_fill(0,array[21])||array[2]||array_fill(0,array[8]) fine)

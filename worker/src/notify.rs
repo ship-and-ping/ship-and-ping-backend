@@ -49,6 +49,14 @@ fn sentence(n: &Notice) -> String {
             count("failures")
         ),
         (_, Some("slow")) => {
+            if n.metric["window"].is_number() {
+                let prefix = if n.event == "worse" {
+                    "문제가 더 나빠졌어요. "
+                } else {
+                    ""
+                };
+                return format!("{prefix}{name} 기능이 느려졌어요. {}", metric_summary(n));
+            }
             let mut text = format!("{name} 기능이 느려졌어요.");
             if let Some(ms) = n.metric["baseline"].as_f64() {
                 text.push_str(&format!(" 평소 약 {:.1}초.", ms / 1000.0));
@@ -116,6 +124,34 @@ fn metric_summary(n: &Notice) -> String {
             count("failures")
         ),
         (_, Some("slow")) => {
+            if let Some(window) = n.metric["window"].as_u64() {
+                let mut parts = Vec::new();
+                if let (Some(p50), Some(p95)) = (
+                    n.metric["baseline_p50"].as_f64(),
+                    n.metric["baseline_p95"].as_f64(),
+                ) {
+                    parts.push(format!(
+                        "평소 약 {:.1}초 (보통 {:.1}초 안)",
+                        p50 / 1000.0,
+                        p95 / 1000.0
+                    ));
+                } else if let Some(ms) = n.metric["threshold"].as_f64() {
+                    parts.push(format!("기준 {:.1}초", ms / 1000.0));
+                }
+                let mut recent = format!("최근 {window}분");
+                if let Some(ms) = n.metric["p50"].as_f64() {
+                    recent.push_str(&format!(" 보통 약 {:.1}초", ms / 1000.0));
+                }
+                if n.metric["baseline_p50"].is_number()
+                    && let Some(ratio) = n.metric["severity"].as_f64()
+                {
+                    let ratio = (ratio * 10.0).round() / 10.0;
+                    recent.push_str(&format!(", {ratio}배"));
+                }
+                recent.push_str(&format!(" ({}건)", count("total")));
+                parts.push(recent);
+                return parts.join(" → ");
+            }
             let mut times = Vec::new();
             for (label, key) in [("평소", "baseline"), ("최근", "p50")] {
                 if let Some(ms) = n.metric[key].as_f64() {
@@ -363,7 +399,14 @@ mod tests {
         n.metric = json!({"baseline_p50":200,"baseline_p95":400,"p50":1400,"severity":7,"window":10,"total":12});
         let mail = render_mail(&[n], 0, Some(ORIGIN));
         for body in [&mail.html, &mail.text] {
-            for expected in ["평소 약 0.2초", "보통 0.4초 안", "최근 10분", "약 1.4초", "7배", "12건"] {
+            for expected in [
+                "평소 약 0.2초",
+                "보통 0.4초 안",
+                "최근 10분",
+                "약 1.4초",
+                "7배",
+                "12건",
+            ] {
                 assert!(body.contains(expected), "{expected} missing from {body}");
             }
         }

@@ -1,4 +1,4 @@
-import { approximateDuration } from "./monitor-data";
+import { approximateDuration, usualDuration } from "./monitor-data";
 import { errorName, errorKind, stepName, displayText, normalizePromptInput, maskVersion, sanitizeRoute } from "./normalize";
 
 function hasVersionFormat(raw: string) {
@@ -47,6 +47,8 @@ export interface IssueInput {
   failures?: number;
   p50?: number;
   baseline?: number;
+  baselineP95?: number;
+  window?: number;
 }
 export const noErrorSamples = "오류 예시가 없어요.";
 
@@ -88,13 +90,13 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
         : "문제를 감지했어요";
   const since = Date.parse(input.opened ?? "");
   const metrics = [
-    Number.isFinite(input.total) && (input.kind === "unconfirmed" ? "최근 1시간 " : "최근 30분 ") + Number(input.total) + "건",
+    Number.isFinite(input.total) && (input.kind === "unconfirmed" ? "최근 1시간 " : input.kind === "slow" && input.window === 10 ? "최근 10분 " : "최근 30분 ") + Number(input.total) + "건",
     input.consecutive && "문제 감지 때 3건 연속 실패",
     Number.isFinite(input.unconfirmed) && "결과 미확인 " + Number(input.unconfirmed) + "건",
     Number.isFinite(input.failures) && "실패 " + Number(input.failures) + "건",
     Number.isFinite(input.p50) && "보통 " + approximateDuration(Number(input.p50)),
     Number.isFinite(input.baseline) &&
-      "평소 " + approximateDuration(Number(input.baseline)),
+      usualDuration(Number(input.baseline), input.baselineP95),
   ]
     .filter(Boolean)
     .join(", ");

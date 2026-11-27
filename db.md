@@ -49,7 +49,7 @@ date: 2026-11-24
 | name | text | 화면 이름 |
 | name_source | text (`route` / `ai` / `confirmed` / 기존 `suggested`) | 이름 없음 / 기능 지도 자동 적용 / 회원이 직접 수정 / 이전 스키마의 제안 출처. 기존 `suggested` 값은 그대로 보존한다. |
 | start_definition, success_definition | text null | deep만 |
-| slow_threshold_ms | int default 5000 | 평소 속도 없을 때 기준 |
+| slow_threshold_ms | int default 5000 | 기능별 절대 느림 기준 |
 | hidden | bool default false | |
 | created_at | timestamptz | |
 - unique(app_id, method, route), unique(app_id, feature_key). deep은 앱당 5개(트리거로 검사). auto 주소 형태 앱당 200개.
@@ -100,7 +100,8 @@ stats_1h와 같은 집계 열·기본 키·조회 인덱스를 쓴다. 30일이 
 | 열 | 형식 | 설명 |
 |---|---|---|
 | feature_id PK | | |
-| p50_ms, p90_ms | int null | null이면 아직 없음 |
+| p50_ms, p95_ms | int null | 최근 7일 성공 30건부터 계산. 느림·실패 문제가 열려 있던 기간은 제외 |
+| p90_ms | int null | 기존 조회와 호환되는 90% 지점 |
 | sample_count | int | |
 | observed_min_ms, observed_max_ms | int | "지금까지 N건, a~b초"용 |
 | computed_at | timestamptz | |

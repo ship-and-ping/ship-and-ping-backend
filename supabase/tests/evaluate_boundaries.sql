@@ -25,11 +25,12 @@ select is(evaluate_all(),'[]'::jsonb,'49 missing out of 100');
 select pg_temp.results('speed','success',1,6000,'1 minute');
 select is(evaluate_all()->0->>'kind','slow','slow opens before learning');
 update incidents set last_notified_at=now()-interval '7 hours';
-insert into baselines(feature_id,p50_ms,sample_count) select id,3000,30 from features where name='speed'
- on conflict(feature_id) do update set p50_ms=3000;
+insert into baselines(feature_id,p50_ms,p95_ms,sample_count) select id,3000,5700,30 from features where name='speed'
+ on conflict(feature_id) do update set p50_ms=3000,p95_ms=5700;
+update features set slow_threshold_ms=8000 where name='speed';
 select is(evaluate_all(),'[]'::jsonb,'learning baseline cannot double unchanged latency');
 update attempts set duration_ms=5700 where feature_id=(select id from features where name='speed');
-select is((select breached from private.evaluation_signals s join features f on f.id=s.feature_id where f.name='speed' and s.kind='slow'),false,'1.9x is below threshold');
+select is((select breached from private.evaluation_signals s join features f on f.id=s.feature_id where f.name='speed' and s.kind='slow'),false,'equal to p95 stays within range');
 select pg_temp.results('speed','failure',7,20000,'1 minute');
 select is((select breached from private.evaluation_signals s join features f on f.id=s.feature_id where f.name='speed' and s.kind='slow'),false,'failed durations excluded from median');
 select pg_temp.results('majority','failure',3,100,'1 minute');

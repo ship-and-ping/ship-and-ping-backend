@@ -25,3 +25,11 @@ it("copies the incident snapshot and baseline into the problem report", () => {
   });
   expect(prompt.text).toContain("보통 약 6.3초, 평소 약 3.3초");
 });
+
+it("copies the measured window and usual range for a new slow incident", () => {
+  const prompt = buildIssuePrompt({
+    feature: "검색", route: "/search", versions: ["v1"], errors: [], kind: "slow",
+    total: 10, p50: 1400, baseline: 200, baselineP95: 400, window: 10,
+  });
+  expect(prompt.text).toContain("최근 10분 10건, 보통 약 1.4초, 평소 약 0.2초 (보통 0.4초 안)");
+});

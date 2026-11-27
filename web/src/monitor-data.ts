@@ -10,6 +10,7 @@ export interface Feature {
   slow_threshold_ms: number;
   baselines: {
     p50_ms: number | null;
+    p95_ms: number | null;
     sample_count: number;
     observed_min_ms: number | null;
     observed_max_ms: number | null;
@@ -32,6 +33,10 @@ interface Metric {
   failures?: number;
   p50?: number;
   baseline?: number;
+  baseline_p50?: number;
+  baseline_p95?: number;
+  threshold?: number;
+  window?: number;
 }
 export interface Incident {
   id: string;
@@ -91,7 +96,7 @@ export async function loadMonitor(
     client
       .from("features")
       .select(
-        "id,kind,name,method,route,hidden,slow_threshold_ms,baselines(p50_ms,sample_count,observed_min_ms,observed_max_ms)",
+        "id,kind,name,method,route,hidden,slow_threshold_ms,baselines(p50_ms,p95_ms,sample_count,observed_min_ms,observed_max_ms)",
       )
       .eq("app_id", app)
       .order("id")
@@ -301,4 +306,8 @@ export function formatDuration(ms: number | null) {
 
 export function approximateDuration(ms: number | null) {
   return (ms !== null && Number.isFinite(ms) ? "약 " : "") + formatDuration(ms);
+}
+
+export function usualDuration(p50: number, p95?: number | null) {
+  return "평소 " + approximateDuration(p50) + (p95 == null ? "" : " (보통 " + formatDuration(p95) + " 안)");
 }
