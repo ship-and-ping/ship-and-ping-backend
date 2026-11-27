@@ -88,10 +88,24 @@ try {
         assert.deepEqual(issues, []);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
         const float = page.locator(".lp-mobile-start");
+        const nav = page.getByRole("navigation", {name:"시작 메뉴"});
+        const logo = await nav.getByRole("link", {name:"쉽앤핑"}).boundingBox();
+        const login = await nav.getByRole("link", {name:"로그인"}).boundingBox();
+        const signup = await nav.getByRole("link", {name:"회원가입"}).boundingBox();
+        assert.ok(logo.x + logo.width <= login.x && login.x + login.width <= signup.x);
+        assert.ok(signup.x + signup.width <= width && login.y === signup.y);
+        assert.ok([login, signup].every(box => box.width >= 44 && box.height >= 44));
+        assert.equal(await float.isVisible(), false);
         await page.locator(".lp-alerts").scrollIntoViewIfNeeded();
         assert.equal(await page.locator(".lp-header").evaluate(el => el.getBoundingClientRect().top), 0);
-        assert.equal(await float.isVisible(), width === 390);
-        if (width === 390) assert.ok((await float.boundingBox()).y > 700);
+        assert.equal(await float.isVisible(), false);
+        if (width === 390) {
+          const staticHeader = await page.addStyleTag({content:".lp-header { position: static; }"});
+          await float.waitFor({state:"visible"});
+          assert.ok((await float.boundingBox()).y > 700);
+          await staticHeader.evaluate(el => el.remove());
+          await float.waitFor({state:"hidden"});
+        }
         const tab = page.getByRole("tab", {name:"슬랙"});
         await tab.focus();
         await page.keyboard.press("ArrowRight");

@@ -20,6 +20,7 @@
   gap: clamp(.75rem, 2vw, 2rem);
 }
 .lp-header a, .lp-start { font-weight: 700; text-decoration: none; }
+.lp-header nav a { min-width: 44px; justify-content: center; white-space: nowrap; }
 .lp-header .lp-brand {
   margin-right: auto;
   gap: .6rem;
@@ -211,21 +212,21 @@
   .lp-reading { top: -6%; right: -8%; }
 }
 @media (max-width: 639px) {
-  .lp { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
+  .lp[data-mobile-signup="true"] { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
   .lp-header nav { min-height: 3.5rem; gap: .8rem; }
   .lp-header .lp-brand { font-size: 1.16rem; }
   .lp-brand img { width: 30px; height: 30px; }
   .lp-header .lp-nav-start { font-size: .88rem; padding-inline: .75rem; }
   .lp .lp-hero {
-    min-height: calc(100svh - 8.5rem - env(safe-area-inset-bottom)); margin: 0 1rem 1rem; border-radius: 30px;
+    min-height: calc(100svh - 4.5rem); margin: 0 1rem 1rem; border-radius: 30px;
     row-gap: 1.2rem;
   }
   .lp .lp-hero-start, .lp-footer .lp-start { display: none; }
-  .lp::after {
+  .lp[data-mobile-signup="true"]::after {
     content: ""; position: fixed; inset: auto 0 0; height: calc(4.4rem + env(safe-area-inset-bottom));
     background: var(--sp-surface); border-top: 1px solid var(--sp-line); z-index: 3; pointer-events: none;
   }
-  .lp .lp-mobile-start {
+  .lp[data-mobile-signup="true"] .lp-mobile-start {
     display: flex; position: fixed; z-index: 4; inset: auto 1rem calc(.75rem + env(safe-area-inset-bottom));
     width: auto; border: 1px solid var(--sp-line); box-shadow: 0 4px 16px var(--scene-edge);
   }
