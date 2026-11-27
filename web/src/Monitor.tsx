@@ -13,6 +13,7 @@ import {
   summarize,
   formatDuration,
   approximateDuration,
+  usualDuration,
   type Monitor,
   type Feature,
   type Incident,
@@ -41,13 +42,15 @@ function details(i: Incident, m: Incident["metric_at_open"], f?: Feature) {
   if (!m) return when(i.opened_at) + "부터";
   if (i.kind === "unconfirmed")
     return "사용 결과를 확인하지 못했어요 · " + when(i.opened_at) + "부터";
-  if (i.kind === "slow")
+  if (i.kind === "slow") {
+    const baseline = m.baseline_p50 ?? m.baseline;
     return (
-      (m.baseline == null ? "기준 " + time(f?.slow_threshold_ms ?? 5000) : "평소 " + approximateDuration(m.baseline)) +
-      " → 최근 30분 " +
+      (baseline == null ? "기준 " + time(m.threshold ?? f?.slow_threshold_ms ?? 5000) : usualDuration(baseline, m.baseline_p95)) +
+      " → 최근 " + (m.window === 10 ? 10 : 30) + "분 " +
       approximateDuration(m.p50 ?? null) +
       (m.total == null ? "" : " (" + displayText(String(m.total)) + "건)")
     );
+  }
   return (
     "최근 30분 " + displayText(String(m.total ?? 0)) + "건 중 실패 " + displayText(String(m.failures ?? 0)) + "건"
   );
@@ -226,7 +229,7 @@ function Home({ data, base }: { data: Monitor; base: string }) {
               </span>
               <span>{s.total}건 사용</span>{f.kind !== "deep" && <span>{s.failures}건 실패</span>}<span aria-hidden="true" className="row-next">›</span>
               {showSpeed && <span className="row-metrics">보통 걸린 시간은 {approximateDuration(s.median)}예요.{" "}
-                {baseline?.p50_ms != null ? "평소 " + approximateDuration(baseline.p50_ms) : low != null && high != null
+                {baseline?.p50_ms != null ? usualDuration(baseline.p50_ms, baseline.p95_ms) : low != null && high != null
                   ? "지금까지 " + (baseline?.sample_count ?? s.total) + "건, " + time(low) + "~" + time(high) : "평소 속도를 알아가는 중이에요"}</span>}
               {f.kind === "deep" && <Outcomes stats={s} />}
             </Link>;
@@ -313,6 +316,7 @@ function FeaturePage({
         <StatusBadge state={problem ? "open" : summary.total ? "healthy" : "waiting"} />
         <h2>{problem ? title(f, problem) : summary.total ? displayText(f.name) + " 기능은 괜찮아요" : "이 기간에는 사용 기록이 없어요"}</h2>
         <p>최근 {days === 1 ? "24시간" : "7일"} 사용 {summary.total}건 중 {summary.failures}건 실패 · 보통 시간 {approximateDuration(summary.median)}</p>
+        {f.baselines?.p50_ms != null && <p>{usualDuration(f.baselines.p50_ms, f.baselines.p95_ms)}</p>}
         <Link className="button dashboard-primary" to={destination}>{action}</Link>
       </section>
       <section className="panel usage-panel">
@@ -386,7 +390,7 @@ function FeaturePage({
             onChange={(e) => setSeconds(e.target.value)}
           />
         </label>
-        <small>평소 속도가 없을 때만 사용해요.</small>
+        <small>보통 걸린 시간이 이 기준을 넘으면 느림으로 알려드려요.</small>
         <button disabled={busy} aria-busy={busy}>{busy ? "저장하는 중" : "저장"}</button>
         <p role="status">{result}</p>
       </form>
@@ -434,7 +438,9 @@ function Issue({
   );
   const streak = proof?.consecutive_successes ?? 0;
   const duration = proof?.latest_duration_ms;
-  const threshold = f.baselines?.p50_ms == null ? f.slow_threshold_ms : f.baselines.p50_ms * 1.5;
+  const normal = f.method === "*" ? null : f.baselines;
+  const p95 = normal?.p95_ms ?? Infinity;
+  const threshold = Math.min(f.slow_threshold_ms, p95 + 500, Math.max(p95, (normal?.p50_ms ?? Infinity) + 499));
   const slow = i.kind === "slow" && duration != null && duration > threshold;
   const again = (proof?.latest_success === false || slow) && i.status === "open";
   function verificationMessage() {
@@ -504,7 +510,9 @@ function Issue({
     total: metric?.total,
     failures: metric?.failures,
     p50: metric?.p50,
-    baseline: metric?.baseline,
+    baseline: metric?.baseline_p50 ?? metric?.baseline,
+    baselineP95: metric?.baseline_p95,
+    window: metric?.window,
     errors: data.samples,
   };
   const prompt = buildIssuePrompt(input);

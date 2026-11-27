@@ -10,6 +10,7 @@ export interface Feature {
   slow_threshold_ms: number;
   baselines: {
     p50_ms: number | null;
+    p95_ms: number | null;
     sample_count: number;
     observed_min_ms: number | null;
     observed_max_ms: number | null;
@@ -24,6 +25,7 @@ export interface Stat {
   failures: number;
   client_errors?: number;
   hist: number[];
+  success_durations?: Record<string, number>;
 }
 interface Metric {
   unconfirmed?: number;
@@ -32,6 +34,10 @@ interface Metric {
   failures?: number;
   p50?: number;
   baseline?: number;
+  baseline_p50?: number;
+  baseline_p95?: number;
+  threshold?: number;
+  window?: number;
 }
 export interface Incident {
   id: string;
@@ -91,7 +97,7 @@ export async function loadMonitor(
     client
       .from("features")
       .select(
-        "id,kind,name,method,route,hidden,slow_threshold_ms,baselines(p50_ms,sample_count,observed_min_ms,observed_max_ms)",
+        "id,kind,name,method,route,hidden,slow_threshold_ms,baselines(p50_ms,p95_ms,sample_count,observed_min_ms,observed_max_ms)",
       )
       .eq("app_id", app)
       .order("id")
@@ -136,7 +142,7 @@ export async function loadMonitor(
   const stats = pages<Stat>((a, b) => {
     let q = client
       .from("stats_5m")
-      .select("feature_id,version,bucket,total,failures,client_errors,hist")
+      .select("feature_id,version,bucket,total,failures,client_errors,hist,success_durations")
       .eq("app_id", app)
       .gte("bucket", cutoff);
     if (selected) q = q.eq("feature_id", selected);
@@ -237,6 +243,7 @@ export async function loadMonitor(
       failures: Number(attempt.status === "failure"),
       client_errors: Number(!["success", "failure"].includes(attempt.status)),
       hist,
+      success_durations: attempt.status === "success" && attempt.duration_ms != null ? { [attempt.duration_ms]: 1 } : {},
     });
   }
   return {
@@ -271,6 +278,7 @@ export function summarize(rows: Stat[]) {
     failures = 0,
     excluded = 0;
   const hist = bounds.map(() => 0);
+  const durations = new Map<number, number>();
   let min = Infinity;
   for (const row of rows) {
     if (row.attemptStatus === "abandon") abandoned++;
@@ -279,23 +287,37 @@ export function summarize(rows: Stat[]) {
     total += row.total;
     failures += row.failures;
     const bins = row.hist.length === legacyBounds.length ? legacyIntervals : mixedIntervals;
+    for (const [ms, n] of Object.entries(row.success_durations ?? {})) {
+      durations.set(Number(ms), (durations.get(Number(ms)) ?? 0) + n);
+    }
     row.hist.forEach((n, i) => {
       if (n > 0) {
         min = Math.min(min, bins[i].lower);
         hist[bins[i].index] += n;
+        if (!row.success_durations) {
+          const ms = bounds[bins[i].index];
+          durations.set(ms, (durations.get(ms) ?? 0) + n);
+        }
       }
     });
   }
   const measured = hist.reduce((sum, n) => sum + n, 0);
-  let left = Math.ceil(measured / 2);
-  const index = hist.findIndex((n) => (left -= n) <= 0);
+  const ordered = [...durations].sort(([a], [b]) => a - b);
+  const count = ordered.reduce((sum, [, n]) => sum + n, 0);
+  function middle(rank: number) {
+    for (const [ms, n] of ordered) {
+      if (rank < n) return ms;
+      rank -= n;
+    }
+    return Infinity;
+  }
   return {
     abandoned, unconfirmed,
     total,
     failures,
     successes: total - failures - excluded,
     eligible: total - excluded,
-    median: measured ? bounds[index] : null,
+    median: count ? (middle(Math.floor((count - 1) / 2)) + middle(Math.floor(count / 2))) / 2 : null,
     min: measured ? min : null,
     max: measured ? bounds[hist.map((n) => n > 0).lastIndexOf(true)] : null,
   };
@@ -308,4 +330,8 @@ export function formatDuration(ms: number | null) {
 
 export function approximateDuration(ms: number | null) {
   return (ms !== null && Number.isFinite(ms) ? "약 " : "") + formatDuration(ms);
+}
+
+export function usualDuration(p50: number, p95?: number | null) {
+  return "평소 " + approximateDuration(p50) + (p95 == null ? "" : " (보통 " + formatDuration(p95) + " 안)");
 }

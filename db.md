@@ -49,7 +49,7 @@ date: 2026-11-24
 | name | text | 화면 이름 |
 | name_source | text (`route` / `ai` / `confirmed` / 기존 `suggested`) | 이름 없음 / 기능 지도 자동 적용 / 회원이 직접 수정 / 이전 스키마의 제안 출처. 기존 `suggested` 값은 그대로 보존한다. |
 | start_definition, success_definition | text null | deep만 |
-| slow_threshold_ms | int default 5000 | 평소 속도 없을 때 기준 |
+| slow_threshold_ms | int default 5000 | 기능별 절대 느림 기준 |
 | hidden | bool default false | |
 | created_at | timestamptz | |
 - unique(app_id, method, route), unique(app_id, feature_key). deep은 앱당 5개(트리거로 검사). auto 주소 형태 앱당 200개.
@@ -68,11 +68,13 @@ date: 2026-11-24
 | failures | int | 5xx·예외 |
 | client_errors | int | 4xx |
 | duration_sum_ms | bigint | |
-| hist | int[] | 기존 16칸, 3~7.5초 사이를 최대 300ms로 나눈 30칸, 또는 두 형식을 합산한 32칸. 중앙값·90% 지점은 누적 건수가 목표 순위에 도달한 구간 상한이다. |
+| hist | int[] | 기존 16칸, 3~7.5초 사이를 최대 300ms로 나눈 30칸, 또는 두 형식을 합산한 32칸. |
 - 인덱스: (app_id, feature_id, bucket desc).
 
+자동 기능의 5분 판정 입력은 서로 다른 성공 시간 32종까지 밀리초별 건수를 보관한다. 종류가 더 많거나 예전 요약만 있으면 성공 히스토그램의 구간 안에서 추정한다. 회원 화면과 판정은 같은 성공 분포를 사용한다. 회원은 자기 앱의 5분 요약에서만 이 분포를 읽을 수 있다.
+
 ### stats_1h — 시간별 요약 (기록 후 30일까지)
-stats_5m과 같은 열, bucket = 1시간. 매일 Cron이 7일 지난 5분 요약을 앱·기능·버전·시간별로 합친다. 옮긴 행의 판정 입력(`private.evaluation_buckets`)은 외래 키로 함께 삭제한다. 평소 속도 계산은 경계 시각을 포함한 최근 7일의 성공 기록을 쓰고, 이전 성공 건수는 시간별 요약에서도 읽는다.
+stats_5m과 같은 열, bucket = 1시간. 매일 Cron이 7일 지난 5분 요약을 앱·기능·버전·시간별로 합친다. 옮긴 행의 판정 입력(`private.evaluation_buckets`)은 외래 키로 함께 삭제한다. 평소 속도 계산과 준비 건수는 경계 시각을 포함한 최근 7일의 성공 기록을 쓴다.
 
 5분·시간·하루 요약에서 16칸과 30칸을 합산할 때 옛 (3초, 5초]와 (5초, 7.5초]의 건수는 각각 31·32번째 칸에 담는다. 두 건수가 모두 0이면 30칸으로 저장한다. 느림 기준을 변경하면 구간 하한이 새 기준 이상인 건수만 초과로 센다. 예를 들어 3.3초 기준에서 옛 (3초, 5초]의 건수는 제외하고 새 (3.3초, 3.6초]의 건수는 포함한다. `private.sum_hist(integer[])`의 전이 함수 `private.add_hist`에는 빈 search_path가 설정되어 있다.
 
@@ -102,7 +104,8 @@ stats_1h와 같은 집계 열·기본 키·조회 인덱스를 쓴다. 30일이 
 | 열 | 형식 | 설명 |
 |---|---|---|
 | feature_id PK | | |
-| p50_ms, p90_ms | int null | null이면 아직 없음 |
+| p50_ms, p95_ms | int null | 최근 7일 중 최근 10분과 느림·실패 문제가 열려 있던 기간을 제외한 성공 30건부터 계산. 자동 기능은 해당 기간에 걸친 5분 요약 전체를 제외 |
+| p90_ms | int null | 기존 조회와 호환되는 90% 지점 |
 | sample_count | int | |
 | observed_min_ms, observed_max_ms | int | "지금까지 N건, a~b초"용 |
 | computed_at | timestamptz | |

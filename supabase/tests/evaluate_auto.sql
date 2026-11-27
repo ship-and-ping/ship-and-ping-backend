@@ -17,10 +17,10 @@ create function pg_temp.batch(v text,good int,bad int,age interval) returns json
  select jsonb_build_object('batch_id',gen_random_uuid(),'app_version',v,'stats',
   (select jsonb_agg(to_jsonb(bins)||jsonb_build_object('method','GET','route','/f','client_errors',0)) from bins))
 $$;
-select ingest_batch(repeat('0',64),pg_temp.batch('old',81,19,'5 minutes'));
+select ingest_batch(repeat('0',64),pg_temp.batch('old',81,19,'17 minutes'));
 update features set slow_threshold_ms=8000;
 select is(evaluate_all(),'[]'::jsonb,'19 percent below failure threshold');
-select is((select p50_ms from baselines),null::int,'81 successes before three days');
+select is((select p95_ms from baselines),7000,'81 successes before the detection window establish an exact baseline');
 select results_eq('select sample_count,observed_min_ms,observed_max_ms from baselines','select 81,7000,7000','failed durations excluded');
 select ingest_batch(repeat('0',64),pg_temp.batch('old',81,21,'4 minutes'));
 -- Legacy mixed data must produce only the auto signal even when both inputs breach.

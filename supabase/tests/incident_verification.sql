@@ -6,7 +6,7 @@ insert into auth.users(id) values ('00000000-0000-0000-0000-000000000006');
 insert into apps(owner_id,name) select id,'verification' from auth.users;
 insert into app_versions(app_id,version) select id,'old' from apps;
 insert into features(app_id,kind,method,route,name) select id,'auto','GET','/f','f' from apps;
-insert into baselines(feature_id,sample_count,p50_ms) select id,30,100 from features;
+insert into baselines(feature_id,sample_count,p50_ms,p95_ms) select id,30,100,100 from features;
 insert into incidents(app_id,feature_id,kind,status,opened_at,opened_version)
  select app_id,id,'slow','open',now()-interval '10 minutes','old' from features;
 select set_config('test.issue',(select id::text from incidents),true);
@@ -20,7 +20,7 @@ select is(incident_verification(current_setting('test.issue')::uuid),
 reset role;
 insert into app_versions(app_id,version,first_seen_at) select id,'rollback',now()-interval '5 days' from apps;
 insert into private.latest_results select app_id,id,'rollback',now(),n,ms,true from features
- cross join (values (1,99),(2,151),(3,149),(4,150)) t(n,ms);
+ cross join (values (1,99),(2,601),(3,149),(4,150)) t(n,ms);
 set local role authenticated;
 select is(incident_verification(current_setting('test.issue')::uuid),
  '{"version":"rollback","consecutive_successes":2,"latest_duration_ms":150,"latest_success":true}'::jsonb,'slow success breaks streak, following two qualify');
