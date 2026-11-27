@@ -34,6 +34,10 @@ select is((select hook from slack_claim),'fixture','only delivery receives decry
 select slack_failed(id,claim_token,secret_id) from slack_claim;
 select ok((notification_settings(current_setting('test.app')::uuid)->>'broken')::boolean,'revocation visible to member');
 create temp table email_claim as select * from claim_notifications(1);
+select is((select app_name from email_claim),'fixture','mail claim includes its app name');
+select ok(has_function_privilege('service_role','public.claim_notifications(integer)','execute')
+ and not has_function_privilege('authenticated','public.claim_notifications(integer)','execute')
+ and not has_function_privilege('anon','public.claim_notifications(integer)','execute'),'only delivery may claim');
 select is((select channel||' '||email from email_claim),'email member@example.invalid','revocation uses login email even with email off');
 select is((select count(*) from generate_series(1,21) where reserve_mail(current_setting('test.app')::uuid)),20::bigint,'member daily cap');
 select is((select used from private.mail_quota where day=(now() at time zone 'UTC')::date),20,'member overflow consumes no global slots');
