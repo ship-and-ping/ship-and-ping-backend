@@ -138,7 +138,7 @@ fn metric_summary(n: &Notice) -> String {
                 } else if let Some(ms) = n.metric["threshold"].as_f64() {
                     parts.push(format!("기준 {:.1}초", ms / 1000.0));
                 }
-                let mut recent = format!("최근 {window}분");
+                let mut recent = format!("최근 {}분", window.max(30));
                 if let Some(ms) = n.metric["p50"].as_f64() {
                     recent.push_str(&format!(" 보통 약 {:.1}초", ms / 1000.0));
                 }
