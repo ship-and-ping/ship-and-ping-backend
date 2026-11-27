@@ -22,6 +22,7 @@ import {
 } from "./monitor-data";
 
 const day = 86400000;
+const kindName = { failure: "실패", slow: "느림", unconfirmed: "결과 미확인" };
 const when = (s: string) => new Date(s).toLocaleString("ko-KR", { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Seoul" });
 const time = (ms: number | string | null) =>
   typeof ms === "string" ? displayText(ms) : formatDuration(ms);
@@ -241,7 +242,6 @@ function Home({ data, base, days, toolbar, loadPrompt }: { data: Monitor; base: 
   const latest = updated ? data.versions.find((v) => v.version === data.verification?.version) : data.versions[0];
   const bannerVersion = updated ? data.verification?.version : latest?.version;
   const first = open[0];
-  const failed = first?.metric_at_open?.failures;
   const total = rows.reduce((sum, row) => sum + row.s.total, 0);
   const hasRecords = total > 0;
   const sparse = total < 4 && (hasRecords || !!latest);
@@ -271,17 +271,17 @@ function Home({ data, base, days, toolbar, loadPrompt }: { data: Monitor; base: 
         {toolbar}</div>
       {first ? <section className="panel status-overview" aria-label="앱 상태 요약">
         <div className="problem-count"><dl><dt>열린 문제 수</dt><dd><strong>{open.length}</strong>개</dd></dl><h2>{stateTitle}</h2></div>
-        <div className="incident-ticket">
+        <div className="incident-tickets">{open.map(issue => <div className="incident-ticket" key={issue.id}>
           <div className="ticket-heading"><span className="ticket-symbol" aria-hidden="true">⚠</span><div>
-            <small>{displayText(find(first)?.name ?? "기능")} · 감지 당시</small>
-            {first.kind === "failure" && failed != null ? <dl><dt>실패 건수</dt><dd>{failed}건</dd></dl> : <p>{details(first, first.metric_at_open, find(first))}</p>}
+            <small>{displayText(find(issue)?.name ?? "기능")} · 감지 당시</small>
+            {issue.kind === "failure" && issue.metric_at_open?.failures != null ? <dl><dt>실패 건수</dt><dd>{issue.metric_at_open.failures}건</dd></dl> : <p>{details(issue, issue.metric_at_open, find(issue))}</p>}
           </div></div>
-          <p>처음 감지 · <time dateTime={first.opened_at}>{when(first.opened_at)}</time></p>
+          <p>처음 감지 · <time dateTime={issue.opened_at}>{when(issue.opened_at)}</time></p>
           <div className="incident-actions">
-            <Copy key={first.id} compact text={() => loadPrompt(first.id)} title="AI 조사 요청문 복사" />
-            <Link className="dashboard-primary" to={action.to}>{action.label}</Link>
+            <Copy compact text={() => loadPrompt(issue.id)} title={kindName[issue.kind] + " AI 조사 요청문 복사"} />
+            <Link className="dashboard-primary" to={base + "/issues/" + issue.id}>문제 보기</Link>
           </div>
-        </div>
+        </div>)}</div>
       </section> : <section className="panel dashboard-state hero-card" aria-label="앱 상태 요약">
         {sparse ? <span className="status-badge waiting">기록 적음</span> : <StatusBadge state={hasRecords ? "healthy" : "waiting"} />}<h2>{stateTitle}</h2>
         <p role="status">{sparse ? "최근 " + periodName(days) + " 사용 " + total + "건 · 열린 문제가 없어요." : hasRecords ? "열린 문제가 없어요." : "연결한 앱을 한 번 사용하면 첫 기록을 확인할 수 있어요."}</p>
@@ -375,7 +375,8 @@ function FeaturePage({
   );
   const summary = summarize(rows);
   const {id = ""} = useParams();
-  const problem = data.incidents.find(i => i.feature_id === f.id && i.status === "open");
+  const open = data.incidents.filter(i => i.feature_id === f.id && i.status === "open");
+  const problem = open[0];
   const base = "/apps/" + encodeURIComponent(id);
   const destination = problem ? base + "/issues/" + problem.id : base + "#features";
   const action = problem ? "문제 보기" : "기능 목록 보기";
@@ -408,7 +409,7 @@ function FeaturePage({
         <p>최근 {periodName(days)} 사용 {summary.total}건 중 {summary.failures}건 실패 · 보통 시간 {approximateDuration(summary.median)}</p>
         {f.baselines?.p50_ms != null && <p>{usualDuration(f.baselines.p50_ms, f.baselines.p95_ms)}</p>}
         {problem ? <div className="incident-actions">
-          <Copy key={problem.id} compact text={() => loadPrompt(problem.id)} title="AI 조사 요청문 복사" />
+          {open.map(issue => <Copy key={issue.id} compact text={() => loadPrompt(issue.id)} title={kindName[issue.kind] + " AI 조사 요청문 복사"} />)}
           <Link className="dashboard-primary" to={destination}>{action}</Link>
         </div> : <Link className="button dashboard-primary" to={destination}>{action}</Link>}
       </section>
@@ -634,7 +635,7 @@ function Issue({
   }
   return (
     <>
-      <h1 tabIndex={-1}>{displayText(f.name)} · {{ failure: "실패", slow: "느림", unconfirmed: "결과 미확인" }[i.kind]} 문제 상세</h1>
+      <h1 tabIndex={-1}>{displayText(f.name)} · {kindName[i.kind]} 문제 상세</h1>
       <section aria-label="문제 상태" className="panel issue-overview">
       <Hero showSheep={false} badge={<StatusBadge state={i.status} />}
         mood={i.status === "open" ? "worried" : "relieved"} arrived={i.status === "resolved"}
@@ -675,8 +676,7 @@ function Issue({
             </p>
             {prompt.invalid && (
               <p role="status">
-                앱이 보낸 버전 값이 형식에 맞지 않아요. 버전 줄은 데이터 표시 안에
-                넣어 보내요.
+                앱이 보낸 버전 값이 형식에 맞지 않아 가렸어요.
               </p>
             )}
             {prompt.strongCount > 0 ? (

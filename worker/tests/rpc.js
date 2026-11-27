@@ -51,7 +51,7 @@ export default {
         && (round===3 ? !payload.text.includes("쉽앤핑에서 보기") : [1,2].every(n=>payload.text.includes("https://web.test/apps/"+id(4)+"/issues/"+id(n))));
       if(url.hostname==="hooks.slack.com"){ report.slack++; return new Response("action_prohibited",{status:403}); }
       report.safe &&= payload.to[0]==="member@example.invalid" && payload.subject==="[쉽앤핑] 모아 둔 알림 14건이에요"
-        && [payload.html, payload.text].every(body=>body.includes("11/27 13:21 배포 · 1d79c156") && !body.includes("9cc6-08b34e145f4e"))
+        && [payload.html, payload.text].every(body=>body.includes("11/27 13:21 · 1d79c156") && body.includes("버전 형식 확인 필요") && !body.includes("9cc6-08b34e145f4e"))
         && payload.text.includes("12건 더") && payload.text.includes("트루바")
         && payload.html.includes("트루바") && payload.html.includes('href="https://web.test/apps"')
         && ![sensitive,"private-body","private-route",hook].some(value=>payload.html.includes(value));

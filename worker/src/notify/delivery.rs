@@ -7,7 +7,7 @@ use worker::*;
 #[wasm_bindgen::prelude::wasm_bindgen(module = "/src/version.js")]
 extern "C" {
     #[wasm_bindgen::prelude::wasm_bindgen(js_name = versionLabel)]
-    fn version_label(raw: &str) -> Option<String>;
+    fn version_label(raw: &str) -> String;
 }
 
 #[derive(serde::Deserialize)]
@@ -165,10 +165,7 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
     for claimed in rows {
         let mut row = claimed.notice;
         if row.channel == "email" {
-            row.version_label = claimed
-                .app_version
-                .as_deref()
-                .map(|raw| version_label(raw).unwrap_or_else(|| "[가림] (형식 확인 필요)".into()));
+            row.version_label = claimed.app_version.as_deref().map(version_label);
         }
         let target = if row.channel == "slack" {
             row.hook

@@ -63,13 +63,30 @@ it.each(["/apps/a", "/apps/a/features/f"])("%s에서 문제 상세와 같은 안
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", {configurable:true, value:{writeText}});
   const {key} = setup(path);
-  fireEvent.click(await screen.findByRole("button", {name:"AI 조사 요청문 복사"}));
+  fireEvent.click(await screen.findByRole("button", {name:"실패 AI 조사 요청문 복사"}));
   await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
   const copied = writeText.mock.calls[0][0];
   expect(copied).not.toContain(key);
   fireEvent.click(screen.getAllByRole("link", {name:"문제 보기"})[0]);
   const preview = await screen.findByText("보낼 내용 미리 보기");
   expect(copied).toBe(preview.parentElement?.querySelector("pre")?.textContent);
+});
+it.each(["/apps/a", "/apps/a/features/f"])("%s에서 같은 기능의 실패와 느림 요청문을 각각 복사한다", async path => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  setup(path, [], rows => {
+    const [failure] = rows.incidents as object[];
+    rows.incidents = [failure, { ...failure, id: "slow", kind: "slow", metric_at_open: { p50: 6000 } },
+      { ...failure, id: "closed", kind: "unconfirmed", status: "resolved" }];
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "실패 AI 조사 요청문 복사" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("button", { name: "느림 AI 조사 요청문 복사" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+  expect(writeText.mock.calls[0][0]).toContain("실패 2건");
+  expect(writeText.mock.calls[1][0]).toContain("보통 약 6초");
+  expect(writeText.mock.calls[1][0]).not.toContain("실패 2건");
+  expect(screen.queryByRole("button", { name: /결과 미확인.*복사/ })).toBeNull();
 });
 it("빈 시간은 0건으로 표시하고 사용과 걸린 시간에 각각 눈금을 붙인다", async () => {
   setup("/apps/a/features/f");
@@ -207,11 +224,11 @@ it("오류 코드가 비면 클래스 이름으로 종류를 집계한다", asyn
   const query = requests.find(url => url.pathname.endsWith("/error_samples") && url.searchParams.has("at"));
   expect(query?.searchParams.get("select")?.split(",")).toContain("message");
 });
-it.each(vectors.version)("해결 버전을 화면에 그대로 표시한다 · $input", async ({ input, expected }) => {
+it.each(vectors.version)("저장된 해결 버전에도 표시 허용 목록을 적용한다 · $input", async ({ input }) => {
   setup("/apps/a/issues/i", [], rows => {
     Object.assign((rows.incidents as object[])[0], { status: "resolved", resolved_version: input });
   });
-  expect(await screen.findByText("해결 버전 · " + expected)).toBeTruthy();
+  expect(await screen.findByText("해결 버전 · " + (input === "2025550100" ? input : "버전 형식 확인 필요"))).toBeTruthy();
 });
 it("첫 기록 대기 화면은 안내와 배지를 하나씩 표시한다", async () => {
   const { container } = setup("/apps/a", [], rows => {
@@ -319,7 +336,7 @@ function setup(
     requests.push(url);
     const table = url.pathname.split("/").pop()!;
     if (table === "incident_verification")
-      expect(JSON.parse(String(init?.body))).toEqual({ incident_id: "i" });
+      expect((rows.incidents as { id: string }[]).map(i => i.id)).toContain(JSON.parse(String(init?.body)).incident_id);
     if (table === "dismiss_incident") {
       expect(JSON.parse(String(init?.body))).toEqual({
         incident_id: "i",
@@ -376,7 +393,7 @@ it("앱 홈에서 기능 상세까지 가린 JSX를 쓰고 기간과 느림 기�
   fireEvent.click(screen.getByRole("button", { name: "기능별 속도 접기", expanded: true }));
   expect(screen.getByRole("link", { name: counts })).toBe(link);
   expect(link.textContent).toContain("<b>&lt;b&gt; [가림]");
-  expect(container.textContent).toContain("(형식 확인 필요)");
+  expect(container.textContent).toContain("버전 형식 확인 필요");
   fireEvent.click(link);
   fireEvent.click(await screen.findByRole("button", { name: "7일" }));
   expect(
@@ -514,24 +531,24 @@ it("되돌린 버전으로 홈 띠와 문제 흐름, 확인 결과, 요청문을
     const now = Date.now();
     const date = (minutes: number) => new Date(now - minutes * 60000).toISOString();
     rows.app_versions = [
-      { version: "v3", first_seen_at: date(30), last_seen_at: date(1) },
-      { version: "v0", first_seen_at: date(240), last_seen_at: date(10) },
+      { version: "v3.0.0", first_seen_at: date(30), last_seen_at: date(1) },
+      { version: "v0.0.1", first_seen_at: date(240), last_seen_at: date(10) },
     ];
-    rows.incident_verification = { version: "v0", latest_success: true, consecutive_successes: 4 };
+    rows.incident_verification = { version: "v0.0.1", latest_success: true, consecutive_successes: 4 };
   });
   const link = await screen.findByRole("link", { name: "업데이트 후 확인" });
-  expect(link.parentElement?.textContent).toContain("새 버전 v0 감지");
+  expect(link.parentElement?.textContent).toContain("새 버전 v0.0.1 감지");
   fireEvent.click(link);
   await screen.findByText("업데이트 후 4건 성공, 1건 더 확인할게요");
   expect(container.querySelector(".timeline li:last-child time")?.getAttribute("datetime")).toBeTruthy();
-  expect(container.querySelector(".timeline li:last-child")?.textContent).toContain("새 버전 감지 · v0");
-  expect(container.querySelector("pre")?.textContent).toContain("v0");
-  expect(container.querySelector("pre")?.textContent).not.toContain("v3");
+  expect(container.querySelector(".timeline li:last-child")?.textContent).toContain("새 버전 감지 · v0.0.1");
+  expect(container.querySelector("pre")?.textContent).toContain("v0.0.1");
+  expect(container.querySelector("pre")?.textContent).not.toContain("v3.0.0");
 });
 it("버전 목록에서 빠져도 서버에 기록된 해결 버전을 보여 준다", async () => {
   const { container } = setup("/apps/a/issues/i", [], (rows) => {
-    Object.assign((rows.incidents as object[])[0], { status: "resolved", resolved_version: "v0" });
+    Object.assign((rows.incidents as object[])[0], { status: "resolved", resolved_version: "v0.0.1" });
   });
-  await screen.findByText("해결 버전 · v0");
-  expect(container.querySelector("pre")?.textContent).toContain("v0");
+  await screen.findByText("해결 버전 · v0.0.1");
+  expect(container.querySelector("pre")?.textContent).toContain("v0.0.1");
 });

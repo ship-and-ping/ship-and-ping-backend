@@ -36,7 +36,7 @@ try {
     for (const [name, path] of [["home", ""], ["issue", "/issues/example"]]) {
       await page.goto(origin + "/apps/demo" + path);
       const panel = page.getByRole("region", { name: name === "home" ? "앱 상태 요약" : "문제 상태" });
-      const copy = panel.getByRole("button", { name: "AI 조사 요청문 복사" });
+      const copy = panel.getByRole("button", { name: name === "home" ? "실패 AI 조사 요청문 복사" : "AI 조사 요청문 복사", exact: true });
       await copy.waitFor();
       await page.evaluate(() => document.fonts.ready);
       if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw Error("수평 넘침");
@@ -46,7 +46,7 @@ try {
       await copy.click();
       await panel.getByRole("button", { name: "복사했어요" }).waitFor();
       const copied = await page.evaluate(() => navigator.clipboard.readText());
-      if (!copied.includes("11/27 13:21 배포 · 1d79c156")) throw Error("복사한 버전 확인 실패");
+      if (!copied.includes("11/27 13:21 · 1d79c156")) throw Error("복사한 버전 확인 실패");
     }
     await context.close();
   }
