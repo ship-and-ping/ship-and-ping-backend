@@ -5,7 +5,7 @@ mod endpoint;
 pub mod ingest;
 #[cfg(any(target_arch = "wasm32", test))]
 mod login;
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 mod notify;
 #[cfg(target_arch = "wasm32")]
 mod slack;

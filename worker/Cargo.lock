@@ -564,6 +564,7 @@ dependencies = [
  "sha2",
  "toml",
  "unicode-normalization",
+ "url",
  "uuid",
  "worker",
 ]
