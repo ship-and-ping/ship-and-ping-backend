@@ -62,9 +62,15 @@ create function public.ingest_batch(app_key_hash text,payload jsonb) returns jso
 language plpgsql security definer set search_path='' as $$
 begin
  -- The two trailing counters are produced only by database rollups.
- if payload @? '$.stats[*].hist ? (@.size() == 32)'
-    or payload @? '$.stats[*].hist_30 ? (@.type() != "array" || @.size() != 30)' then
-  raise exception 'invalid histogram layout' using errcode='22023';
+ if jsonb_typeof(payload->'stats')='array' then
+  if exists (
+   select from jsonb_array_elements(payload->'stats') item
+   where case when jsonb_typeof(item->'hist')='array' then jsonb_array_length(item->'hist')=32 else false end
+    or (item ? 'hist_30' and case when jsonb_typeof(item->'hist_30')='array'
+        then jsonb_array_length(item->'hist_30')<>30 else true end)
+  ) then
+   raise exception 'invalid histogram layout' using errcode='22023';
+  end if;
  end if;
  if payload @? '$.stats[*].hist_30' then
   payload := jsonb_set(payload,'{stats}',(

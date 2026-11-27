@@ -87,6 +87,12 @@ select is((select (metric->>'slow')::int from speeds where route='/upper-mixed')
 update features set slow_threshold_ms=6300 where route='/upper-mixed';
 select is((select (metric->>'slow')::int from speeds where route='/upper-mixed'),2,
  'changing to 6.3s counts only the two refined observations known to exceed it');
+select throws_ok(format('select ingest_batch(%L,%L::jsonb)',repeat('0',64),
+ jsonb_build_object('stats',jsonb_build_array(jsonb_build_object('hist',array_fill(0,array[32]))))),
+ '22023','invalid histogram layout','32-counter mixed layout is reserved for stored aggregates');
+select throws_ok(format('select ingest_batch(%L,%L::jsonb)',repeat('0',64),
+ jsonb_build_object('stats',jsonb_build_array(jsonb_build_object('hist_30',array_fill(0,array[16]))))),
+ '22023','invalid histogram layout','optional refined array requires exactly 30 counters');
 
 -- Exercise the ingest path used before the optional field was recognized,
 -- with the pre-T45 array constraint enforced on the newly inserted row.
