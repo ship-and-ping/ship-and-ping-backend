@@ -48,15 +48,10 @@ fn sentence(n: &Notice) -> String {
             count("total"),
             count("failures")
         ),
+        (_, Some("slow")) if n.metric["window"].is_number() => {
+            format!("{name} 기능이 느려졌어요. {}", metric_summary(n))
+        }
         (_, Some("slow")) => {
-            if n.metric["window"].is_number() {
-                let prefix = if n.event == "worse" {
-                    "문제가 더 나빠졌어요. "
-                } else {
-                    ""
-                };
-                return format!("{prefix}{name} 기능이 느려졌어요. {}", metric_summary(n));
-            }
             let mut text = format!("{name} 기능이 느려졌어요.");
             if let Some(ms) = n.metric["baseline"].as_f64() {
                 text.push_str(&format!(" 평소 약 {:.1}초.", ms / 1000.0));

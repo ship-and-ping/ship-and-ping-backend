@@ -80,6 +80,14 @@ select is((select (metric->>'slow')::int from speeds where route='/mixed'),2,
 update features set slow_threshold_ms=3000 where route='/mixed';
 select is((select (metric->>'slow')::int from speeds where route='/mixed'),8,
  'legacy observations count when their entire interval exceeds the new threshold');
+-- Old clients can contribute a histogram without exact timings to the same bucket.
+select pg_temp.record('/partial',array[4900]);
+update stats_5m set total=6,duration_sum_ms=20900,
+ hist=private.add_hist(hist,array_fill(0,array[10])||array[5,0,0,0,0,0])
+ where feature_id=(select id from features where route='/partial');
+update features set slow_threshold_ms=3300 where route='/partial';
+select is((select breached from speeds where route='/partial'),false,
+ 'one exact timing cannot certify that the other five legacy requests exceeded a custom cap');
 select pg_temp.record('/upper-mixed',array[6400,7300]);
 select pg_temp.record('/upper-mixed',array_fill(6100,array[5]),legacy=>true);
 select is((select (metric->>'slow')::int from speeds where route='/upper-mixed'),7,

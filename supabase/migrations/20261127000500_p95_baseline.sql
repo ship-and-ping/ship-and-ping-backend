@@ -47,18 +47,19 @@ create or replace view private.evaluation_signals as
   where closed_at>=now()-interval '1 hour' and status in ('resolved','quiet') group by 1,2
  ), windows(kind,minutes) as (values ('failure',30),('slow',30),('slow',10)), auto as (
   select s.feature_id,k.kind,k.minutes,sum(s.total-s.client_errors) results,sum(s.failures) failures,
-   sum(s.total-s.client_errors) timed,sum(s.total-s.client_errors-s.failures) filter(where s.success_hist is not null) successes,
+   sum(s.total-s.client_errors) timed,sum(measured.n) successes,
    private.hist_percentile(private.sum_hist(s.success_hist),0.5) p50,
    sum(case when s.threshold_ms=f.slow_threshold_ms and s.result_count=s.total-s.client_errors then s.slow_count
     else coalesce(private.hist_above(case when s.client_errors=0 then s.hist else s.success_hist end,f.slow_threshold_ms),0) end) slow,
    -- A bin straddling a custom limit cannot prove a breach. Prefer exact counts when available.
-   sum(case when s.min_ms>f.slow_threshold_ms then s.total-s.client_errors-s.failures
-    when s.max_ms<=f.slow_threshold_ms then 0
-    when s.failures=0 and s.threshold_ms=f.slow_threshold_ms and s.result_count=s.total-s.client_errors then s.slow_count
-    else coalesce(private.hist_above(s.success_hist,f.slow_threshold_ms),0) end)*2 >
-    sum(s.total-s.client_errors-s.failures) filter(where s.success_hist is not null) over_cap,
+   sum(case when s.result_count=s.total-s.client_errors and s.min_ms>f.slow_threshold_ms then measured.n
+    when s.result_count=s.total-s.client_errors and s.max_ms<=f.slow_threshold_ms then 0
+    else greatest(private.hist_above(s.success_hist,f.slow_threshold_ms),
+     case when s.threshold_ms=f.slow_threshold_ms and s.result_count=s.total-s.client_errors
+      then greatest(0,s.slow_count-s.failures) end) end)*2 > sum(measured.n) over_cap,
    max(s.bucket) latest,(array_agg(s.version order by s.bucket desc,s.version))[1] version,false as consecutive
   from private.speed_buckets s join public.features f on f.id=s.feature_id and f.kind='auto' cross join windows k
+  cross join lateral (select coalesce(sum(n),0) n from unnest(s.success_hist) n) measured
   left join cutoffs c on c.feature_id=s.feature_id and c.kind=k.kind
   where s.bucket between now()-interval '30 minutes' and now() and s.bucket>=now()-k.minutes*interval '1 minute'
    and (c.closed_at is null or s.bucket>c.closed_at) group by s.feature_id,k.kind,k.minutes
