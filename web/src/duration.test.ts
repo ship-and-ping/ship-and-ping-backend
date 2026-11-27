@@ -29,6 +29,14 @@ it("copies the incident snapshot and baseline into the problem report", () => {
   expect(prompt.text).toContain("보통 약 6.3초, 평소 약 3.3초");
 });
 
+it("displays the same successful durations as the incident, excluding fast failures", () => {
+  const bucket = row(16, [[0, 2], [7, 10]]);
+  expect(summarize([{ ...bucket, failures: 2, success_durations: {1050: 4, 1200: 6} }]).median).toBe(1200);
+  for (const ms of [600, 1400]) {
+    expect(summarize([{ ...bucket, success_durations: {[ms]: 10} }]).median).toBe(ms);
+  }
+});
+
 it("copies the measured window and usual range for a new slow incident", () => {
   const prompt = buildIssuePrompt({
     feature: "검색", route: "/search", versions: ["v1"], errors: [], kind: "slow",

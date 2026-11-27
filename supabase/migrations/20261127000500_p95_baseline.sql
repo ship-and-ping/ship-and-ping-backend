@@ -112,7 +112,24 @@ create or replace view private.speed_buckets as
   case when s.failures+s.client_errors=0 then s.duration_sum_ms::numeric/nullif(s.total,0) end mean_ms
  from public.stats_5m s left join private.evaluation_buckets b using(app_id,feature_id,version,bucket);
 
+-- Computed field for the member dashboard. Read the stored row and authenticate
+-- its owner even when the function is called directly with a composite argument.
+create function public.success_durations(public.stats_5m) returns jsonb
+language sql stable security definer set search_path='' as $$
+ select coalesce(jsonb_object_agg(ms,n),'{}'::jsonb) from (
+  select p.ms,sum(p.n) n from private.speed_buckets s
+  join public.apps a on a.id=s.app_id and a.owner_id=(select auth.uid())
+  cross join lateral private.duration_points(s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms) p
+  where (s.app_id,s.feature_id,s.version,s.bucket)=(($1).app_id,($1).feature_id,($1).version,($1).bucket)
+  group by p.ms
+ ) points
+$$;
+revoke all on function public.success_durations(public.stats_5m) from public,anon,authenticated,service_role;
+grant execute on function public.success_durations(public.stats_5m) to authenticated;
+
 alter table public.baselines add column p95_ms integer;
+update public.baselines b set p50_ms=null,p90_ms=null from public.features f
+ where f.id=b.feature_id and f.method='*';
 
 create or replace function private.refresh_baselines() returns void
 language sql set search_path='' as $$
@@ -211,7 +228,8 @@ create or replace view private.evaluation_signals as
    and (c.closed_at is null or started_at>c.closed_at) group by a.feature_id
  ), recent as (
   select distinct on (r.feature_id,r.kind) r.* from (select * from auto union all select * from deep) r
-  where r.minutes=30 or r.successes>=10
+  join public.features f on f.id=r.feature_id left join public.baselines b on b.feature_id=r.feature_id
+  where r.minutes=30 or (r.successes>=10 and (b.p95_ms is not null or f.method='*'))
   order by r.feature_id,r.kind,r.minutes
  )
  select f.app_id,f.id feature_id,k.kind,
