@@ -232,3 +232,40 @@ it("화면 구독 전 도착한 복구 이벤트를 한 번만 다시 전달한�
     history.replaceState(null, "", original);
   }
 });
+
+it("logs out only after revoking this endpoint under the current session and unsubscribing locally", async () => {
+  const endpoint = "https://web.push.apple.com/shared";
+  const operations: string[] = [];
+  const sub = {endpoint,unsubscribe:async () => { operations.push("unsubscribe"); return true; }};
+  vi.stubGlobal("navigator",{serviceWorker:{getRegistration:async () => ({pushManager:{getSubscription:async () => sub}})}});
+  vi.stubGlobal("caches",{open:async () => ({delete:async () => operations.push("unbind")})});
+  const eq = vi.fn(async () => { operations.push("delete"); return {error:null}; });
+  const client = {from:vi.fn(() => ({delete:() => ({eq})})),
+    auth:{signOut:async () => { operations.push("logout"); return {error:null}; }}};
+  try {
+    await gateway(client as unknown as SupabaseClient).logout();
+    expect(client.from).toHaveBeenCalledWith("push_subscriptions");
+    expect(eq).toHaveBeenCalledWith("endpoint",endpoint);
+    expect(operations).toEqual(["unbind","delete","unsubscribe","logout"]);
+  } finally { vi.unstubAllGlobals(); }
+});
+it("reclaims an existing browser subscription after sign-in without prompting or enabling an app", async () => {
+  const sub = {endpoint:"https://web.push.apple.com/shared",keys:{p256dh:"device-key",auth:"device-auth"}};
+  const put = vi.fn();
+  vi.stubGlobal("navigator",{userAgent:"PC",serviceWorker:{getRegistration:async () => ({pushManager:{
+    getSubscription:async () => ({toJSON:() => sub,options:{applicationServerKey:null}})}})}});
+  vi.stubGlobal("caches",{open:async () => ({delete:vi.fn(),put})});
+  const rpc = vi.fn(async () => ({data:"new-binding",error:null}));
+  const session = {user:{id:"next-member"}};
+  const client = {rpc,auth:{getSession:async () => ({data:{session}}),
+    onAuthStateChange:(fn: (event: string,s: typeof session) => void) => {
+      fn("SIGNED_IN",session); return {data:{subscription:{unsubscribe:vi.fn()}}};
+    }}};
+  try {
+    gateway(client as unknown as SupabaseClient).listen(vi.fn());
+    await vi.waitFor(() => expect(put).toHaveBeenCalledOnce());
+    expect(rpc).toHaveBeenCalledWith("register_push",{app:null,p_endpoint:sub.endpoint,p_key:sub.keys.p256dh,
+      p_auth:sub.keys.auth,p_agent:"PC",p_fingerprint:null});
+    expect(await (put.mock.calls[0][1] as Response).text()).toBe("new-binding");
+  } finally { vi.unstubAllGlobals(); }
+});

@@ -330,7 +330,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
       login_required: "다시 로그인해 주세요.",
     }[result]);
     setUser(null);
-    void api.logout().catch(()=>{});
+    void api.logout(result === "done").catch(()=>{});
     navigate("/login",{replace:true});
   },[api,navigate]);
   useEffect(() => {

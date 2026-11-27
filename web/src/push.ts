@@ -29,19 +29,42 @@ export function standalone() {
   return (navigator as Navigator & {standalone?: boolean}).standalone === true ||
     Boolean(window.matchMedia?.("(display-mode: standalone)").matches);
 }
-export async function subscribe() {
+const bindingCache = "ship-ping-push-device";
+const bindingPath = "/.push-device";
+
+export async function setPushBinding(device: string | null) {
+  const cache = await caches.open(bindingCache);
+  if (device) await cache.put(bindingPath, new Response(device));
+  else await cache.delete(bindingPath);
+}
+export async function currentSubscription() {
+  const registration = await navigator.serviceWorker?.getRegistration("/");
+  return await registration?.pushManager?.getSubscription() ?? null;
+}
+export function configuredKey() {
   const key = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-  if (!key) throw Error("푸시 발송 설정을 준비 중이에요.");
+  return key ? Uint8Array.from(atob(key.replace(/-/g,"+").replace(/_/g,"/")), c => c.charCodeAt(0)) : null;
+}
+export async function fingerprint(bytes: ArrayBuffer | null | undefined) {
+  if (!bytes) return null;
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2,"0")).join("");
+}
+export async function subscribe(remove: (endpoint: string) => Promise<void>) {
+  const bytes = configuredKey();
+  if (!bytes) throw Error("푸시 발송 설정을 준비 중이에요.");
   // iOS requires permission to be requested directly from a user gesture.
   const permission = await Notification.requestPermission();
   if (permission !== "granted") throw Error(permission === "denied" ? deniedHelp() : "알림을 받으려면 허용을 눌러 주세요.");
   await navigator.serviceWorker.register("/sw.js");
   const registration = await navigator.serviceWorker.ready;
   const current = await registration.pushManager.getSubscription();
-  const bytes = Uint8Array.from(atob(key.replace(/-/g,"+").replace(/_/g,"/")), c => c.charCodeAt(0));
   const oldKey = current?.options.applicationServerKey;
   if (current && oldKey && bytes.toString() === new Uint8Array(oldKey).toString()) return current;
-  if (current) await current.unsubscribe();
+  if (current) {
+    await remove(current.endpoint);
+    if (!await current.unsubscribe()) throw Error("푸시 구독을 갱신하지 못했어요.");
+  }
   return registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});
 }
 export function deniedHelp() {

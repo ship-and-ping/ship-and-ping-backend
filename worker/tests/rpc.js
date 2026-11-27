@@ -29,7 +29,7 @@ async function rows() {
   const receiver = await crypto.subtle.generateKey({name:"ECDH",namedCurve:"P-256"},true,["deriveBits"]);
   const encode = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replaceAll("+","-").replaceAll("/","_").replace(/=+$/,"");
   result.push({...result[0],id:id(11),channel:"push",digest:false,push_target:{
-    endpoint:"https://web.push.apple.com/fixture",
+    device:id(11),endpoint:"https://web.push.apple.com/fixture",
     p256dh:encode(await crypto.subtle.exportKey("raw",receiver.publicKey)),
     auth:encode(crypto.getRandomValues(new Uint8Array(16))),
   }});
@@ -50,6 +50,10 @@ export default {
         && request.headers.get("Urgency")==="high" && Number(request.headers.get("TTL"))>0
         && request.headers.get("Authorization")?.startsWith("vapid t=")
         && bytes.length>103 && bytes[20]===65 && bytes[21]===4;
+      if (round === 2) {
+        report.safe &&= report.mail === 1;
+        await new Promise(resolve => setTimeout(resolve, 6500));
+      }
       return new Response(null,{status:410});
     }
     if(url.hostname==="hooks.slack.com" || url.hostname==="api.resend.com") {

@@ -13,6 +13,7 @@ use sha2::Sha256;
 
 #[derive(Deserialize)]
 pub(super) struct Target {
+    device: uuid::Uuid,
     endpoint: String,
     p256dh: String,
     auth: String,
@@ -102,7 +103,7 @@ fn encrypt(
     )
 }
 
-pub(super) fn payload(n: &Notice) -> String {
+pub(super) fn payload(n: &Notice, device: uuid::Uuid) -> String {
     let app = app_name(n).unwrap_or_else(|| "내 앱".into());
     let title = if n.event == "test" {
         format!("[쉽앤핑] {app} · 시험 알림이에요")
@@ -144,7 +145,7 @@ pub(super) fn payload(n: &Notice) -> String {
         ),
         _ => metric_summary(n),
     };
-    json!({"title":title,"body":body,"url":notice_link(n,"")}).to_string()
+    json!({"title":title,"body":body,"url":notice_link(n,""),"device":device}).to_string()
 }
 
 fn result(status: u16) -> &'static str {
@@ -186,7 +187,7 @@ pub(super) async fn send(n: &Notice, env: &worker::Env) -> &'static str {
     }
     let Some(body) = encrypt(
         target,
-        payload(n).as_bytes(),
+        payload(n, target.device).as_bytes(),
         &SecretKey::random(&mut OsRng),
         &salt,
     ) else {
@@ -214,8 +215,9 @@ pub(super) async fn send(n: &Notice, env: &worker::Env) -> &'static str {
     let Ok(req) = Request::new_with_init(&target.endpoint, &init) else {
         return "retry";
     };
+    let deadline = web_sys::AbortSignal::timeout_with_u32(3_000).into();
     Fetch::Request(req)
-        .send()
+        .send_with_signal(&deadline)
         .await
         .map_or("retry", |r| result(r.status_code()))
 }
@@ -227,6 +229,7 @@ mod tests {
     #[test]
     fn rfc8291_section_five() {
         let target = Target {
+            device: uuid::Uuid::nil(),
             endpoint: String::new(),
             p256dh: concat!(
                 "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcx",

@@ -11,14 +11,22 @@ function destination(value) {
   return self.location.origin + "/apps";
 }
 
+self.addEventListener("install", event => event.waitUntil(self.skipWaiting()));
+self.addEventListener("activate", event => event.waitUntil(self.clients.claim()));
+
 self.addEventListener("push", event => {
   let notice = {};
   try { notice = event.data?.json() ?? {}; } catch { /* Use the generic notification. */ }
-  event.waitUntil(self.registration.showNotification(notice.title || "쉽앤핑", {
-    body: notice.body || "앱에서 알림을 확인해 주세요.",
-    icon: "/sheep-192.png",
-    data: { url: destination(notice.url) },
-  }));
+  event.waitUntil((async () => {
+    const cache = await caches.open("ship-ping-push-device");
+    const binding = await cache.match("/.push-device");
+    if (!binding || await binding.text() !== notice.device) return;
+    await self.registration.showNotification(notice.title || "쉽앤핑", {
+      body: notice.body || "앱에서 알림을 확인해 주세요.",
+      icon: "/sheep-192.png",
+      data: { url: destination(notice.url) },
+    });
+  })());
 });
 
 self.addEventListener("notificationclick", event => {

@@ -148,7 +148,7 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
         .await?
         .json()
         .await?;
-    let mut groups = BTreeMap::<(String, String), Vec<Notice>>::new();
+    let mut groups = BTreeMap::<(bool, String, String), Vec<Notice>>::new();
     for row in rows {
         let target = if row.channel == "slack" {
             row.hook
@@ -161,6 +161,7 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
         };
         groups
             .entry((
+                row.channel == "push", // Finish email and Slack before contacting push providers.
                 row.channel.clone(),
                 target.unwrap_or_else(|| row.id.to_string()),
             ))

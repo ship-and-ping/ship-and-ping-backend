@@ -361,10 +361,10 @@ mod tests {
         let mut n = notice("open", "slow");
         n.feature = Some("장소 목록 보기".into());
         n.metric = json!({"baseline_p50":200,"p50":1400,"error":"private diagnostic"});
-        let body: Value = serde_json::from_str(&push::payload(&n)).unwrap();
+        let body: Value = serde_json::from_str(&push::payload(&n, uuid::Uuid::nil())).unwrap();
         assert_eq!(
             body,
-            json!({"title":"[쉽앤핑] 트루바 · 장소 목록 보기가 느려졌어요","body":"평소 약 0.2초 → 지금 약 1.4초","url":format!("/apps/{APP}/issues/{ISSUE}")})
+            json!({"device":uuid::Uuid::nil(),"title":"[쉽앤핑] 트루바 · 장소 목록 보기가 느려졌어요","body":"평소 약 0.2초 → 지금 약 1.4초","url":format!("/apps/{APP}/issues/{ISSUE}")})
         );
     }
 

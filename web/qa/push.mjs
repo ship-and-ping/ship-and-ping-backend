@@ -1,6 +1,7 @@
 import { mkdir,readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
+import { createHash } from "node:crypto";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 import { mockPage } from "./fixtures.mjs";
@@ -9,6 +10,7 @@ const origin = "http://127.0.0.1:4193";
 const output = new URL("../../docs/design/qa/T49/",import.meta.url);
 const endpoint = "https://web.push.apple.com/fixture";
 const server = await createServer({ server:{host:"127.0.0.1",port:4193,strictPort:true},define:{
+  "import.meta.env.VITE_VAPID_PUBLIC_KEY":JSON.stringify("BA"),
   "import.meta.env.VITE_SUPABASE_URL":JSON.stringify("https://example.supabase.co"),
   "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY":JSON.stringify("sb_publishable_qa_local_only"),
   "import.meta.env.VITE_INGEST_URL":JSON.stringify("https://ingest.ship-and-ping.invalid"),
@@ -24,11 +26,12 @@ try {
     await mockPage(page,"normal",true,origin);
     await page.addInitScript(({home,endpoint}) => {
       Object.defineProperty(navigator,"standalone",{value:home});
-      const reg = {pushManager:{getSubscription:async () => home ? {endpoint} : null}};
+      const reg = {pushManager:{getSubscription:async () => home ? {endpoint, options:{applicationServerKey:Uint8Array.of(4).buffer},toJSON:()=>({endpoint})} : null}};
       Object.defineProperty(navigator,"serviceWorker",{value:{register:async () => reg,getRegistration:async () => reg}});
       Object.defineProperty(window,"Notification",{value:{permission:home?"granted":"default"}});
     },{home,endpoint});
-    await page.route("**/rest/v1/push_subscriptions?**",r => r.fulfill({json:home?[{id:"one",user_agent:"iPhone",created_at:"2026-11-27",endpoint}]:[]}));
+    await page.route("**/rest/v1/push_subscriptions?**",r => r.fulfill({json:home?[{id:"one",vapid_fingerprint:createHash("sha256").update(Buffer.from([4])).digest("hex"),user_agent:"iPhone",created_at:"2026-11-27",endpoint}]:[]}));
+    await page.route("**/rpc/register_push",r => r.fulfill({json:"one"}));
     await page.route("**/rpc/notification_settings",r => r.fulfill({json:{push:true,subscribed:home,email:true,connected:false,broken:false,channel:null}}));
     await page.goto(origin+"/apps/demo/notifications");
     await (home ? page.getByRole("button",{name:"시험 푸시 보내기"}) : page.getByText(/iOS·iPadOS 16.4/)).waitFor();
@@ -38,9 +41,11 @@ try {
       let notice;
       const source = await readFile(new URL("../public/sw.js",import.meta.url),"utf8");
       const events = {};
-      runInNewContext(source,{URL,self:{location:{origin},addEventListener:(name,fn)=>{events[name]=fn;},
+      runInNewContext(source,{URL,caches:{open:async()=>({match:async()=>({text:async()=>"one"})})},self:{location:{origin},addEventListener:(name,fn)=>{events[name]=fn;},
         registration:{showNotification:(title,options)=>{notice={title,...options};}}}});
-      events.push({data:{json:()=>({title:"[쉽앤핑] 트루바 · 장소 목록 보기가 느려졌어요",body:"평소 약 0.2초 → 지금 약 1.4초"})},waitUntil(){}});
+      let displayed;
+      events.push({data:{json:()=>({device:"one",title:"[쉽앤핑] 트루바 · 장소 목록 보기가 느려졌어요",body:"평소 약 0.2초 → 지금 약 1.4초"})},waitUntil(promise){displayed=promise;}});
+      await displayed;
       await page.evaluate(notice => {
         const preview = document.createElement("section");
         preview.className = "panel";

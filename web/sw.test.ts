@@ -9,7 +9,8 @@ function worker(script = source) {
   const events = new Map<string,(event:unknown) => void>();
   const clients = {matchAll:vi.fn(),openWindow:vi.fn()};
   const showNotification = vi.fn();
-  runInNewContext(script,{URL,self:{location:{origin},clients,registration:{showNotification},
+  const caches = {open:async () => ({match:async () => ({text:async () => id})})};
+  runInNewContext(script,{URL,caches,self:{location:{origin},clients,registration:{showNotification},
     addEventListener:(name:string,fn:(value:unknown)=>void) => events.set(name,fn)}});
   return {clients,showNotification,async dispatch(name:string,event:object) {
     let done;
@@ -19,7 +20,7 @@ function worker(script = source) {
 }
 it("shows the payload and opens its exact issue on a click",async () => {
   const sw = worker();
-  await sw.dispatch("push",{data:{json:() => ({url:path,title:"문제 알림",body:"속도 변화"})}});
+  await sw.dispatch("push",{data:{json:() => ({device:id,url:path,title:"문제 알림",body:"속도 변화"})}});
   const [title,options] = sw.showNotification.mock.calls[0];
   expect(title).toBe("문제 알림");
   expect(options.body).toBe("속도 변화");
@@ -45,4 +46,16 @@ it("detects a missing origin check in an isolated worker copy", async () => {
   const copy = source.replace("url.origin === self.location.origin &&","true &&");
   expect(copy).not.toBe(source);
   await expect(checkExternalDestination(copy)).rejects.toThrow();
+});
+
+async function checkOldAccount(script: string) {
+  const sw = worker(script);
+  await sw.dispatch("push",{data:{json:() => ({device:"previous",title:"이전 계정",body:"이전 앱의 장애"})}});
+  expect(sw.showNotification).not.toHaveBeenCalled();
+}
+it("drops an in-flight message addressed to the former device and detects a removed binding check", async () => {
+  await checkOldAccount(source);
+  const mutant = source.replace("await binding.text() !== notice.device","false");
+  expect(mutant).not.toBe(source);
+  await expect(checkOldAccount(mutant)).rejects.toThrow();
 });

@@ -50,7 +50,7 @@ function fake(user: string | null = "member"): Gateway {
     deepCounts: vi.fn(),
     firstResult: vi.fn(),
     emailSetting: vi.fn(),
-    devices: vi.fn(async () => []), registerPush: vi.fn(), removeDevice: vi.fn(),
+    devices: vi.fn(async () => []), registerPush: vi.fn(), removeDevice: vi.fn(), removeEndpoint: vi.fn(),
     pushEnabled: vi.fn(), testPush: vi.fn(),
     testSlack: vi.fn(),
     disconnectSlack: vi.fn(),

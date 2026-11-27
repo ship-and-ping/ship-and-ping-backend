@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import type { AlertSettings, Gateway, PushDevice } from "./data";
-import { canInstall, deniedHelp, deviceType, install, standalone, subscribe } from "./push";
+import { canInstall, configuredKey, deniedHelp, deviceType, fingerprint, install, setPushBinding, standalone, subscribe } from "./push";
 
 type Props = { api: Gateway; app: string; settings: AlertSettings; reload(): void };
 export function PushChannel({api, app, settings, reload}: Props) {
   const [devices, setDevices] = useState<PushDevice[]>([]);
   const [endpoint, setEndpoint] = useState("");
+  const [keyHash, setKeyHash] = useState<string | null>(null);
+  const [browserHash, setBrowserHash] = useState<string | null>(null);
   const [installable, setInstallable] = useState(canInstall);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
@@ -15,19 +17,30 @@ export function PushChannel({api, app, settings, reload}: Props) {
   const home = standalone();
   const supported = "Notification" in window && "PushManager" in window && "serviceWorker" in navigator;
   const current = devices.find(d => d.endpoint === endpoint);
+  const stale = Boolean(current && (!keyHash || current.vapid_fingerprint !== keyHash ||
+    (browserHash && browserHash !== keyHash)));
   useEffect(() => {
     const update = () => setInstallable(canInstall());
+    const updateDevices = () => setVersion(v => v + 1);
     window.addEventListener("push-install-change", update);
-    return () => window.removeEventListener("push-install-change", update);
+    window.addEventListener("push-device-change", updateDevices);
+    return () => {
+      window.removeEventListener("push-install-change", update);
+      window.removeEventListener("push-device-change", updateDevices);
+    };
   }, []);
   useEffect(() => {
     let active = true;
+    fingerprint(configuredKey()?.buffer).then(hash => { if (active) setKeyHash(hash); }).catch(() => {});
     api.devices().then(list => { if (active) setDevices(list); }).catch(() => {
       if (active) setMessage("기기 목록을 불러오지 못했어요.");
     });
     if (supported) navigator.serviceWorker.getRegistration("/")
       .then(reg => reg?.pushManager.getSubscription())
-      .then(sub => { if (active) setEndpoint(sub?.endpoint ?? ""); }).catch(() => {});
+      .then(async sub => {
+        const hash = await fingerprint(sub?.options?.applicationServerKey);
+        if (active) { setBrowserHash(hash); setEndpoint(sub?.endpoint ?? ""); }
+      }).catch(() => {});
     return () => { active = false; };
   }, [api, supported, version]);
   async function act(action: () => Promise<void>) {
@@ -44,7 +57,7 @@ export function PushChannel({api, app, settings, reload}: Props) {
     reload();
   }
   async function enable() {
-    const sub = await subscribe();
+    const sub = await subscribe(api.removeEndpoint);
     await api.registerPush(app,sub.toJSON(),type);
     setEndpoint(sub.endpoint);
     setMessage("이 기기에서 푸시를 받을 수 있어요.");
@@ -56,12 +69,15 @@ export function PushChannel({api, app, settings, reload}: Props) {
     if (device.endpoint === endpoint && supported) {
       const reg = await navigator.serviceWorker.getRegistration("/");
       const sub = await reg?.pushManager.getSubscription();
-      if (sub?.endpoint === device.endpoint) await sub.unsubscribe();
+      if (sub?.endpoint === device.endpoint) {
+        await setPushBinding(null);
+        await sub.unsubscribe();
+      }
     }
     setMessage("이 기기를 알림 목록에서 삭제했어요.");
   }
   return <section className="panel push-channel">
-    <header><h2>앱 푸시</h2><small>{settings.push && settings.subscribed ? "켜짐" : "홈 화면 앱"}</small></header>
+    <header><h2>앱 푸시</h2><small>{stale ? "다시 켜기 필요" : settings.push && current ? "켜짐" : "홈 화면 앱"}</small></header>
     {ios && !home ? <>
       <p>iOS·iPadOS 16.4 이상에서 홈 화면에 추가한 쉽앤핑으로만 푸시를 받을 수 있어요.</p>
       <ol><li>Safari 공유 버튼을 누르세요.</li><li>홈 화면에 추가를 선택하세요.</li>
@@ -70,6 +86,8 @@ export function PushChannel({api, app, settings, reload}: Props) {
       {!home && (installable ? <button disabled={pending} onClick={() => act(install)}>쉽앤핑 설치</button>
         : <p>브라우저 메뉴에서 ‘앱 설치’ 또는 ‘홈 화면에 추가’를 선택하세요.</p>)}
       {supported ? Notification.permission === "denied" ? <p>{deniedHelp()}</p>
+        : stale ? <><p>푸시 발송 키가 바뀌었어요. 이 기기의 구독을 갱신해 주세요.</p>
+          <button disabled={pending} onClick={() => act(enable)}>푸시 다시 켜기</button></>
         : current && settings.push ? <>
           <p>이 기기로 {type === "PC" ? "데스크톱" : "홈 화면"} 알림을 받아요.</p>
           <button disabled={pending} onClick={() => act(async () => setMessage(await api.testPush(app,current.id)

@@ -4,6 +4,7 @@ import { loginRequests, type LoginRequest } from "./login-requests";
 import { loadMonitor, type Monitor } from "./monitor-data";
 import type { DeepFeature, Definitions, FirstResult } from "./deep";
 import { resultKinds } from "./deep";
+import { configuredKey, currentSubscription, deviceType, fingerprint, setPushBinding } from "./push";
 
 interface AppRow {
   url?: string | null;
@@ -44,6 +45,7 @@ export interface Gateway {
   devices(): Promise<PushDevice[]>;
   registerPush(app: string, sub: PushSubscriptionJSON, agent: string): Promise<void>;
   removeDevice(id: string): Promise<void>;
+  removeEndpoint(endpoint: string): Promise<void>;
   pushEnabled(app: string, enabled: boolean): Promise<void>;
   testPush(app: string, device: string): Promise<boolean>;
   emailSetting(app: string, enabled: boolean): Promise<void>;
@@ -66,7 +68,7 @@ export interface Gateway {
   requestReset(email: string): Promise<void>;
   reauthenticate(): Promise<void>;
   updatePassword(password: string, nonce?: string): Promise<void>;
-  logout(): Promise<void>;
+  logout(accountDeleted?: boolean): Promise<void>;
   firstVisit(): Promise<boolean>;
   apps(): Promise<AppSummary[]>;
   create(name: string, url: string): Promise<string>;
@@ -92,6 +94,7 @@ export interface AlertSettings {
 export interface PushDevice {
   id: string;
   endpoint: string;
+  vapid_fingerprint: string | null;
   user_agent: string;
   created_at: string;
 }
@@ -112,8 +115,36 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
         if (event === "PASSWORD_RECOVERY") initialRecovery = session?.user.id;
         if (!session) initialRecovery = undefined;
       }).data.subscription : undefined;
+  async function savePush(app: string | null, sub: PushSubscriptionJSON, agent: string, hash: string | null) {
+    const {data, error} = await client.rpc("register_push", {app,p_endpoint:sub.endpoint,
+      p_key:sub.keys?.p256dh,p_auth:sub.keys?.auth,p_agent:agent,p_fingerprint:hash});
+    if (error) throw error;
+    return data as string | null;
+  }
+  async function removeEndpoint(endpoint: string) {
+    const {error} = await client.from("push_subscriptions").delete().eq("endpoint",endpoint);
+    if (error) throw error;
+  }
+  // Serialize local binding writes with logout and with other tabs on this origin.
+  function deviceOperation<T>(action: () => Promise<T>) {
+    return navigator.locks ? navigator.locks.request("push-device", action) : action();
+  }
+  async function restorePush(user: string | null) {
+    await deviceOperation(async () => {
+      const sub = await currentSubscription();
+      if (!sub) return;
+      const {data} = await client.auth.getSession();
+      if ((data.session?.user.id ?? null) !== user) return;
+      await setPushBinding(null);
+      if (!user) return;
+      const device = await savePush(null, sub.toJSON(), deviceType(), await fingerprint(sub.options.applicationServerKey));
+      if (device) await setPushBinding(device);
+      window.dispatchEvent(new Event("push-device-change"));
+    });
+  }
   return {
     requests,
+    removeEndpoint,
     async account() {
       const { data: { user } } = await client.auth.getUser();
       if (!user?.email) throw Error("로그인이 필요해요");
@@ -204,12 +235,13 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       return value(await client.rpc("notification_settings", { app }));
     },
     async devices() {
-      return value(await client.from("push_subscriptions").select("id,endpoint,user_agent,created_at").order("created_at"));
+      return value(await client.from("push_subscriptions").select("id,endpoint,user_agent,created_at,vapid_fingerprint").order("created_at"));
     },
     async registerPush(app, sub, agent) {
-      const {error} = await client.rpc("register_push", {app,p_endpoint:sub.endpoint,
-        p_key:sub.keys?.p256dh,p_auth:sub.keys?.auth,p_agent:agent});
-      if (error) throw error;
+      await deviceOperation(async () => {
+        const device = await savePush(app, sub, agent, await fingerprint(configuredKey()?.buffer));
+        await setPushBinding(device);
+      });
     },
     async removeDevice(id) {
       const {error} = await client.from("push_subscriptions").delete().eq("id",id);
@@ -275,9 +307,18 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       return data.session?.user.id ?? null;
     },
     listen(fn) {
-      const { data } = client.auth.onAuthStateChange((event, session) =>
-        fn(session?.user.id ?? null, event === "PASSWORD_RECOVERY"),
-      );
+      let restored: string | null | undefined;
+      const { data } = client.auth.onAuthStateChange((event, session) => {
+        fn(session?.user.id ?? null, event === "PASSWORD_RECOVERY");
+        const user = session?.user.id ?? null;
+        if (user !== restored) {
+          restored = user;
+          // Supabase releases its auth lock after the callback returns.
+          setTimeout(() => { void restorePush(user).catch(() => {
+            if (restored === user) restored = undefined;
+          }); }, 0);
+        }
+      });
       earlyListener?.unsubscribe();
       if (initialRecovery) {
         fn(initialRecovery, true);
@@ -328,9 +369,20 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       if (result.error) throw result.error;
       return request;
     },
-    async logout() {
-      const { error } = await client.auth.signOut({ scope: "local" });
-      if (error) throw error;
+    async logout(accountDeleted = false) {
+      await deviceOperation(async () => {
+        const sub = await currentSubscription();
+        if (sub) {
+          await setPushBinding(null);
+          const registration = await navigator.serviceWorker.getRegistration("/");
+          const notices = await registration?.getNotifications?.();
+          notices?.forEach(notice => notice.close());
+          if (!accountDeleted) await removeEndpoint(sub.endpoint);
+          if (!await sub.unsubscribe() && await currentSubscription()) throw Error("기기 구독 해제 실패");
+        }
+        const { error } = await client.auth.signOut({ scope: "local" });
+        if (error) throw error;
+      });
     },
     async firstVisit() {
       const { data, error } = await client.auth.getUser();
