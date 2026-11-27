@@ -32,13 +32,14 @@ async function fixture(page, stage) {
     const failures = Number(slow);
     hist[9] = failures;
     const version = stage === "fixed" && age === 0 ? "1.2" : stage !== "before" && age < 5 ? "1.1" : "1.0";
-    return {feature_id:"search",version,bucket:stamp(age + 1/12),total:25+failures,failures,hist};
+    const success_durations = slow ? {1400:20,2000:5} : {[i % 3 === 0 ? 200 : 300]:24,2000:1};
+    return {feature_id:"search",version,bucket:stamp(age + 1/12),total:25+failures,failures,hist,success_durations};
   });
   const app = {id:"demo", name:"트루바",first_record_at:stamp(96),created_at:stamp(100)};
   const incident = {id:"slow",feature_id:"search",kind:"slow",status:stage === "fixed" ? "resolved" : "open",
     opened_version:"1.1",opened_at:stamp(4),closed_at:stage === "fixed" ? stamp(0.1) : null,
     resolved_version:stage === "fixed" ? "1.2" : null,notifications:[],
-    metric_at_open:{p50:1500,baseline_p50:200,baseline_p95:500,total:25,window:10},metric_worst:null};
+    metric_at_open:{p50:1400,baseline_p50:200,baseline_p95:500,total:25,window:10},metric_worst:null};
   await page.route(service + "/rest/v1/**", route => {
     const name = new URL(route.request().url()).pathname.split("/").pop();
     const rows = {
@@ -46,8 +47,8 @@ async function fixture(page, stage) {
       features:[feature], incidents:stage === "before" ? [] : [incident],stats_5m:stats,
       app_versions:versions.map(version => ({version,first_seen_at:stamp({"1.0":96,"1.1":5,"1.2":0.25}[version]),last_seen_at:stamp(0)})),
       demo_insights:[{feature_id:"search",fast:stage === "load" ? 0 : 24,measured:25,failures:Number(stage === "load"),
-        previous_n:versions.length > 1 ? 50 : 0,current_n:25,previous_ms:stage === "fixed" ? 1500 : 300,
-        current_ms:stage === "load" ? 1500 : 300}],
+        previous_n:versions.length > 1 ? 50 : 0,current_n:25,previous_ms:stage === "fixed" ? 1400 : 300,
+        current_ms:stage === "load" ? 1400 : 300}],
     };
     return Object.hasOwn(rows,name) ? route.fulfill({json:rows[name]}) : route.fallback();
   });
@@ -67,7 +68,7 @@ try {
     for (const screen of ["home","detail"]) {
       await page.goto(origin+"/apps/demo"+(screen === "detail" ? "/features/search" : ""));
       await page.getByText(/최근 1시간 성공 요청의/).waitFor();
-      if (stage !== "before") await page.getByText(stage === "load" ? /5배 느려졌어요/ : /5배 빨라졌어요/).waitFor();
+      if (stage !== "before") await page.getByText(stage === "load" ? /4.7배 느려졌어요/ : /4.7배 빨라졌어요/).waitFor();
       if (screen === "detail") {
         if (width === 390) {
           await page.getByText("그래프와 표 보기",{exact:true}).focus();

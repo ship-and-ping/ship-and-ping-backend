@@ -116,9 +116,10 @@ function description(p: Bucket, p95: number | null) {
     + (p95 !== null && p.median !== null && p.median > p95 ? " · 평소 범위 초과" : "");
 }
 
-function Plot({ points, labels, duration, baseline, p95 = null, samples = 0, summary }: {
+function Plot({ points, labels, duration, baseline, p95 = null, samples = 0, summary, learnsRange = true }: {
   points: Bucket[]; labels: ReturnType<typeof ticks>; duration?: boolean; baseline: number | null; summary?: string;
   p95?: number | null; samples?: number;
+  learnsRange?: boolean;
 }) {
   const id = useId();
   const [selected, setSelected] = useState(() => Math.max(0,
@@ -158,7 +159,7 @@ function Plot({ points, labels, duration, baseline, p95 = null, samples = 0, sum
   return <figure className="flow-figure" aria-labelledby={id}>
     <figcaption id={id}>{title}</figcaption>
     {summary && <p className="flow-summary">{summary}</p>}
-    {duration && p95 === null && <p className="flow-note">평소 범위는 성공 30번 뒤에 생겨요 (지금 {samples}번)</p>}
+    {duration && p95 === null && <p className="flow-note">{learnsRange ? `평소 범위는 성공 30번 뒤에 생겨요 (지금 ${samples}번)` : "여러 기능을 모은 기타 요청은 평소 범위를 계산하지 않아요."}</p>}
     {(!duration || baseline !== null) && <div className="flow-key">{duration ? <>
       <span className="median-key">보통 시간</span>
       {baseline !== null && p95 !== null && <span className="range-key">평소 범위 · {approximateDuration(baseline)} ~ {approximateDuration(p95)}</span>}
@@ -215,8 +216,9 @@ function Plot({ points, labels, duration, baseline, p95 = null, samples = 0, sum
   </figure>;
 }
 
-export function Chart({ rows, days, now, baseline, p95 = null, samples }: {
+export function Chart({ rows, days, now, baseline, p95 = null, samples, learnsRange = true }: {
   rows: Stat[]; days: number; now: number; baseline: number | null; p95?: number | null; samples?: number;
+  learnsRange?: boolean;
 }) {
   const start = now - days * day;
   const hourly = days === 1;
@@ -230,7 +232,7 @@ export function Chart({ rows, days, now, baseline, p95 = null, samples }: {
     {occupied <= 3 && <p className="flow-note">{occupied ? "아직 사용 기록이 적어요. 쌓이면 흐름이 보여요." : "이 기간에는 표시할 사용 기록이 없어요."}</p>}
     <div className="flow-plots"><Plot points={points} labels={labels} baseline={null}
       summary={worst.failures ? worst.label + " 구간에 실패 " + worst.failures + "건이 있었어요." : undefined} />
-    <Plot points={points} labels={labels} duration baseline={baseline} p95={p95} samples={samples}
+    <Plot points={points} labels={labels} duration baseline={baseline} p95={p95} samples={samples} learnsRange={learnsRange}
       summary={period.median === null ? "선택한 기간에 걸린 시간 측정값이 없어요." : "선택한 기간 보통 " + approximateDuration(period.median)} /></div>
     <details><summary>표로 보기</summary>
       <table><caption>최근 {hourly ? "24시간" : "7일"} 기록</caption>

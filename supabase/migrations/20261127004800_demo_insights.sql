@@ -1,5 +1,4 @@
--- Read the same successful timings as the baseline. Public stats_5m.hist
--- includes failures and client errors and cannot be used for this percentage.
+-- The chart and this RPC share T46's successful timings and its fallback for older buckets.
 create function public.demo_insights(target_app uuid)
 returns table(feature_id uuid, fast bigint, measured bigint, failures bigint,
  previous_ms numeric, current_ms numeric, previous_n bigint, current_n bigint)
@@ -15,38 +14,48 @@ begin
  ), features as (
   select f.id,f.kind,b.p95_ms from public.features f left join public.baselines b on b.feature_id=f.id
   where f.app_id=target_app and not f.hidden
- ), auto_hist as (
-  select s.feature_id,s.version,private.sum_hist(s.success_hist) h,
-   private.sum_hist(s.success_hist) filter(where s.bucket>=now()-interval '1 hour') recent,
-   sum(s.failures) filter(where s.bucket>=now()-interval '1 hour') failed
+ ), profiles as materialized (
+  select s.feature_id,s.version,s.bucket>=now()-interval '1 hour' recent,
+   s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms,count(*) copies,sum(s.failures) failed
   from private.speed_buckets s join features f on f.id=s.feature_id and f.kind='auto'
   where s.app_id=target_app and s.bucket between now()-interval '7 days' and now()
    and (s.bucket>=now()-interval '1 hour' or s.version in (select v.version from versions v))
-  group by s.feature_id,s.version
- ), results as (
-  select a.feature_id,a.version,
-   (select sum(i.n) from private.hist_intervals(a.recent) i where i.upper_ms<=f.p95_ms) quick,
-   (select sum(i.n) from private.hist_intervals(a.recent) i) timed,a.failed,
-   private.hist_percentile(a.h,0.5)::numeric median,(select sum(i.n) from private.hist_intervals(a.h) i) n
-  from auto_hist a join features f on f.id=a.feature_id
-  union all
-  select a.feature_id,a.version,
-   count(*) filter(where a.ended_at>=now()-interval '1 hour' and a.status='success' and a.duration_ms<=f.p95_ms),
-   count(a.duration_ms) filter(where a.ended_at>=now()-interval '1 hour' and a.status='success'),
-   count(*) filter(where a.ended_at>=now()-interval '1 hour' and a.status='failure'),
-   (percentile_cont(0.5) within group(order by a.duration_ms) filter(where a.status='success'))::numeric,
-   count(a.duration_ms) filter(where a.status='success')
+  group by 1,2,3,4,5,6,7,8
+ ), attempts as materialized (
+  select a.feature_id,a.version,a.ended_at>=now()-interval '1 hour' recent,a.duration_ms,a.status,count(*) n
   from public.attempts a join features f on f.id=a.feature_id and f.kind='deep'
   where a.app_id=target_app and a.ended_at between now()-interval '7 days' and now()
+   and a.status in ('success','failure')
    and (a.ended_at>=now()-interval '1 hour' or a.version in (select v.version from versions v))
-  group by a.feature_id,a.version
+  group by 1,2,3,4,5
+ ), points as materialized (
+  select s.feature_id,s.version,s.recent,p.ms,p.n*s.copies n
+  from profiles s cross join lateral
+   private.duration_points(s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms) p
+  where s.success_hist is not null
+  union all select a.feature_id,a.version,a.recent,a.duration_ms,a.n from attempts a
+  where a.status='success' and a.duration_ms is not null
+ ), hourly as (
+  select p.feature_id,sum(p.n) measured,sum(p.n) filter(where p.ms<=f.p95_ms) fast
+  from points p join features f on f.id=p.feature_id where p.recent group by 1
+ ), failed as (
+  select r.feature_id,sum(r.n)::bigint n from (
+   select s.feature_id,s.failed n from profiles s where s.recent
+   union all select a.feature_id,a.n from attempts a where a.recent and a.status='failure'
+  ) r group by 1
+ ), grouped as (
+  select p.feature_id,v.pos,p.ms,sum(p.n)::bigint n
+  from points p join versions v on v.version=p.version group by 1,2,3
+ ), medians as (
+  select g.feature_id,g.pos,sum(g.n)::bigint n,
+   (private.duration_quantiles(array_agg(g.ms order by g.ms),array_agg(g.n order by g.ms),array[0.5]))[1]::numeric ms
+  from grouped g group by 1,2
  )
- select f.id,case when f.p95_ms is not null then coalesce(sum(r.quick),0)::bigint end,
-  coalesce(sum(r.timed),0)::bigint,coalesce(sum(r.failed),0)::bigint,
-  max(r.median) filter(where v.pos=2),max(r.median) filter(where v.pos=1),
-  coalesce(max(r.n) filter(where v.pos=2),0),coalesce(max(r.n) filter(where v.pos=1),0)
- from features f left join results r on r.feature_id=f.id left join versions v on v.version=r.version
- group by f.id,f.p95_ms order by f.id;
+ select f.id,case when f.p95_ms is not null then coalesce(h.fast,0)::bigint end,coalesce(h.measured,0)::bigint,
+  coalesce(e.n,0),prev.ms,cur.ms,coalesce(prev.n,0),coalesce(cur.n,0)
+ from features f left join hourly h on h.feature_id=f.id left join failed e on e.feature_id=f.id
+ left join medians prev on prev.feature_id=f.id and prev.pos=2
+ left join medians cur on cur.feature_id=f.id and cur.pos=1 order by f.id;
 end $$;
 revoke all on function public.demo_insights(uuid) from public,anon,authenticated,service_role;
 grant execute on function public.demo_insights(uuid) to authenticated;

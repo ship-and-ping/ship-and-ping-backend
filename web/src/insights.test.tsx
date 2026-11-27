@@ -36,9 +36,11 @@ it("draws the band, highlights above it and explains a missing range", () => {
   expect(view.getByText("평소 범위는 성공 30번 뒤에 생겨요 (지금 12번)")).toBeTruthy();
 });
 
-it("distinguishes the automatic overflow bin from a measured ten-minute duration", () => {
-  const overflow = {...row, current_ms:600000};
-  expect(compareVersions(overflow,true)).toMatchObject({after:Infinity, direction:"slower", bounded:true});
-  expect(compareVersions({...overflow,previous_ms:30000},true)?.direction).toBe("unknown");
-  expect(compareVersions(overflow,false)).toMatchObject({after:600000, bounded:false});
+it("does not mark an exact p95 timing as slow when the public histogram rounds it up", () => {
+  const now = Date.UTC(2026,10,27);
+  const rows = [{bucket:new Date(now).toISOString(), feature_id:"f", version:"v2", hist:[0,0,0,10],
+    success_durations:{"240":10}, total:10, failures:0}];
+  const view = render(<Chart rows={rows} now={now} days={1} baseline={200} p95={240} />);
+  expect(view.container.querySelector("circle.above-range")).toBeNull();
+  expect(view.getByText("선택한 기간 보통 약 0.24초")).toBeTruthy();
 });
