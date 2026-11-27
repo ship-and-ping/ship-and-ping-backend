@@ -71,6 +71,18 @@ try {
           assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
           assert.equal(await page.locator("img").evaluateAll(imgs=>imgs.every(i=>i.complete&&i.naturalWidth>0)),true);
           await page.screenshot({path:join(dir,"option-"+option,file),fullPage:width!==390});
+          if(screen==="home"){
+            for(const state of ["empty","loading","healthy"]){
+              await page.goto(base+"?state="+state+"&theme="+theme);
+              await page.locator(".state-view."+state).waitFor();
+              assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+              if(option==="c")assert.ok(await page.locator(".state-art img").evaluate(img=>{
+                const image=img.getBoundingClientRect(),panel=img.parentElement.getBoundingClientRect();
+                return image.width>45&&image.height>50&&image.left>=panel.left&&image.right<=panel.right&&image.top>=panel.top&&image.bottom<=panel.bottom;
+              }));
+              await page.screenshot({path:join(dir,"option-"+option,state+"-"+width+"-"+theme+".png")});
+            }
+          }
           if(screen==="alerts"){
             assert.deepEqual(await page.locator(".channel h2").allTextContents(),["앱 푸시","메일","슬랙"]);
             await page.getByRole("link",{name:"예시 알림 열기"}).click();

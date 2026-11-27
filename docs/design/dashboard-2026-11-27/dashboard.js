@@ -6,9 +6,12 @@
   document.documentElement.dataset.theme = theme;
   const page = params.get("screen") || "home";
   const key = Object.hasOwn(featureNames,params.get("feature")) ? params.get("feature") : "other";
-  const name = featureNames[key];
+  const name = page==="home"?"전체 기능":featureNames[key];
   const days = params.get("days") === "7" ? 7 : 1;
-  const points = series(key,days);
+  const atHome=page==="home";
+  const scenario=atHome&&["empty","loading","healthy"].includes(params.get("state"))?params.get("state"):"problem";
+  const preview=atHome&&scenario!=="problem";
+  const points = series(key,days).map(p=>atHome?{...p,...aggregate(records.filter(r=>r.at>=p.from&&r.at<p.until))}:p);
   const current = (id,period=1) => aggregate(records.filter(r=>r.feature===id && r.at>=snapshotEnd-period*day));
   const snap = "11월 27일 18:00 기준";
   const paths = {
@@ -27,11 +30,11 @@
   const sec=(n)=>n===null?"측정 없음":`${n}초`;
   const action=()=>link("issue","실패 문제 보기"+icon("next"),"other","btn");
   function nav(){
-    return `<header><div class="top"><a class="brand" href="${navUrl("home")}"><img src="../../brand/ship-and-ping-wordmark.png" width="30" height="30" alt="">쉽앤핑</a><span class="app-name">트루바</span><div class="tools"><a href="../index.html" aria-label="시안 비교">${icon("compare")}<span>시안 비교</span></a><a href="${navUrl(page,key,days,theme==="light"?"dark":"light")}" aria-label="화면 테마 변경">${icon("theme")}</a></div></div></header>
-    <nav aria-label="트루바 메뉴">${[["home","앱 홈"],["features","기능 목록"],["issue","문제 1개"],["alerts","알림 설정"]].map(([s,t])=>`<a href="${navUrl(s)}" ${page===s||(page==="feature"&&s==="features")?'aria-current="page"':""}>${icon(s)}${t}</a>`).join("")}</nav>`;
+    return `<header><div class="top"><a class="brand" href="${navUrl("home")}"><img src="../../brand/ship-and-ping-wordmark.png" width="30" height="30" alt="">쉽앤핑</a><span class="app-name">트루바</span><div class="tools"><a href="../index.html" aria-label="시안 비교">${icon("compare")}<span>시안 비교</span></a><a href="${navUrl(page,key,days,theme==="light"?"dark":"light")}&state=${scenario}" aria-label="화면 테마 변경">${icon("theme")}</a></div></div></header>
+    <nav aria-label="트루바 메뉴">${(preview?[["home","문제 예시로 돌아가기"]]:[["home","앱 홈"],["features","기능 목록"],["issue","문제 1개"],["alerts","알림 설정"]]).map(([s,t])=>`<a href="${navUrl(s)}" ${page===s||(page==="feature"&&s==="features")?'aria-current="page"':""}>${icon(s)}${t}</a>`).join("")}</nav>`;
   }
   function hero(title,reason,button,bad=true){
-    return `<section class="hero"><div>${badge(bad)}<h2>${title}</h2><p>${reason}</p>${button||""}</div><div class="mascot"><img src="../../brand/sheep.svg" alt=""></div></section>`;
+    return `<section class="hero"><div>${badge(bad)}<h2>${title}</h2><p>${reason}</p>${button||""}</div>${!bad&&option==="c"?'<div class="mascot"><img src="../../brand/sheep.svg" alt=""></div>':""}</section>`;
   }
   function facts(items){
     return `<dl class="facts">${items.map(([label,val])=>`<div><dt>${label}</dt><dd>${val}</dd></div>`).join("")}</dl>`;
@@ -53,21 +56,44 @@
     return `<div class="event"><time>${time}</time><div><strong>${title}</strong><p>${note}</p></div></div>`;
   }
   const eventList=()=>section("오늘의 기록",eventRow("14:15","기타에서 실패가 몰렸어요","14:20까지 5분 동안 30건 실패")+eventRow("10:00","기타가 한때 느렸어요","10:00–11:00 보통 5초, 다음 구간 1초"));
-  function home(){
-    const summary=hero("확인할 문제가 1개 있어요","기타에서 오후 2시 15분부터 5분 동안 30건이 실패했어요.",action());
-    const metric=facts([["지켜보는 기능","3개"],["열린 문제","1개"],["기타 실패","30건"]]);
-    if(option==="b")return summary+`<div class="split">${eventList()}${section("앱 요약",metric)}</div>`+list();
-    if(option==="c")return `<section class="ledger-alert">${badge(true)}<strong>기타에서 실패 30건</strong>${action()}</section>`+list()+eventList();
-    return hero("기타에서 실패가 늘었어요","오늘 14:15–14:20에 실패 30건을 확인했어요.",null)+
-      section("문제",link("issue","기타의 실패 문제 확인하기"+icon("next"),"other","issue-link"))+list();
+  const mascotImage='<img class="sheep-art" src="../../brand/sheep.svg" alt="">';
+  function sheepDesk(title,detail){
+    return `<aside class="sheep-desk"><div class="desk-card">${icon("ok")}<strong>${title}</strong><small>${detail}</small></div><div class="sheep-stage">${mascotImage}</div></aside>`;
   }
-  const filters=()=>`<div class="range"><div class="seg" aria-label="조회 기간">${[1,7].map(d=>`<a href="${navUrl("feature",key,d)}&chart=open" ${days===d?'aria-current="true"':""}>${d===1?"24시간":"7일"}</a>`).join("")}</div><small>${range({from:points[0].from,until:snapshotEnd})} · 한국 시간</small></div>`;
+  function statePage(){
+    const content={
+      empty:["첫 기록을 기다려요","트루바에서 기능을 한 번 사용하면 이곳에 첫 기록이 나타나요.","기록 도착 전"],
+      loading:["기록을 불러오고 있어요","트루바의 최근 기록과 열린 문제를 확인하고 있어요.","조회 중"],
+      healthy:["모두 괜찮아요","세 기능에 열린 문제가 없어요. 마지막으로 확인한 기능은 검색이에요.","정상"]
+    }[scenario];
+    const illustration=option==="c"?`<div class="state-art ${scenario}">${mascotImage}</div>`:"";
+    const next=scenario==="loading"?"확인 중":scenario==="empty"?"첫 기록을 확인하는 방법":"최근 정상 기록";
+    const more=scenario==="empty"?"연결한 트루바에서 검색을 한 번 실행한 뒤 기록 도착을 확인하세요.":scenario==="healthy"?"17:10 검색 성공 · 보통 0.5초":"기록이 도착하면 상태와 기능별 건수를 보여줘요.";
+    return `<section class="panel state-view ${scenario}" aria-busy="${scenario==="loading"}"><div><span class="badge">${icon(scenario==="healthy"?"ok":"clock")} ${content[2]}</span><h2>${content[0]}</h2><p>${content[1]}</p></div>${illustration}</section>`+
+      section(next,scenario==="loading"?'<div class="skeleton" aria-hidden="true"><i></i><i></i><i></i></div>':'<p>'+more+'</p>');
+  }
+  function home(){
+    if(preview)return statePage();
+    const totals=aggregate(records.filter(r=>r.at>=snapshotEnd-days*day));
+    if(option==="a"){
+      const stats=facts([["열린 문제","1개"],["전체 사용",totals.total+"건"],["실패",totals.fail+"건"],["보통 시간",sec(totals.median)]]);
+      return `<div class="phone-summary">${badge(true)} 기타에서 실패 30건</div><section class="panel overview"><div class="section-title"><h2>앱 사용 흐름</h2><small>전체 기능 3개</small></div>${stats}<details class="fold" ${matchMedia("(min-width:761px)").matches||params.get("chart")==="open"?"open":""}><summary>그래프와 표 보기</summary>${filters()}${figure(false)}${table()}</details></section>
+        <div class="overview-foot">${list()}${section("확인할 문제",'<p>기타에서 5분 동안 30건이 실패했어요.</p>'+action())}</div>`;
+    }
+    if(option==="b"){
+      return `<section class="panel toss-card"><div class="big-status"><span class="badge">${icon("issue")} 확인할 문제</span><h2><b>1</b><span>개</span></h2><p>기타에서 실패가 몰렸어요.</p></div>
+        <div class="incident-ticket"><div class="ticket-heading"><span class="ticket-icon">${icon("issue")}</span><div><small>기타 · 실패</small><h3>5분 동안 30건 실패</h3></div></div><p>오늘 오후 2시 15분부터 2시 20분까지</p>${action()}</div></section>
+        <div class="toss-lower">${list()}${section("다른 시간대 기록",eventRow("17:10","검색이 정상 작동했어요","사용 4건 모두 성공 · 보통 0.5초")+eventRow("10:00","기타가 한때 느렸어요","보통 5초, 다음 구간에서 1초"))}</div>`;
+    }
+    return `<section class="workbench"><div class="watch-report"><span class="badge">${icon("issue")} 문제 있어요</span><h2>기타를 한 번 <br>살펴봐 주세요.</h2><p>오후 2시 15분부터 5분 동안 <br>30건이 실패했어요.</p>${action()}</div>${sheepDesk("검색은 괜찮아요","17:10 마지막 성공 기록")}</section><div class="watch-lower">${eventList()}${list()}</div>`;
+  }
+  const filters=()=>`<div class="range"><div class="seg" aria-label="조회 기간">${[1,7].map(d=>`<a href="${navUrl(atHome?"home":"feature",key,d)}&chart=open" ${days===d?'aria-current="true"':""}>${d===1?"24시간":"7일"}</a>`).join("")}</div><small>${range({from:points[0].from,until:snapshotEnd})} · 한국 시간</small></div>`;
   const maxPoint=points.reduce((best,p)=>(p.median??0)>(best.median??0)?p:best);
   const step=days===1?"1시간":"24시간";
   function figure(isTime){
     const title=isTime?"보통 걸린 시간":"사용과 실패";
     const summary=isTime?`가장 오래 걸린 구간은 ${range(maxPoint)}로, 보통 ${sec(maxPoint.median)}였어요.`:
-      key==="other"?"11/27 14:15–14:20에 30건이 실패했어요.":`선택한 기간에 실패한 기록은 없어요.`;
+      atHome||key==="other"?"11/27 14:15–14:20에 기타에서 30건이 실패했어요.":`선택한 기간에 실패한 기록은 없어요.`;
     return `<figure><figcaption>${title}</figcaption><p>${summary}</p><div class="plot-head"><small>${isTime?"점":"막대"} 하나는 ${step}</small>${isTime?"":'<span class="legend"><i></i>성공 <i class="hatch"></i>실패</span>'}</div><div class="chart" data-chart="${isTime?"time":"count"}"></div></figure>`;
   }
   const table=()=>`<details class="table"><summary>표로 보기</summary><table><caption>기능 ${name} · ${step} 단위</caption><thead><tr><th>시간 구간</th><th>사용</th><th>실패</th><th>보통 시간</th></tr></thead><tbody>${points.map(p=>`<tr><th scope="row">${range(p)}</th><td>${p.total}</td><td>${p.fail}</td><td>${sec(p.median)}</td></tr>`).join("")}</tbody></table></details>`;
@@ -94,12 +120,15 @@
       <section class="panel channel"><div class="channel-head"><h2>슬랙</h2><span>팀용 선택 · 미연결</span></div><p>팀원이 함께 확인할 때 채널로 알림을 받을 수 있어요.</p></section></div>`;
   }
   function dock(){
+    if(preview)return '<div class="dock">'+link("home","문제 예시로 돌아가기","other","btn")+"</div>";
     const button=page==="issue"?copyButton():page==="alerts"?'<a class="btn" href="#setup">홈 화면에 추가하는 방법</a>':
       page==="feature"&&key!=="other"?link("features","기능 목록 보기",key,"btn"):action();
     return `<div class="dock" aria-label="주요 행동">${button}</div>`;
   }
+  const stateLinks=()=>atHome?`<div class="state-links" aria-label="홈 상태 미리보기"><span>상태 미리보기</span>${[["problem","문제"],["empty","빈 화면"],["loading","로딩"],["healthy","정상"]].map(([s,t])=>`<a href="${navUrl("home")}&state=${s}" ${s===scenario?'aria-current="true"':""}>${t}</a>`).join("")}</div>`:"";
   const pageTitle={home:"트루바",features:"기능 목록",feature:name,issue:"실패 문제",alerts:"알림 설정"};
-  document.getElementById("dashboard").outerHTML=nav()+`<main><div class="page-title"><div><small>${page==="home"?"앱 홈":link("home","트루바")+" / "+(page==="feature"?link("features","기능 목록"):"앱 홈")}</small><h1>${pageTitle[page]||"트루바"}</h1></div><small>${icon("clock")}${snap}</small></div>${page==="feature"?detail():page==="features"?'<div class="phone-summary">'+badge(true)+' 기타에서 실패 30건</div>'+list():page==="issue"?issue():page==="alerts"?alerts():home()}</main><footer>트루바 예시 데이터 · 2026년 11월 27일</footer>${dock()}`;
+  document.getElementById("dashboard").outerHTML=nav()+`<main><div class="page-title"><div><small>${page==="home"?"앱 홈":link("home","트루바")+" / "+(page==="feature"?link("features","기능 목록"):"앱 홈")}</small><h1>${pageTitle[page]||"트루바"}</h1></div><small>${icon("clock")}${snap}</small></div>${page==="feature"?detail():page==="features"?'<div class="phone-summary">'+badge(true)+' 기타에서 실패 30건</div>'+list():page==="issue"?issue():page==="alerts"?alerts():home()}</main><footer>${stateLinks()}트루바 예시 데이터 · 2026년 11월 27일</footer>${dock()}`;
+  document.body.dataset.screen=page;
   const setup=document.getElementById("setup");
   if(setup)document.querySelector('.dock a').onclick=()=>{setup.open=true;};
   const fold=document.querySelector(".fold");
@@ -118,10 +147,11 @@
     el.innerHTML=`<svg aria-hidden="true"></svg><div class="hit" role="slider" tabindex="0" aria-label="${label} 시간 구간" aria-valuemin="1" aria-valuemax="${points.length}"><i hidden></i></div>`;
     el.append(tip);
     const svg=el.querySelector("svg"),hit=el.querySelector(".hit"),mark=hit.firstChild;
-    const left=40,right=12,yTop=12,bottom=147;
+    const left=40,right=12,yTop=12;
     function draw(){
       const width=el.clientWidth;
       if(width<=left+right)return;
+      const bottom=el.clientHeight-38;
       const w=width-left-right, slot=w/points.length;
       const x=i=>left+(i+0.5)*slot, y=v=>bottom-v/top*(bottom-yTop);
       const glyph=(px,py,content,anchor)=>`<text x="${px}" y="${py}" text-anchor="${anchor}">${content}</text>`;
@@ -132,7 +162,7 @@
       const xTicks=days===1?[0,6,12,18,24]:[0,2,4,7];
       for(const n of xTicks){
         const at=n===points.length?snapshotEnd:points[n].from;
-        content+=glyph(left+n*slot,173,days===1?clock(at):date(at),n===0?"start":n===points.length?"end":"middle");
+        content+=glyph(left+n*slot,bottom+26,days===1?clock(at):date(at),n===0?"start":n===points.length?"end":"middle");
       }
       if(timed){
         let path="";

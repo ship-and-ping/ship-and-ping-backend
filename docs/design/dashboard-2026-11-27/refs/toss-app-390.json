@@ -1,0 +1,91 @@
+{
+  "id": "toss-app",
+  "url": "https://toss.im/tossfeed/article/toss-darkmode",
+  "width": 390,
+  "sampled": {
+    "lines": [],
+    "headings": [
+      {
+        "tag": "h3",
+        "label": "🔍 라이트 모드 VS. 다크모드 비교하기",
+        "x": 0,
+        "y": 206,
+        "width": 390,
+        "height": 38,
+        "font": "24px",
+        "line": "38.4px",
+        "weight": "700",
+        "padding": "0px",
+        "gap": "normal",
+        "radius": "0px",
+        "shadow": "none"
+      }
+    ],
+    "text": [
+      {
+        "tag": "span",
+        "label": "🔍 라이트 모드 VS. 다크모드 비교하기",
+        "x": 0,
+        "y": 210,
+        "width": 361,
+        "height": 30,
+        "font": "24px",
+        "line": "38.4px",
+        "weight": "700",
+        "padding": "0px",
+        "gap": "normal",
+        "radius": "0px",
+        "shadow": "none"
+      }
+    ],
+    "panels": [
+      {
+        "tag": "div",
+        "label": "",
+        "x": 95,
+        "y": 794,
+        "width": 200,
+        "height": 50,
+        "font": "16px",
+        "line": "16px",
+        "weight": "400",
+        "padding": "0px 24px",
+        "gap": "20px",
+        "radius": "999px",
+        "shadow": "rgba(0, 0, 0, 0.25) 0px 4px 20px 0px"
+      }
+    ],
+    "images": [
+      {
+        "tag": "img",
+        "label": "",
+        "x": 0,
+        "y": 272,
+        "width": 390,
+        "height": 300,
+        "font": "16px",
+        "line": "16px",
+        "weight": "400",
+        "padding": "0px 24px",
+        "gap": "normal",
+        "radius": "0px",
+        "shadow": "none"
+      },
+      {
+        "tag": "img",
+        "label": "",
+        "x": 0,
+        "y": 632,
+        "width": 390,
+        "height": 300,
+        "font": "16px",
+        "line": "16px",
+        "weight": "400",
+        "padding": "0px 24px",
+        "gap": "normal",
+        "radius": "0px",
+        "shadow": "none"
+      }
+    ]
+  }
+}
