@@ -11,10 +11,9 @@ insert into app_keys(app_id,kind,prefix,key_hash) select id,'pub','fixture',repe
 create function pg_temp.record(route text, samples integer[], age interval default '5 minutes',
                               failed integer default 0, legacy boolean default false) returns jsonb language sql as $$
  with bounds as (
-  select edge,i from unnest(case when legacy then array[50,100,200,300,500,750,1000,1500,2000,3000,
-    5000,7500,10000,20000,30000,600000] else array[50,100,200,300,500,750,1000,1500,2000,3000,
+  select edge,i from unnest(array[50,100,200,300,500,750,1000,1500,2000,3000,
     3300,3600,3900,4200,4500,4800,5000,5100,5400,5700,6000,6300,6600,6900,7200,7500,
-    10000,20000,30000,600000] end) with ordinality as b(edge,i)
+    10000,20000,30000,600000]) with ordinality as b(edge,i)
  ), events as (
   select ms,pos,(select min(i) from bounds where edge>=ms) bin from unnest(samples) with ordinality e(ms,pos)
  )
@@ -22,8 +21,13 @@ create function pg_temp.record(route text, samples integer[], age interval defau
   'stats',jsonb_build_array(jsonb_build_object('method','GET','route',route,
    'bucket',date_bin('5 minutes',now()-age,'epoch'),'total',cardinality(samples),'failures',failed,
    'client_errors',0,'duration_sum_ms',(select sum(ms) from events),
-   'hist',array(select (select count(*) from events where bin=i) from bounds order by i),
-   'timings',(select jsonb_agg(jsonb_build_array(pos,ms,pos>failed) order by pos) from events)))));
+   'hist',array(select (select count(*) from events where ms>lower_ms and ms<=upper_ms)
+     from (select edge upper_ms,lag(edge,1,-1) over(order by edge) lower_ms
+           from unnest(array[50,100,200,300,500,750,1000,1500,2000,3000,5000,7500,10000,20000,30000,600000]) edge) legacy_bins
+     order by upper_ms),
+   'timings',(select jsonb_agg(jsonb_build_array(pos,ms,pos>failed) order by pos) from events))
+   || case when legacy then '{}'::jsonb else jsonb_build_object('hist_30',
+      array(select (select count(*) from events where bin=i) from bounds order by i)) end)));
 $$;
 
 select pg_temp.record('/long',array(select 6000+round(i*500.0/29)::int from generate_series(0,29) i));
@@ -76,5 +80,24 @@ select is((select (metric->>'slow')::int from speeds where route='/mixed'),2,
 update features set slow_threshold_ms=3000 where route='/mixed';
 select is((select (metric->>'slow')::int from speeds where route='/mixed'),8,
  'legacy observations count when their entire interval exceeds the new threshold');
+select pg_temp.record('/upper-mixed',array[6400,7300]);
+select pg_temp.record('/upper-mixed',array_fill(6100,array[5]),legacy=>true);
+select is((select (metric->>'slow')::int from speeds where route='/upper-mixed'),7,
+ 'the exact original threshold count survives mixing in reverse order');
+update features set slow_threshold_ms=6300 where route='/upper-mixed';
+select is((select (metric->>'slow')::int from speeds where route='/upper-mixed'),2,
+ 'changing to 6.3s counts only the two refined observations known to exceed it');
+
+-- Exercise the ingest path used before the optional field was recognized,
+-- with the pre-T45 array constraint enforced on the newly inserted row.
+alter table stats_5m add check (cardinality(hist)=16) not valid;
+select private.ingest_duration_batch(repeat('0',64),jsonb_build_object('batch_id',gen_random_uuid(),'app_version','v1',
+ 'stats',jsonb_build_array(jsonb_build_object('method','GET','route','/old-db',
+ 'bucket',date_bin('5 minutes',now(),'epoch'),'total',1,'failures',0,'client_errors',0,'duration_sum_ms',3200,
+ 'hist',array_fill(0,array[10])||array[1]||array_fill(0,array[5]),
+ 'hist_30',array_fill(0,array[10])||array[1]||array_fill(0,array[19]),
+ 'timings',jsonb_build_array(jsonb_build_array(0,3200,true))))));
+select results_eq($$select total,cardinality(hist),hist[11] from stats_5m join features on features.id=feature_id
+ where route='/old-db'$$,'select 1,16,1','old storage accepts the dual-format batch exactly once');
 select * from finish();
 rollback;

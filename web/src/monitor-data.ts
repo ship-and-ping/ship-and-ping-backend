@@ -264,7 +264,12 @@ const bounds = [
   3300, 3600, 3900, 4200, 4500, 4800, 5000, 5100, 5400, 5700, 6000, 6300, 6600, 6900, 7200,
   ...legacyBounds.slice(11),
 ];
-const legacyIndices = legacyBounds.map(upper => bounds.indexOf(upper));
+function intervals(edges: number[]) {
+  return edges.map((upper, i) => ({ lower: edges[i - 1] ?? 0, index: bounds.indexOf(upper) }));
+}
+const legacyIntervals = intervals(legacyBounds);
+const refinedIntervals = intervals(bounds);
+const mixedIntervals = [...refinedIntervals, ...legacyIntervals.slice(10, 12)];
 export function summarize(rows: Stat[]) {
   let abandoned = 0, unconfirmed = 0;
   let total = 0,
@@ -278,11 +283,13 @@ export function summarize(rows: Stat[]) {
     excluded += row.client_errors ?? 0;
     total += row.total;
     failures += row.failures;
-    const legacy = row.hist.length === legacyBounds.length;
-    const edges = legacy ? legacyBounds : bounds;
-    const first = row.hist.findIndex(n => n > 0);
-    if (first >= 0) min = Math.min(min, edges[first - 1] ?? 0);
-    row.hist.forEach((n, i) => (hist[legacy ? legacyIndices[i] : i] += n));
+    const bins = row.hist.length === legacyBounds.length ? legacyIntervals : mixedIntervals;
+    row.hist.forEach((n, i) => {
+      if (n > 0) {
+        min = Math.min(min, bins[i].lower);
+        hist[bins[i].index] += n;
+      }
+    });
   }
   const measured = hist.reduce((sum, n) => sum + n, 0);
   let left = Math.ceil(measured / 2);
