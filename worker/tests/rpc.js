@@ -8,9 +8,10 @@ let pcGrant;
 report.claims = [];
 report.releases = [];
 report.retry = [];
+report.push = [];
 let round=0;
 let stateIssued=false;
-function rows() {
+async function rows() {
   round++;
   const result = [1,2].map(n=>({id:id(n),claim_token:id(3),app:id(4),incident:id(n),event:"open",
     app_name:"트루바",kind:"slow",feature:"신청 "+sensitive,metric:{total:10,p50:n===1?3400.5:null,baseline:n===1?1100:null,raw:"private-body"},raw_route:"/private-route",
@@ -18,6 +19,13 @@ function rows() {
   // This address sorts before the healthy digest, so a batch-wide return loses both.
   if(round===2) result.push({...result[0],id:id(9),app:id(9),email:"a@example.invalid"});
   if(round===2) result.push({...result[0],id:id(8),app:id(8),email:"b@example.invalid"});
+  const receiver = await crypto.subtle.generateKey({name:"ECDH",namedCurve:"P-256"},true,["deriveBits"]);
+  const encode = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replaceAll("+","-").replaceAll("/","_").replace(/=+$/,"");
+  result.push({...result[0],id:id(11),channel:"push",digest:false,push_target:{
+    endpoint:"https://web.push.apple.com/fixture",
+    p256dh:encode(await crypto.subtle.exportKey("raw",receiver.publicKey)),
+    auth:encode(crypto.getRandomValues(new Uint8Array(16))),
+  }});
   return result;
 }
 async function fixtureHash(suffix) {
@@ -29,6 +37,14 @@ export default {
   async fetch(request) {
     const url=new URL(request.url);
     if(url.pathname==="/fixture-report") return Response.json(report);
+    if(url.hostname==="web.push.apple.com") {
+      const bytes = new Uint8Array(await request.arrayBuffer());
+      report.safe &&= request.method==="POST" && request.headers.get("Content-Encoding")==="aes128gcm"
+        && request.headers.get("Urgency")==="high" && Number(request.headers.get("TTL"))>0
+        && request.headers.get("Authorization")?.startsWith("vapid t=")
+        && bytes.length>103 && bytes[20]===65 && bytes[21]===4;
+      return new Response(null,{status:410});
+    }
     if(url.hostname==="hooks.slack.com" || url.hostname==="api.resend.com") {
       const payload=await request.json();
       report.safe &&= ![sensitive,"private-body","private-route",hook].some(value=>payload.text.includes(value))
@@ -80,7 +96,10 @@ export default {
         if(body.p_action==="poll" && body.p_secret==="pc-only" && pcGrant){ const grant=pcGrant; pcGrant=null; return Response.json({status:"approved",token_hash:grant}); }
         return Response.json({status:"missing"});
       case "evaluate_all": return new Response(null,{status:503});
-      case "claim_notifications": return Response.json(rows());
+      case "claim_notifications": return Response.json(await rows());
+      case "complete_push":
+        report.push.push(body.id===id(11) && body.token===id(3) ? body.result : "wrong lease");
+        return Response.json(null);
       case "slack_failed": report.broken++;return Response.json(null);
       case "complete_notification": if (!body.ok) report.retry.push([body.id.slice(-1),body.error,body.token===id(3)]);
         if(body.id===id(1)) return new Response(null,{status:503});
