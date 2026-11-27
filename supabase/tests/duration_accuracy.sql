@@ -103,6 +103,43 @@ select throws_ok(format('select ingest_batch(%L,%L::jsonb)',repeat('0',64),
  '22023','invalid histogram layout','optional refined array requires exactly 30 counters');
 
 -- Exercise the ingest path used before the optional field was recognized,
+-- First evaluation must learn only from traffic before the detection window.
+select pg_temp.record('/review',array_fill(200,array[27])||array[400,400,400],'2 hours');
+select pg_temp.record('/review',array_fill(1400,array[10]),'2 minutes');
+select evaluate_all();
+select results_eq($$select sample_count,p50_ms,p95_ms from baselines join features on id=feature_id where route='/review'$$,
+ 'select 30,200,400','startup load cannot raise the normal p95');
+select results_eq($$select (metric_at_open->>'p50')::int,(metric_at_open->>'severity')::numeric
+ from incidents join features on features.id=feature_id where route='/review' and incidents.kind='slow'$$,
+ 'select 1400,7::numeric','automatic and deep report the same 1400 ms and sevenfold slowdown');
+select pg_temp.record('/normal',array_fill(200,array[27])||array[400,400,400],'2 hours');
+select pg_temp.record('/normal',array_fill(600,array[10]),'2 minutes');
+select private.refresh_baselines();
+select results_eq($$select breached,(metric->>'p50')::int from speeds where route='/normal'$$,
+ 'select false,600','600 ms is below the 700 ms opening boundary');
+select pg_temp.record('/custom',array_fill(1000,array[30]),'1 day');
+update features set slow_threshold_ms=1100 where route='/custom';
+select pg_temp.record('/custom',array[30,40]||array_fill(1050,array[4])||array_fill(1200,array[6]),failed=>2);
+select private.refresh_baselines();
+select results_eq($$select breached,(metric->>'p50')::int from speeds where route='/custom'$$,
+ 'select true,1200','six of ten successes exceed 1100 ms regardless of two fast failures');
+select pg_temp.record('/boundary',array_fill(200,array[30]),'1 day');
+select pg_temp.record('/boundary',array_fill(200,array[80]),'22 minutes');
+select pg_temp.record('/boundary',array_fill(1400,array[10]),'10 minutes');
+select private.refresh_baselines();
+select results_eq($$select breached,(metric->>'window')::int,(metric->>'total')::int from speeds where route='/boundary'$$,
+ 'select true,10,10','the overlapping start bucket remains in the ten-minute window');
+insert into app_versions(app_id,version) select id,'v2' from apps;
+update incidents set opened_at=now()-interval '1 minute' where feature_id=(select id from features where route='/review');
+insert into private.latest_results select app_id,id,'v2',now(),n,800,true from features cross join generate_series(1,5) n where route='/review';
+select evaluate_all();
+select is((select status from incidents join features on features.id=feature_id where route='/review' and incidents.kind='slow'),
+ 'open','five 800 ms successes cannot resolve an incident with normal p50/p95 of 200/400 ms');
+update features set method='*',route='*' where route='/boundary';
+select is((select breached from speeds where route='*'),false,'composition changes in the overflow group cannot trigger baseline alerts');
+update features set slow_threshold_ms=1100 where route='*';
+select is((select breached from speeds where route='*'),true,'overflow still observes the absolute cap');
+
 -- with the pre-T45 array constraint enforced on the newly inserted row.
 alter table stats_5m add check (cardinality(hist)=16) not valid;
 select private.ingest_duration_batch(repeat('0',64),jsonb_build_object('batch_id',gen_random_uuid(),'app_version','v1',
