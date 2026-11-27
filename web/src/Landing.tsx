@@ -21,8 +21,8 @@ const paymentAlert = {
   sample: "결제 24건",
 };
 
-function StartLink({ className = "" }: { className?: string }) {
-  return <Link to="/login" className={"lp-start " + className}>무료로 시작하기 <span aria-hidden="true">↗</span></Link>;
+function SignupLink({ className = "" }: { className?: string }) {
+  return <Link to="/signup" className={"lp-start " + className}>회원가입 <span aria-hidden="true">↗</span></Link>;
 }
 
 function SignalStrip() {
@@ -103,6 +103,14 @@ function ProductExample() {
 
 export function Landing() {
   const main = useRef<HTMLElement>(null);
+  const navSignup = useRef<HTMLAnchorElement>(null);
+  const [showMobileSignup, setShowMobileSignup] = useState(false);
+  useEffect(() => {
+    if (!navSignup.current || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setShowMobileSignup(!entry.isIntersecting));
+    observer.observe(navSignup.current);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     if (!main.current || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(entries => {
@@ -115,11 +123,12 @@ export function Landing() {
     main.current.querySelectorAll(".lp-section").forEach(section => observer.observe(section));
     return () => observer.disconnect();
   }, []);
-  return <div className="lp">
+  return <div className="lp" data-mobile-signup={showMobileSignup}>
     <a className="skip" href="#main">본문으로 가기</a>
     <header className="lp-header"><nav aria-label="시작 메뉴">
       <Link className="lp-brand" to="/"><img src={mark} alt="" width="34" height="34"/>쉽앤핑</Link>
-      <Link to="/login">로그인</Link><Link className="lp-nav-start" to="/login">무료로 시작</Link>
+      <Link to="/login">로그인</Link>
+      <Link className="lp-nav-start" to="/signup" ref={navSignup}>회원가입</Link>
     </nav></header>
     <main id="main" tabIndex={-1} ref={main}>
       <section className="intro lp-hero">
@@ -127,7 +136,7 @@ export function Landing() {
           <p className="lp-kicker"><i aria-hidden="true"/>웹앱 모니터링</p>
           <h1 className="lp-title" tabIndex={-1}>내 앱의 이상 신호,<br/><em>양이 알려드려요.</em></h1>
           <p className="lp-lede">로그인이 막히거나 결제가 느려질 때,<br/>쉽앤핑이 슬랙이나 메일로 알려드려요.</p>
-          <StartLink className="lp-hero-start"/>
+          <SignupLink className="lp-hero-start"/>
         </div>
         <div className="lp-scene" aria-hidden="true">
           <div className="lp-radar"><i/><i/><i/><b/></div>
@@ -160,7 +169,7 @@ export function Landing() {
           <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div>
       </section>
     </main>
-    <footer className="lp-footer"><strong>쉽앤핑</strong><small>무료 베타 · 회원당 앱 3개까지</small><StartLink/></footer>
-    <StartLink className="lp-mobile-start"/>
+    <footer className="lp-footer"><strong>쉽앤핑</strong><small>무료 베타 · 회원당 앱 3개까지</small><SignupLink/></footer>
+    <SignupLink className="lp-mobile-start"/>
   </div>;
 }

@@ -9,12 +9,18 @@ function visit() {
   return render(<MemoryRouter><Landing/></MemoryRouter>);
 }
 
-it("첫 화면과 휴대폰 고정 버튼이 로그인으로 이어진다", () => {
+it("헤더에서 로그인과 회원가입을 선택하고 각 가입 버튼으로 회원가입 화면에 간다", () => {
   const {container} = visit();
   expect(screen.getByRole("heading", {level:1}).textContent).toContain("양이 알려드려요");
   const nav = screen.getByRole("navigation", {name:"시작 메뉴"});
   expect(within(nav).getByRole("link", {name:"로그인"}).getAttribute("href")).toBe("/login");
-  expect(container.querySelector(".lp-mobile-start")?.getAttribute("href")).toBe("/login");
+  expect(within(nav).getByRole("link", {name:"회원가입"}).getAttribute("href")).toBe("/signup");
+  for (const selector of [".lp-hero-start", ".lp-mobile-start", ".lp-footer .lp-start"]) {
+    const link = container.querySelector(selector);
+    expect(link?.textContent).toContain("회원가입");
+    expect(link?.getAttribute("href")).toBe("/signup");
+  }
+  expect(container.textContent).not.toContain("무료로 시작");
 });
 
 it("알림 탭을 클릭하거나 방향키로 선택하면 초점과 패널이 함께 바뀐다", () => {
