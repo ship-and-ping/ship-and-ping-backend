@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+﻿import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdir } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
@@ -28,11 +28,9 @@ export async function take(page, name, frames, camera, action = async () => {}) 
   if ((await done)[0] !== 0) throw Error("Source recording failed: "+name);
   const dimensions = execFileSync("ffprobe",["-v","error","-select_streams","v:0","-show_entries","stream=width,height","-of","csv=p=0",resolve("raw",name+".mp4")],{encoding:"utf8"}).trim();
   if (!dimensions.startsWith("2880,1800")) throw Error("Expected 1440 × 900 at 2×, got "+dimensions);
-  // The camera eases into the focal area; dimensions below are CSS pixels, before 2× capture.
-  const half = n=>Math.round(n/2)*2;
-  const moving = Math.min(h<80 ? 3 : 8,left);
-  const cx = (left-moving)*2+"+"+moving*2+"*(1-cos(PI*n/"+Math.max(frames-1,1)+"))/2";
-  const vf = "crop="+half(2*w)+":"+half(2*h)+":'"+cx+"':"+half(2*top)
+  // Lock the framing once per take on the 4:2:0 chroma grid, before scaling.
+  const even = n => 2 * Math.round(n / 2);
+  const vf = "crop="+even(2*w)+":"+even(2*h)+":"+even(2*left)+":"+even(2*top)
     +",scale=872:440:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos"
     +",pad=872:440:(ow-iw)/2:(oh-ih)/2:color="+(camera.matte || "white")+",setsar=1";
   await run("ffmpeg",["-hide_banner","-loglevel","error","-y","-i",resolve("raw",name+".mp4"),"-vf",vf,
