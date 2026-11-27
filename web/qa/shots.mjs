@@ -79,8 +79,8 @@ const profiles = chart ? [[1440,"light",1,false],[390,"light",1,true]] : qa3 ? [
   [1440,"light",1,false], [1280,"dark",1,false], [390,"light",1,false], [390,"dark",2,true],
 ];
 const selected = process.argv.slice(3);
-const scenes = chart ? ["many","few","cluster"].map(state =>
-  ["사용 흐름", "/apps/demo/features/apply", state, ".chart-period"]) : gallery || qa3 ? flow : cases;
+const scenes = chart ? ["many","few","cluster","scrolled"].map(state =>
+  [state === "scrolled" ? "아래로 내린 회원 메뉴" : "사용 흐름", "/apps/demo/features/apply", state, ".chart-period"]) : gallery || qa3 ? flow : cases;
 if (selected.some(id => !scenes[Number(id)] || String(Number(id)) !== id)) throw Error("Unknown screen index");
 const server = await createServer({server:{host:"127.0.0.1",port:4179,strictPort:true,hmr:false},
   define: { "import.meta.env.VITE_SUPABASE_URL": JSON.stringify("https://example.supabase.co"),
@@ -180,8 +180,9 @@ try {
         const file = gallery ? String(index+1).padStart(2,"0")+"-"+width+".jpg"
           : String(index).padStart(2,"0")+"-"+state+"-"+width+"-"+colorScheme+".jpg";
         const capture = phase !== "qa3-after" || state === "approval-mismatch" || existsSync(resolve(dir,"../qa3-before",file));
+        if (state === "scrolled") await checkScrolledMenu(page, phase === "chart-after");
         if (capture) {
-          const bytes = await page.screenshot({path:resolve(dir,file),type:"jpeg",quality:80,fullPage:true,animations:"disabled"});
+          const bytes = await page.screenshot({path:resolve(dir,file),type:"jpeg",quality:80,fullPage:state !== "scrolled",animations:"disabled"});
           if (gallery && bytes.length > 500000) throw Error(file+" exceeds 500 KB");
         }
         const smallTargets = qa3 && width === 390 ? await page.locator("main :is(button,summary,input:not([type=checkbox]),select,a)").evaluateAll(nodes =>
@@ -320,4 +321,39 @@ async function tabTo(page,target) {
     await page.keyboard.press("Tab");
   }
   throw Error("Keyboard could not reach "+target);
+}
+
+async function checkScrolledMenu(page, verify) {
+  const viewport = page.viewportSize();
+  const rail = page.locator("#member-menu");
+  await page.getByText("표로 보기", {exact:true}).click();
+  await page.evaluate(() => window.scrollTo(0, 900));
+  if (await page.evaluate(() => scrollY) < 800) throw Error("Missing long-page fixture");
+  if (!verify) return;
+  if (viewport.width === 390) {
+    if (await rail.isVisible() || await page.evaluate(() => document.documentElement.scrollWidth > innerWidth))
+      throw Error("Mobile menu must stay collapsed without horizontal overflow");
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const toggle = page.getByRole("button", {name:"메뉴", exact:true});
+    await toggle.click();
+    const firstLink = rail.getByRole("link", {name:"내 앱", exact:true});
+    if (!await firstLink.evaluate(el => el === document.activeElement && getComputedStyle(el.closest("aside")).position === "static"))
+      throw Error("Mobile menu layout or initial focus changed");
+    await page.keyboard.press("Escape");
+    if (!await toggle.evaluate(el => el === document.activeElement)) throw Error("Menu toggle lost focus");
+  } else {
+    const pinned = await rail.evaluate(el => el.getBoundingClientRect().top === 0 &&
+      el.offsetHeight === innerHeight && getComputedStyle(el).position === "sticky");
+    if (!pinned) throw Error("Desktop member menu scrolled off screen");
+    await page.setViewportSize({width:viewport.width,height:360});
+    await rail.getByRole("link", {name:"내 계정"}).focus();
+    await page.keyboard.press("Tab");
+    const last = rail.getByRole("button", {name:"로그아웃"});
+    if (!await last.evaluate(el => el === document.activeElement && el.closest("aside").scrollTop > 0 &&
+      el.getBoundingClientRect().bottom <= innerHeight && scrollY === 900))
+      throw Error("Keyboard focus must scroll the short menu independently of the document");
+    await last.evaluate(el => el.blur());
+    await page.setViewportSize(viewport);
+  }
+  await page.evaluate(() => window.scrollTo(0, 900));
 }
