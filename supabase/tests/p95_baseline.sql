@@ -20,6 +20,7 @@ select pg_temp.samples(name,3,case when name='fast' then 100 else 400 end,'12 ho
 insert into incidents(app_id,feature_id,kind,status,opened_at,opened_version)
  select app_id,id,name,'open',now()-interval '3 hours','v1' from features where name in ('failure','slow');
 select pg_temp.samples(name,100,9000,'2 hours') from features where name in ('failure','slow');
+select pg_temp.samples('search',10,1400,'2 minutes');
 select private.refresh_baselines();
 select results_eq($$select sample_count,p50_ms,p95_ms from baselines join features on id=feature_id
  where name in ('search','failure','slow') order by name$$,
@@ -27,7 +28,6 @@ select results_eq($$select sample_count,p50_ms,p95_ms from baselines join featur
 create temp view speeds as select name,breached,severity,metric from private.evaluation_signals s
  join features f on s.feature_id=f.id where s.kind='slow';
 select pg_temp.samples('search',80,200,'20 minutes');
-select pg_temp.samples('search',10,1400,'2 minutes');
 select results_eq($$select breached,severity,(metric->>'baseline_p50')::int,(metric->>'baseline_p95')::int,
  (metric->>'window')::int,(metric->>'total')::int from speeds where name='search'$$,
  'select true,7::numeric,200,400,10,10','ten successes select the short window and report sevenfold severity');
@@ -66,6 +66,6 @@ insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_erro
  from features cross join (values (interval '20 minutes',25,200,3),(interval '0 minutes',10,1400,8)) b(age,n,ms,bin)
  where name='auto';
 select results_eq($$select breached,(metric->>'window')::int,(metric->>'p50')::int from speeds where name='auto'$$,
- 'select true,10,1500','auto short window uses the T45 histogram upper bound');
+ 'select true,10,1400','legacy one-bin data uses its measured mean for interpolation');
 select * from finish();
 rollback;

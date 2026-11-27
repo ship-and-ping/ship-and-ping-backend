@@ -438,7 +438,9 @@ function Issue({
   );
   const streak = proof?.consecutive_successes ?? 0;
   const duration = proof?.latest_duration_ms;
-  const threshold = Math.min(f.slow_threshold_ms, (f.baselines?.p95_ms ?? Infinity) + 500);
+  const normal = f.method === "*" ? null : f.baselines;
+  const p95 = normal?.p95_ms ?? Infinity;
+  const threshold = Math.min(f.slow_threshold_ms, p95 + 500, Math.max(p95, (normal?.p50_ms ?? Infinity) + 499));
   const slow = i.kind === "slow" && duration != null && duration > threshold;
   const again = (proof?.latest_success === false || slow) && i.status === "open";
   function verificationMessage() {
