@@ -17,6 +17,9 @@ it("reads medians across empty, legacy and refined five-minute buckets", () => {
   const fine = row(30, [[21, 30]]);
   expect(summarize([fine, legacy]).median).toBe(7500);
   expect(summarize([fine, legacy]).min).toBe(5000);
+  const mixed = row(32, [[21, 30], [31, 31]]);
+  expect(summarize([mixed])).toEqual(summarize([fine, legacy]));
+  expect(summarize([row(32, [[16, 1], [30, 5]])])).toMatchObject({ min: 3000, median: 5000, max: 5000 });
 });
 
 it("copies the incident snapshot and baseline into the problem report", () => {

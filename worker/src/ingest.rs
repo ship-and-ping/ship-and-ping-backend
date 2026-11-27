@@ -197,26 +197,26 @@ struct Stats {
     failures: u32,
     client_errors: u32,
     duration_sum_ms: u64,
-    #[serde(serialize_with = "serialize_hist")]
+    #[serde(rename = "hist_30", skip_serializing_if = "no_refined_samples")]
     hist: [u32; BOUNDS.len() + 1],
     // Transient inputs for DB-side aggregation with the feature's current threshold.
     timings: Vec<(usize, u32, Option<bool>)>,
 }
 
-// A batch without measurements in (3s, 7.5s] can use the smaller wire and DB layout.
-fn serialize_hist<S: serde::Serializer>(
-    hist: &[u32; BOUNDS.len() + 1],
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    let start = BOUNDS.partition_point(|&ms| ms <= 3000);
-    let end = BOUNDS.partition_point(|&ms| ms <= 7500);
-    if hist[start..end].iter().any(|&n| n > 0) {
-        return hist.serialize(serializer);
+fn no_refined_samples(hist: &[u32; BOUNDS.len() + 1]) -> bool {
+    hist[10..26].iter().all(|&count| count == 0)
+}
+
+impl Stats {
+    // Older databases always read hist. They ignore the optional hist_30 field.
+    fn legacy_hist(&self) -> [u32; 16] {
+        let mut compact = [0; 16];
+        compact[..10].copy_from_slice(&self.hist[..10]);
+        compact[10] = self.hist[10..17].iter().sum(); // (3000, 5000]
+        compact[11] = self.hist[17..26].iter().sum(); // (5000, 7500]
+        compact[12..].copy_from_slice(&self.hist[26..]);
+        compact
     }
-    let mut compact = [0; 16];
-    compact[..start].copy_from_slice(&hist[..start]);
-    compact[start + 2..].copy_from_slice(&hist[end..]);
-    compact.serialize(serializer)
 }
 
 fn require(ok: bool) -> Result<(), ApiError> {
@@ -847,6 +847,7 @@ pub fn prepare_ingest(
         .into_iter()
         .map(|((seconds, method, path), row)| {
             let mut value = json!(row);
+            value["hist"] = json!(row.legacy_hist());
             value["bucket"] = json!(DateTime::<Utc>::from_timestamp_secs(seconds));
             value["method"] = json!(method);
             value["route"] = json!(path);
