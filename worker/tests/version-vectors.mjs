@@ -6,11 +6,12 @@ const token = "aB09".repeat(8);
 
 export const shown = [
   { input: "02659da", expected: "02659da" },
+  { input: "1a2b3c4", expected: "1a2b3c4" },
   { input: "abcdef012345", expected: "abcdef012345" },
   { input: sha, expected: "abcdef0" },
   { input: "2.3.1", expected: "2.3.1" },
   { input: "v2.3.1-rc.1", expected: "v2.3.1-rc.1" },
-  { input: "1.0.0+build.5", expected: "1.0.0+build.5" },
+  ...["1.2.3-rc.1", "1.0.0-alpha", "1.0.0-beta2", "1.0.0-dev.123456", "1.0.0-pre", "1.0.0-build3", "1.0.0+123456789"].map(input => ({ input, expected: input })),
   { input: "2026-11-27", expected: "11/27 09:00" },
   { input: stamp, expected: "11/27 19:54" },
   { input: "2026-11-27T23:54:02-05:00", expected: "11/28 13:54" },
@@ -19,6 +20,9 @@ export const shown = [
 ];
 
 export const hidden = [
+  "01012345678", "1234567890", "123456789012", "1".repeat(40), "abcdefa",
+  "v1.0.0-AKIA" + awsSuffix, "1.0.0+build.5", "1.0.0-RC.1",
+  "1.0.0-rc.1234567", "1.0.0+1234567890",
   ...["sk_", "pk_", "rk_", "sb_secret_", "sb_publishable_", "ghp_", "sp_pub_", "sp_srv_"].map(prefix => prefix + token),
   ...["AKIA", "ASIA", "v1AKIA"].map(prefix => prefix + awsSuffix),
   ["eyJ" + token, token, token].map(part => part.slice(0, 15)).join("."),

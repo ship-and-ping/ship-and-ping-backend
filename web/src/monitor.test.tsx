@@ -228,7 +228,7 @@ it.each(vectors.version)("저장된 해결 버전에도 표시 허용 목록을 
   setup("/apps/a/issues/i", [], rows => {
     Object.assign((rows.incidents as object[])[0], { status: "resolved", resolved_version: input });
   });
-  expect(await screen.findByText("해결 버전 · " + (input === "2025550100" ? input : "버전 형식 확인 필요"))).toBeTruthy();
+  expect(await screen.findByText("해결 버전 · 버전 형식 확인 필요")).toBeTruthy();
 });
 it("첫 기록 대기 화면은 안내와 배지를 하나씩 표시한다", async () => {
   const { container } = setup("/apps/a", [], rows => {
