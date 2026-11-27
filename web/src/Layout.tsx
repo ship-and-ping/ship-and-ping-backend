@@ -84,6 +84,8 @@ export function Shell({
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const { pathname, hash: currentHash } = useLocation();
+  const appPath = pathname.match(/^\/apps\/([^/]+)(?:\/(?:features\/[^/]+|issues\/[^/]+|notifications))?\/?$/);
+  const dashboard = appPath && !["new","notifications"].includes(appPath[1]) && !pathname.endsWith("/features/deep");
   const [heading, setHeading] = useState<AppHeading>();
   const currentName =
     heading && pathname.split("/")[2] === heading.id
@@ -100,7 +102,7 @@ export function Shell({
   }
   return (
     <div
-      className="shell"
+      className={"shell" + (dashboard ? " dashboard-shell" : "")}
       onKeyDown={(e) => {
         if (open && e.key === "Escape") close();
       }}
@@ -174,6 +176,20 @@ export function Shell({
           )}
         </nav>
       </aside>
+      {dashboard && <nav className="dashboard-tabs" aria-label="대시보드 메뉴">
+        {[
+          ["앱 홈", "", "M3 10 12 3l9 7v10h-6v-6H9v6H3Z"],
+          ["기능 목록", "#features", "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z"],
+          ["문제" + (heading?.id === appPath[1] && heading.issues != null ? " "+heading.issues+"개" : ""), "#issues", "M12 3 2 21h20Z M12 9v5m0 2v1"],
+          ["알림 설정", "/notifications", "M5 16h14l-2-3V9a5 5 0 0 0-10 0v4Z M10 20h4"],
+        ].map(([label,suffix,icon]) => {
+          const base = "/apps/" + appPath[1];
+          const current = pathname + currentHash === base + suffix ||
+            (suffix.startsWith("#") && pathname.startsWith(base + "/" + suffix.slice(1) + "/"));
+          return <Link key={label} to={base + suffix} aria-current={current ? "page" : undefined} onClick={() => setOpen(false)}>
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d={icon}/></svg>{label}</Link>;
+        })}
+      </nav>}
       <main id="main" className="workspace">
         <CurrentAppName.Provider value={setHeading}>
           {children}

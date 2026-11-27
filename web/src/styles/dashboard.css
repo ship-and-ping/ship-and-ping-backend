@@ -1,0 +1,142 @@
+.shell.dashboard-shell { display: block; }
+.dashboard-shell .compact {
+  display: flex; justify-content: start; gap: 16px; padding: 10px max(16px, calc((100% - 1088px)/2));
+}
+.dashboard-shell .compact .brand img { width: 30px; height: 30px; }
+.dashboard-shell .compact > span { padding-inline-start: 16px; border-inline-start: 1px solid var(--sp-line); font-weight: 700; }
+.dashboard-shell .compact > button { margin-inline-start: auto; background: var(--sp-surface); color: var(--sp-ink); }
+.dashboard-shell .compact > a[aria-label] { display: none; }
+.dashboard-shell .rail { display: none; }
+.dashboard-shell .rail.open {
+  display: block; height: auto; max-height: 60vh; position: relative; border: 0;
+  padding: 8px max(16px, calc((100% - 1088px)/2)); overflow: auto;
+}
+.dashboard-shell .rail > .brand { display: none; }
+.dashboard-shell .rail nav { margin: 0; }
+.dashboard-tabs {
+  display: flex; gap: 30px; max-width: 1152px; margin: auto; padding: 0 32px;
+  border-bottom: 1px solid var(--sp-line);
+}
+.dashboard-tabs a {
+  gap: 5px; min-height: 56px; text-decoration: none; color: var(--sp-ink-2);
+  border-bottom: 3px solid transparent; font-size: .94rem;
+}
+.dashboard-tabs [aria-current] { border-color: var(--sp-btn); color: var(--sp-ink); font-weight: 700; }
+.dashboard-shell .workspace { width: 100%; max-width: 1152px; padding: 32px; }
+.dashboard-title, .feature-list header, .dashboard-channels header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+}
+.monitor .dashboard-title h1 { font-size: 2.25rem; margin: 0; }
+.dashboard-shell .dashboard-title { margin-bottom: -4px; }
+.dashboard-title small, .feature-list small, .incident-ticket small, .hour-row time { color: var(--sp-ink-2); }
+.monitor .status-overview, .monitor .dashboard-state, .monitor .issue-overview,
+.monitor .feature-list, .monitor .other-hours, .dashboard-channels .panel, .monitor .usage-panel {
+  background: var(--sp-surface); border: 1px solid var(--sp-line); border-radius: 24px; box-shadow: none;
+}
+.monitor .status-overview {
+  display: grid; grid-template-columns: minmax(0,1fr) minmax(0,.85fr); align-items: center;
+  padding: 36px 44px 40px; gap: 36px; overflow-wrap: anywhere;
+}
+.status-overview dl, .status-overview dd { margin: 0; }
+.problem-count dt, .incident-ticket dt { font-size: .875rem; font-weight: 700; }
+.problem-count dt::before { content: "⚠"; color: var(--sp-bad-ink); margin-inline-end: .4em; }
+.problem-count dd { font-size: 1.75rem; font-weight: 700; line-height: 1.15; margin-block: 10px 14px; }
+.problem-count dd strong { font-size: 5rem; letter-spacing: -.065em; margin-right: 6px; }
+.problem-count h2 { font-size: 1.5rem; margin: 0; }
+.incident-ticket { padding: 24px; border-radius: 18px; background: var(--sp-surface-2); }
+.ticket-heading { display: flex; gap: 12px; align-items: center; }
+.ticket-symbol { font-size: 1.15rem; padding: 7px 10px; background: var(--sp-surface); color: var(--sp-bad-ink); border-radius: 12px; }
+.incident-ticket dl { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.incident-ticket dd { font-size: 1.45rem; font-weight: 750; line-height: 1.3; }
+.incident-ticket p { color: var(--sp-ink-2); font-size: .94rem; margin-block: 10px 16px; }
+.dashboard-shell .button, .dashboard-shell .issue-copy button { border-radius: 8px; min-height: 46px; }
+.dashboard-lower { display: grid; grid-template-columns: minmax(0,1.55fr) minmax(0,1fr); gap: 20px; align-items: start; }
+.monitor .feature-list, .monitor .other-hours { padding: 26px 28px; gap: 0; }
+.dashboard-lower h2 { font-size: 1.3rem; margin: 0; }
+.feature-list header { padding-bottom: 12px; }
+.monitor #features .feature-row {
+  display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto auto 12px; gap: 10px;
+  align-items: center; min-height: 59px; border-top: 1px solid var(--sp-line); text-decoration: none;
+  color: var(--sp-ink); font-size: .875rem; padding: 9px 0; overflow-wrap: anywhere;
+}
+.monitor #features .feature-row:hover { background: var(--sp-surface-2); }
+.monitor #features .feature-row h3 { font-size: 1rem; margin: 0; }
+.row-state { font-weight: 700; }
+.row-state.problem > span { color: var(--sp-bad-ink); }
+.row-state.healthy > span { color: var(--sp-ok-ink); }
+.row-next { font-size: 1.35rem; color: var(--sp-ink-2); }
+.feature-row p, .feature-row .row-metrics { grid-column: 1/-1; }
+.feature-list .speed-toggle { margin-top: 4px; font-size: .875rem; }
+.hour-row { display: grid; grid-template-columns: 4.4em 1fr; gap: 8px; padding-block: 14px; font-size: .94rem; }
+.hour-row + .hour-row { border-top: 1px solid var(--sp-line); }
+.hour-row:last-child { padding-bottom: 0; }
+.hour-row p { color: var(--sp-ink-2); }
+.monitor .dashboard-state, .monitor .issue-overview { color: var(--sp-ink); padding: 32px; margin: 0; justify-items: start; gap: 12px; }
+.monitor .dashboard-state p, .monitor .issue-overview p { color: var(--sp-ink-2); margin: 0; }
+.monitor .dashboard-state h2, .monitor .issue-overview h2 { font-size: clamp(1.45rem, 3vw, 2.4rem); margin: 0; }
+.dashboard-shell .monitor .dashboard-state { margin-top: 0; }
+.monitor .dashboard-state :focus-visible { outline-color: var(--sp-focus); }
+.issue-overview .hero-card { color: var(--sp-ink); background: none; border: 0; padding: 0; margin: 0; box-shadow: none; }
+.monitor .issue-overview .hero-card { margin: 0; }
+.issue-copy { max-width: 100%; }
+.issue-copy .sp-copy, .dashboard-channels { display: grid; gap: 12px; }
+.issue-copy .sp-copy > :empty { display: none; }
+.issue-copy button { min-height: 48px; }
+.dashboard-channels .panel { padding: 24px 28px; justify-items: start; }
+.dashboard-channels header { width: 100%; }
+.dashboard-channels header small { border-radius: 999px; background: var(--sp-surface-2); padding: 3px 10px; }
+.dashboard-channels .push-channel { border-inline-start: 4px solid var(--sp-focus); }
+.dashboard-dock { display: none; }
+.monitor .chart-fold > summary { display: none; }
+.flow-plots { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; }
+.flow-plots .flow-figure { min-width: 0; }
+.flow-plots .flow-coordinates { margin-top: 20px; }
+.flow-plots .flow-y { position: relative; }
+.flow-plots .flow-y span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; }
+.flow-plots .flow-plot { border-top: 0; }
+.flow-plots .flow-figure .flow-plot { height: 168px; }
+@media (min-width: 761px) {
+  .monitor .dashboard-state:has(+ .usage-panel) {
+    display: grid; grid-template-columns: auto minmax(0,1fr) auto;
+    align-items: center; gap: 4px 18px; padding: 20px 28px;
+  }
+  .dashboard-state:has(+ .usage-panel) p { grid-column: 2; }
+  .dashboard-state:has(+ .usage-panel) .button { grid-column: 3; grid-row: 1 / 3; }
+  .flow-plots .flow-figure { display: grid; grid-template-rows: subgrid; grid-row: span 4; row-gap: 4px; }
+  .flow-plots .flow-figure .flow-coordinates { grid-row: 4; margin-top: 8px; }
+  .flow-plots .flow-figure .flow-key { grid-row: 3; margin: 0; }
+  .flow-plots .flow-figure figcaption { margin-top: 0; }
+}
+@media (max-width: 760px) {
+  .dashboard-shell .compact { padding: 4px 16px; gap: 12px; }
+  .dashboard-shell .compact > span { flex: 1 1 0; order: 0; }
+  .dashboard-tabs { flex-wrap: wrap; justify-content: space-between; gap: 0 6px; padding: 0 16px; }
+  .dashboard-tabs a { font-size: .83rem; min-height: 50px; }
+  .dashboard-shell .workspace { padding: 24px 16px calc(88px + env(safe-area-inset-bottom)); }
+  .dashboard-shell .monitor { gap: 12px; }
+  .dashboard-shell .workspace:has(.dashboard-dock) { padding-bottom: 0; }
+  .dashboard-shell .workspace :focus-visible { scroll-margin-block: 16px 84px; }
+  .monitor .dashboard-title h1 { font-size: 1.75rem; }
+  .dashboard-shell .dashboard-title { margin: 0; }
+  .monitor .status-overview { grid-template-columns: 1fr; padding: 23px 20px; gap: 20px; }
+  .problem-count dd strong { font-size: 3.625rem; }
+  .problem-count h2 { font-size: 1.31rem; }
+  .incident-ticket { padding: 15px; }
+  .incident-ticket p { margin: 8px 0 0; }
+  .dashboard-shell .dashboard-primary { display: none; }
+  .dashboard-lower, .flow-plots { grid-template-columns: 1fr; gap: 12px; }
+  .monitor .feature-list, .monitor .other-hours, .monitor .usage-panel { padding: 18px 15px; }
+  .monitor #features .feature-row { grid-template-columns: minmax(0,1fr) minmax(0,1fr) 12px; gap: 3px 8px; }
+  .feature-row .row-next { grid-column: 3; grid-row: 1/3; }
+  .monitor .dashboard-state, .monitor .issue-overview { padding: 22px 18px; }
+  .dashboard-dock {
+    display: grid; position: sticky; bottom: 0; z-index: 3; margin-inline: -16px;
+    padding: 8px 16px max(8px,env(safe-area-inset-bottom));
+    background: var(--sp-surface); border-top: 1px solid var(--sp-line);
+  }
+  .dashboard-dock .button, .issue-copy, .issue-copy .sp-copy button, .issue-dock button { width: 100%; min-height: 48px; }
+  .issue-dock:has(textarea) { position: static; }
+  .issue-dock .sp-copy > :empty { display: none; }
+  .monitor .chart-fold > summary { display: list-item; }
+  .dashboard-channels .panel { padding: 20px; }
+}

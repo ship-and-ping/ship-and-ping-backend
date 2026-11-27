@@ -6,6 +6,7 @@ import { status, StatusBadge, Timeline, IssueListItem } from "./IncidentSummary"
 import type { Gateway } from "./data";
 import { Hero, CurrentAppName } from "./Layout";
 import { Chart } from "./Chart";
+import "./styles/dashboard.css";
 import { displayText, sanitizeRoute } from "./normalize";
 import { buildIssuePrompt, displayVersion, noErrorSamples } from "./issue-prompt";
 import {
@@ -17,7 +18,7 @@ import {
 } from "./monitor-data";
 
 const day = 86400000;
-const when = (s: string) => new Date(s).toLocaleString("ko-KR", { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
+const when = (s: string) => new Date(s).toLocaleString("ko-KR", { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Seoul" });
 const time = (ms: number | string | null) =>
   typeof ms === "string" ? displayText(ms) : formatDuration(ms);
 
@@ -35,8 +36,7 @@ const route = (f: Feature) =>
   displayText(
     [f.method, sanitizeRoute(f.route ?? "")].filter(Boolean).join(" "),
   );
-function details(i: Incident, f?: Feature) {
-  const m = i.metric_worst ?? i.metric_at_open;
+function details(i: Incident, m: Incident["metric_at_open"], f?: Feature) {
   if (!m) return when(i.opened_at) + "부터";
   if (i.kind === "unconfirmed")
     return "사용 결과를 확인하지 못했어요 · " + when(i.opened_at) + "부터";
@@ -152,6 +152,7 @@ function Outcomes({stats}: {stats:ReturnType<typeof summarize>}) {
   return <p>성공 {stats.successes}건 · 실패 {stats.failures}건 · 중단 {stats.abandoned}건 · 결과 미확인 {stats.unconfirmed}건 · 실패율 {rate}</p>;
 }
 function Home({ data, base }: { data: Monitor; base: string }) {
+  const [showSpeed, setShowSpeed] = useState(false);
   const open = data.incidents.filter((i) => i.status === "open");
   const find = (i: Incident) =>
     data.features.find((f) => f.id === i.feature_id);
@@ -165,97 +166,92 @@ function Home({ data, base }: { data: Monitor; base: string }) {
   const updated = open.find((i) => i.id === data.verificationIncidentId && data.verification?.version != null);
   const latest = updated ? data.versions.find((v) => v.version === data.verification?.version) : data.versions[0];
   const bannerVersion = updated ? data.verification?.version : latest?.version;
+  const first = open[0];
+  const failed = first?.metric_at_open?.failures;
+  const total = rows.reduce((sum, row) => sum + row.s.total, 0);
+  const hasRecords = total > 0;
+  const sparse = total < 4 && (hasRecords || !!latest);
+  const stateTitle = first ? title(find(first), first) : sparse ? "최근 사용 기록이 적어요"
+    : hasRecords ? "모두 괜찮아요" : "첫 기록을 기다리고 있어요";
+  const action = first ? {to:base + "/issues/" + first.id, label:"문제 보기"}
+    : hasRecords ? {to:base + "#features", label:"기능별 상태 보기"} : {to:base + "/connect", label:"연결 확인하기"};
+  const visible = new Map(rows.map(({f}) => [f.id, f]));
+  const samples = new Map<string, Monitor["stats"]>();
+  for (const row of data.stats) {
+    if (!visible.has(row.feature_id) || !row.total) continue;
+    const key = row.feature_id + "/" + row.bucket;
+    const group = samples.get(key);
+    if (group) group.push(row);
+    else samples.set(key, [row]);
+  }
+  const recent = Array.from(samples.values(), group => ({
+    at:Date.parse(group[0].bucket), feature:group[0].feature_id, ...summarize(group),
+  })).sort((a,b) => b.at - a.at);
+  const last = recent[0];
+  const earlier = recent.filter(row => Math.floor(row.at / 3600000) !== Math.floor(last.at / 3600000));
+  const slowest = earlier.sort((a,b) => (b.median ?? 0) - (a.median ?? 0))[0];
+  const events = slowest ? [last, slowest] : recent.slice(0,1);
   return (
     <>
-      <h1 tabIndex={-1}>{displayText(data.name)}</h1>
-      <Hero
-        badge={<StatusBadge state={open.length ? "open" : data.versions.length ? "healthy" : "waiting"} />}
-        mood={open.length ? "worried" : latest ? "relieved" : "waiting"}
-        title={
-          open.length
-            ? title(find(open[0]), open[0])
-            : latest
-              ? "모두 괜찮아요"
-              : "첫 기록을 기다리고 있어요"
-        }
-        detail={open.length ? details(open[0], find(open[0])) : latest ? "열린 문제가 없어요" : "연결한 앱을 한 번 사용하면 첫 기록을 확인할 수 있어요."}
-      />
-      {latest &&
-        data.versions.every(
-          (v) => Date.parse(v.last_seen_at) < data.now - day,
-        ) && (
-          <p>
-            하루 동안 기록이 없어요 — 사용자가 없었거나 연결이 끊겼을 수 있어요
-          </p>
-        )}
-      {bannerVersion != null && (
-        <p className="panel">
-          새 버전 {displayVersion(bannerVersion)} 감지
-          {latest && " (" + when(observedAt(latest, updated)) + ")"}{" "}
-          {updated && (
-            <Link to={base + "/issues/" + updated.id + "#verification"}>
-              업데이트 후 확인
-            </Link>
-          )}
-        </p>
-      )}
-      <section id="issues">
-        <h2>문제</h2>
-        {data.incidents.length ? (
-          data.incidents.map((i) => (
-            <IssueListItem key={i.id} href={base + "/issues/" + i.id}
-              summary={title(find(i), i)} state={i.status} metric={details(i, find(i))} />
-          ))
-        ) : (
-          <p>열린 문제가 없어요.</p>
-        )}
+      <div className="dashboard-title"><div><small>앱 홈</small><h1 tabIndex={-1}>{displayText(data.name)}</h1></div>
+        <small><time dateTime={new Date(data.now).toISOString()}>{when(new Date(data.now).toISOString())} 조회</time></small></div>
+      {first ? <section className="panel status-overview" aria-label="앱 상태 요약">
+        <div className="problem-count"><dl><dt>열린 문제 수</dt><dd><strong>{open.length}</strong>개</dd></dl><h2>{stateTitle}</h2></div>
+        <div className="incident-ticket">
+          <div className="ticket-heading"><span className="ticket-symbol" aria-hidden="true">⚠</span><div>
+            <small>{displayText(find(first)?.name ?? "기능")} · 감지 당시</small>
+            {first.kind === "failure" && failed != null ? <dl><dt>실패 건수</dt><dd>{failed}건</dd></dl> : <p>{details(first, first.metric_at_open, find(first))}</p>}
+          </div></div>
+          <p>처음 감지 · <time dateTime={first.opened_at}>{when(first.opened_at)}</time></p>
+          <Link className="button dashboard-primary" to={action.to}>{action.label}</Link>
+        </div>
+      </section> : <section className="panel dashboard-state hero-card" aria-label="앱 상태 요약">
+        {sparse ? <span className="status-badge waiting">기록 적음</span> : <StatusBadge state={hasRecords ? "healthy" : "waiting"} />}<h2>{stateTitle}</h2>
+        <p role="status">{sparse ? "최근 24시간 사용 " + total + "건 · 열린 문제가 없어요." : hasRecords ? "열린 문제가 없어요." : "연결한 앱을 한 번 사용하면 첫 기록을 확인할 수 있어요."}</p>
+        <Link className="button dashboard-primary" to={action.to}>{action.label}</Link>
+      </section>}
+      <div className="dashboard-lower">
+        <section className="panel feature-list" id="features">
+          <header><h2>기능별 상태</h2><small>최근 24시간 · 문제 있는 기능 먼저</small></header>
+          {rows.length ? rows.map(({f,s}) => {
+            const problem = open.find(i => i.feature_id === f.id);
+            const baseline = f.baselines;
+            const low = baseline?.observed_min_ms ?? s.min;
+            const high = baseline?.observed_max_ms ?? s.max;
+            return <Link key={f.id} className="feature-row" to={base + "/features/" + f.id}>
+              <h3>{displayText(f.name)}</h3>
+              <span className={"row-state " + (problem ? "problem" : s.total ? "healthy" : "waiting")}>
+                <span aria-hidden="true">{problem ? "⚠" : s.total ? "✓" : "◷"}</span> {problem ? "문제 있어요" : s.total ? "괜찮아요" : "사용을 기다려요"}
+              </span>
+              <span>{s.total}건 사용</span>{f.kind !== "deep" && <span>{s.failures}건 실패</span>}<span aria-hidden="true" className="row-next">›</span>
+              {showSpeed && <span className="row-metrics">보통 걸린 시간은 {time(s.median)}예요.{" "}
+                {baseline?.p50_ms != null ? "평소 " + time(baseline.p50_ms) : low != null && high != null
+                  ? "지금까지 " + (baseline?.sample_count ?? s.total) + "건, " + time(low) + "~" + time(high) : "평소 속도를 알아가는 중이에요"}</span>}
+              {f.kind === "deep" && <Outcomes stats={s} />}
+            </Link>;
+          }) : <p>아직 기록된 기능이 없어요.</p>}
+          {rows.length > 0 && <button className="speed-toggle secondary" aria-expanded={showSpeed}
+            onClick={() => setShowSpeed(value => !value)}>기능별 속도 {showSpeed ? "접기" : "보기"}</button>}
+        </section>
+        <section className="panel other-hours"><h2>다른 시간대 기록</h2>
+          {events.length ? events.map(row => <div className="hour-row" key={row.at}>
+            <time dateTime={new Date(row.at).toISOString()}>{new Date(row.at).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Seoul"})}</time>
+            <div><strong>{displayText(visible.get(row.feature)?.name ?? "기능")} · {row.failures ? "실패 " + row.failures + "건" : "사용 " + row.total + "건"}</strong>
+            <p>{row.median === null ? "시간 측정값이 없어요." : "보통 " + time(row.median)}</p></div></div>) : <p>사용 기록이 도착하면 여기에 보여요.</p>}
+        </section>
+      </div>
+      <section id="issues" className="panel dashboard-history"><h2>문제 기록</h2>
+        {data.incidents.length ? data.incidents.map(i => <IssueListItem key={i.id} href={base + "/issues/" + i.id}
+          summary={title(find(i), i)} state={i.status} metric={(i.metric_worst ? "가장 나빴을 때 · " : "감지 당시 · ") + details(i, i.metric_worst ?? i.metric_at_open, find(i))} />) : <p>열린 문제가 없어요.</p>}
       </section>
-      <section id="features">
-        <h2>기능 · 최근 24시간</h2>
-        <Link className="button" to={base + "/features/deep/new"}>깊게 볼 기능 추가</Link>
-        {rows.length ? (
-          rows.map(({ f, s }) => {
-            const issue = open.find((i) => i.feature_id === f.id);
-            const b = f.baselines;
-            const low = b?.observed_min_ms ?? s.min,
-              high = b?.observed_max_ms ?? s.max;
-            return (
-              <Link
-                className="panel app-card"
-                key={f.id}
-                to={base + "/features/" + f.id}
-              >
-                <h3>{displayText(f.name)}</h3>
-                {f.kind === "deep" && <Outcomes stats={s} />}
-                <span className={"feature-status " + (issue ? "problem" : s.total ? "healthy" : "")}>
-                  <span aria-hidden="true">{issue ? "⚠ " : s.total ? "✓ " : "◷ "}</span>
-                  {issue
-                    ? title(f, issue)
-                    : s.total
-                      ? "괜찮아요"
-                      : "사용을 기다려요"}
-                </span>
-                <p>
-                  사용 {s.total}건 중 {s.failures}건이 실패했어요. 보통 걸린 시간은 {time(s.median)}예요.
-                </p>
-                {b?.p50_ms != null
-                  ? "평소 " + time(b.p50_ms)
-                  : low != null && high != null
-                    ? "지금까지 " +
-                      (b?.sample_count ?? s.total) +
-                      "건, " +
-                      time(low).replace(/초$/, "") +
-                      "~" +
-                      time(high)
-                    : "평소 속도를 알아가는 중이에요"}
-              </Link>
-            );
-          })
-        ) : (
-          <p>아직 기록된 기능이 없어요.</p>
-        )}
-      </section>
-      <Link to={base + "/connect"}>연결과 기능 이름 보기</Link>
+      {latest && data.versions.every(v => Date.parse(v.last_seen_at) < data.now - day) &&
+        <p>하루 동안 기록이 없어요 — 사용자가 없었거나 연결이 끊겼을 수 있어요</p>}
+      {bannerVersion != null && <p>새 버전 {displayVersion(bannerVersion)} 감지
+        {latest && " (" + when(observedAt(latest, updated)) + ")"}{" "}
+        {updated && <Link to={base + "/issues/" + updated.id + "#verification"}>업데이트 후 확인</Link>}</p>}
+      <div className="actions"><Link to={base + "/features/deep/new"}>깊게 볼 기능 추가</Link>
+        <Link to={base + "/connect"}>연결과 기능 이름 보기</Link></div>
+      <div className="dashboard-dock"><Link className="button" to={action.to}>{action.label}</Link></div>
     </>
   );
 }
@@ -277,6 +273,18 @@ function FeaturePage({
       r.feature_id === f.id && Date.parse(r.bucket) >= data.now - days * day,
   );
   const summary = summarize(rows);
+  const {id = ""} = useParams();
+  const problem = data.incidents.find(i => i.feature_id === f.id && i.status === "open");
+  const base = "/apps/" + encodeURIComponent(id);
+  const destination = problem ? base + "/issues/" + problem.id : base + "#features";
+  const action = problem ? "문제 보기" : "기능 목록 보기";
+  const [expanded, setExpanded] = useState(() => !window.matchMedia?.("(max-width: 760px)").matches);
+  useEffect(() => {
+    const media = window.matchMedia?.("(max-width: 760px)");
+    const resize = () => setExpanded(!media.matches);
+    media?.addEventListener("change", resize);
+    return () => media?.removeEventListener("change", resize);
+  }, []);
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -300,26 +308,23 @@ function FeaturePage({
     <>
       <h1 tabIndex={-1}>{displayText(f.name)}</h1>
       {f.kind === "deep" && <><Outcomes stats={summary} /><Link to={"../deep/" + encodeURIComponent(f.id)} relative="path">추가 연결 요청과 첫 결과 보기</Link></>}
-      <Hero
-        title={
-          summary.total
-            ? "사용 " +
-              summary.total +
-              "건 중 " +
-              summary.failures +
-              "건 실패했어요"
-            : "이 기간에는 사용 기록이 없어요"
-        }
-        detail={"보통 걸린 시간 " + time(summary.median)}
-      />
+      <section className="panel dashboard-state">
+        <StatusBadge state={problem ? "open" : summary.total ? "healthy" : "waiting"} />
+        <h2>{problem ? title(f, problem) : summary.total ? displayText(f.name) + " 기능은 괜찮아요" : "이 기간에는 사용 기록이 없어요"}</h2>
+        <p>최근 {days === 1 ? "24시간" : "7일"} 사용 {summary.total}건 중 {summary.failures}건 실패 · 보통 시간 {time(summary.median)}</p>
+        <Link className="button dashboard-primary" to={destination}>{action}</Link>
+      </section>
       <section className="panel usage-panel">
         <h2>사용 흐름</h2>
+        <details className="chart-fold" open={expanded} onToggle={e => setExpanded(e.currentTarget.open)}>
+        <summary>그래프와 표 보기</summary>
         <div className="chart-period" role="group" aria-label="조회 기간">{[1, 7].map((d) => (
           <button key={d} aria-pressed={d === days} onClick={() => period(d)}>
             {d === 1 ? "24시간" : "7일"}
           </button>
         ))}</div>
         <Chart key={days} rows={rows} days={days} now={data.now} baseline={f.baselines?.p50_ms ?? null} />
+        </details>
       </section>
       <section>
         <h2>최근 버전 비교</h2>
@@ -384,6 +389,7 @@ function FeaturePage({
         <button disabled={busy} aria-busy={busy}>{busy ? "저장하는 중" : "저장"}</button>
         <p role="status">{result}</p>
       </form>
+      <div className="dashboard-dock"><Link className="button" to={destination}>{action}</Link></div>
     </>
   );
 }
@@ -501,6 +507,7 @@ function Issue({
     errors: data.samples,
   };
   const prompt = buildIssuePrompt(input);
+  const copyTitle = prompt.strongCount ? "그 줄 빼고 요청문 복사" : again ? "다시 보낼 요청문 복사" : "AI 조사 요청문 복사";
   const hasFailureCounts = i.kind === "failure" && metric?.total != null && metric.failures != null;
   function summaryTitle() {
     if (i.status === "resolved") return verificationMessage();
@@ -513,10 +520,10 @@ function Issue({
   function summaryDetail() {
     if (i.status === "dismissed" && i.closed_at)
       return when(new Date(Date.parse(i.closed_at) + day).toISOString()) + "까지 다시 알리지 않아요.";
-    if (i.status === "resolved") return "해결 전 기록 · " + details(i, f);
+    if (i.status === "resolved") return "해결 전 기록 · " + details(i, metric, f);
     if (i.kind === "unconfirmed" && metric?.unconfirmed != null)
       return "사용 결과를 확인하지 못한 기록 " + displayText(String(metric.unconfirmed)) + "건";
-    return hasFailureCounts && !i.metric_at_open?.consecutive ? "감지 구간 · 최근 30분" : details(i, f);
+    return hasFailureCounts && !i.metric_at_open?.consecutive ? "감지 구간 · 최근 30분" : details(i, metric, f);
   }
   async function close() {
     setBusy(true);
@@ -533,10 +540,13 @@ function Issue({
   return (
     <>
       <h1 tabIndex={-1}>{displayText(f.name)} · {{ failure: "실패", slow: "느림", unconfirmed: "결과 미확인" }[i.kind]} 문제 상세</h1>
-      {f.kind === "deep" && <section><h2>문제 감지 구간부터의 결과</h2><Outcomes stats={summarize(data.stats.filter(r => r.feature_id === f.id && Date.parse(r.bucket) <= Date.parse(i.closed_at ?? new Date(data.now).toISOString())))} /></section>}
-      <Hero badge={<StatusBadge state={i.status} />}
+      <section aria-label="문제 상태" className="panel issue-overview">
+      <Hero showSheep={false} badge={<StatusBadge state={i.status} />}
         mood={i.status === "open" ? "worried" : "relieved"} arrived={i.status === "resolved"}
         title={summaryTitle()} detail={summaryDetail()} />
+      <div className="issue-copy"><Copy compact text={prompt.text} title={copyTitle} /></div>
+      </section>
+      {f.kind === "deep" && <section><h2>문제 감지 구간부터의 결과</h2><Outcomes stats={summarize(data.stats.filter(r => r.feature_id === f.id && Date.parse(r.bucket) <= Date.parse(i.closed_at ?? new Date(data.now).toISOString())))} /></section>}
       <div className="issue-columns">
         <div className="issue-history">
           <section>
@@ -599,11 +609,6 @@ function Issue({
                 </details>
               )}
             </details>
-            <Copy compact text={prompt.text} title={prompt.strongCount
-                ? "그 줄 빼고 복사"
-                : again
-                  ? "AI에 다시 보낼 내용 복사"
-                  : "AI에 보낼 내용 복사"} />
             {prompt.strongCount > 0 && (
               <><p>그대로 복사하면 강함으로 표시한 줄도 데이터 블록에 포함돼요.</p>
               <Copy compact text={buildIssuePrompt(input, true).text} title="그대로 복사" /></>
@@ -626,6 +631,7 @@ function Issue({
           <p role="status">{feedback}</p>
         </div>
       </div>
+      <div className="dashboard-dock issue-dock"><Copy compact text={prompt.text} title={copyTitle} /></div>
     </>
   );
 }
