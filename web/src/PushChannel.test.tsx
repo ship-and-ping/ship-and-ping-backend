@@ -2,7 +2,7 @@ import {cleanup, fireEvent, render, screen, waitFor} from "@testing-library/reac
 import {afterEach, expect, it, vi} from "vitest";
 import type {Gateway} from "./data";
 import {PushChannel} from "./PushChannel";
-import {startPwa} from "./push";
+import {PushCleanupError,startPwa} from "./push";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 function setup(home: boolean, permission: NotificationPermission = "granted", agent = "iPhone", rotated = false, loggedOut = false) {
@@ -17,9 +17,10 @@ function setup(home: boolean, permission: NotificationPermission = "granted", ag
   vi.stubGlobal("Notification",{permission:"default",requestPermission});
   vi.stubGlobal("PushManager",class {});
   vi.stubEnv("VITE_VAPID_PUBLIC_KEY","BA");
+  const operations = {registerPush:vi.fn(),removeEndpoint:vi.fn()};
   const api = {devices:vi.fn(async () => rotated || loggedOut ? [{id:"old",endpoint:sub.endpoint,user_agent:"iPhone",
     created_at:"2026-11-27",vapid_fingerprint:rotated ? "03" : "04"}] : []),
-    registerPush:vi.fn(),removeEndpoint:vi.fn()};
+    ...operations,withPushRegistration:vi.fn((action: (ops:typeof operations) => Promise<void>) => action(operations))};
   render(<PushChannel api={api as unknown as Gateway} app="mine" settings={{push:true,email:false,connected:false,broken:false,channel:null}} reload={vi.fn()}/>);
   return {api,manager,sub,old,requestPermission};
 }
@@ -61,6 +62,16 @@ it("offers one-tap opt-in after login even if another saved device and app push 
   fireEvent.click(screen.getByRole("button",{name:"푸시 켜기"}));
   await waitFor(() => expect(api.registerPush).toHaveBeenCalledWith("mine",sub.toJSON(),"PC"));
   expect(manager.subscribe).toHaveBeenCalledOnce();
+});
+it("explains a cleanup failure and retries opt-in from the same screen", async () => {
+  const {api,manager} = setup(true);
+  api.withPushRegistration.mockRejectedValueOnce(new PushCleanupError());
+  fireEvent.click(screen.getByRole("button",{name:"푸시 켜기"}));
+  await screen.findByText(/이전 회원의 푸시 구독을 정리하지 못했어요/);
+  expect(manager.subscribe).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button",{name:"다시 시도"}));
+  await screen.findByText("이 기기에서 푸시를 받을 수 있어요.");
+  expect(api.registerPush).toHaveBeenCalledOnce();
 });
 it("prompts Android users to install using the deferred install event", async () => {
   setup(false,"granted","Android");

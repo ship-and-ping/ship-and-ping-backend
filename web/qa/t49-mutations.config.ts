@@ -9,11 +9,16 @@ export default defineConfig(({mode}) => ({
     enforce: "pre",
     apply: "serve",
     transform(source, id) {
-      if (mode === "early-member" || mode === "skip-revocation") {
+      if (mode === "skip-push-lock") {
+        if (id.endsWith("/src/push-lock.ts")) return source.replace("navigator.locks.request(name, action)", "action()");
+        return;
+      }
+      if (["early-member","skip-revocation","ignore-owner","skip-enable-retry"].includes(mode)) {
         if (!id.endsWith("/src/data.ts")) return;
-        return mode === "early-member"
-          ? source.replace("const current = ++revision;", "const current = ++revision; write(lastMemberKey,user);")
-          : source.replace("if (saved && saved", "if (false && saved && saved");
+        if (mode === "early-member") return source.replace("const marker = read(cleanupKey,pending);", "write(lastMemberKey,user); const marker = read(cleanupKey,pending);");
+        if (mode === "skip-revocation") return source.replace("if (state === \"owned\") await checkTarget(target,true);","void target;");
+        if (mode === "ignore-owner") return source.replace('if (state === "owned" ||', 'if (state === "other" || state === "owned" ||');
+        return source.replace("await finishCleanup(() => observedMember ?? read(lastMemberKey,null));","void action;");
       }
       if (id.endsWith("/src/push.ts")) {
         return source.replace("notices?.forEach(notice => notice.close());", "void notices;");
@@ -22,7 +27,7 @@ export default defineConfig(({mode}) => ({
         return source.replace("devices.find(d => d.endpoint === endpoint)", "devices[0]");
       }
       if (id.endsWith("/src/data.ts")) {
-        return source.replace("unregister(proof), sub.unsubscribe()", "unregister(proof), true");
+        return source.replace("!await sub.unsubscribe()", "false");
       }
     },
   }],

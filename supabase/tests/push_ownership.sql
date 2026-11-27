@@ -71,6 +71,14 @@ select set_config('test.proof',encode(extensions.digest(endpoint || chr(10) || p
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000048',true);
 set local role authenticated;
 select revoke_push_by_proof(repeat('0',64));
+select is(cleanup_push_target('00000000-0000-0000-0000-000000000048','https://web.push.apple.com/revoke',
+ current_setting('test.proof'),true),'other','matching proof cannot delete a different owner');
+select is(cleanup_push_target('00000000-0000-0000-0000-000000000049','https://web.push.apple.com/revoke',
+ repeat('0',64),true),'other','owner and endpoint cannot replace browser proof');
+select is(cleanup_push_target('00000000-0000-0000-0000-000000000049','https://web.push.apple.com/different',
+ current_setting('test.proof'),true),'missing','cleanup is bound to the captured endpoint');
+select is(cleanup_push_target('00000000-0000-0000-0000-000000000049','https://web.push.apple.com/revoke',
+ current_setting('test.proof'),false),'owned','next member may check the old browser proof');
 reset role;
 select ok(exists(select from push_subscriptions where endpoint='https://web.push.apple.com/revoke'),'incorrect proof preserves device');
 set local role authenticated;
@@ -78,5 +86,13 @@ select revoke_push_by_proof(current_setting('test.proof'));
 reset role;
 select is_empty($$select from push_subscriptions where endpoint='https://web.push.apple.com/revoke'$$,'next account can replay exact revocation');
 select ok(not has_function_privilege('anon','revoke_push_by_proof(text)','execute'),'anonymous revocation denied');
+select register_push(current_setting('test.second')::uuid,'https://web.push.apple.com/revoke','B'||repeat('A',86),repeat('Z',22),'PC');
+set local role authenticated;
+select is(cleanup_push_target('00000000-0000-0000-0000-000000000049','https://web.push.apple.com/revoke',
+ current_setting('test.proof'),true),'other','late cleanup preserves re-registration with identical endpoint and keys');
+select is(cleanup_push_target('00000000-0000-0000-0000-000000000048',null,
+ current_setting('test.proof'),true),'owned','legacy marker deletes only its recorded member and proof');
+select is_empty($$select id from push_subscriptions where endpoint='https://web.push.apple.com/revoke'$$,'confirmed target deleted');
+select ok(not has_function_privilege('anon','cleanup_push_target(uuid,text,text,boolean)','execute'),'anonymous cleanup denied');
 select * from finish();
 rollback;

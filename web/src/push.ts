@@ -56,12 +56,18 @@ export async function fingerprint(bytes: ArrayBuffer | null | undefined) {
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2,"0")).join("");
 }
-export async function subscribe(remove: (endpoint: string) => Promise<void>, registeredEndpoint?: string) {
+export class PushCleanupError extends Error {
+  constructor() { super("이전 회원의 푸시 구독을 정리하지 못했어요. 연결을 확인하고 다시 시도해 주세요."); }
+}
+export async function requestPushPermission() {
   const bytes = configuredKey();
   if (!bytes) throw Error("푸시 발송 설정을 준비 중이에요.");
   // iOS requires permission to be requested directly from a user gesture.
   const permission = await Notification.requestPermission();
   if (permission !== "granted") throw Error(permission === "denied" ? deniedHelp() : "알림을 받으려면 허용을 눌러 주세요.");
+  return bytes;
+}
+export async function subscribe(bytes: Uint8Array<ArrayBuffer>, remove: (endpoint: string) => Promise<void>, registeredEndpoint?: string) {
   await navigator.serviceWorker.register("/sw.js");
   const registration = await navigator.serviceWorker.ready;
   const current = await registration.pushManager.getSubscription();

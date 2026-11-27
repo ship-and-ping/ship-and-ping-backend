@@ -4,8 +4,20 @@ import { loginRequests, type LoginRequest } from "./login-requests";
 import { loadMonitor, type Monitor } from "./monitor-data";
 import type { DeepFeature, Definitions, FirstResult } from "./deep";
 import { resultKinds } from "./deep";
-import { closePushNotifications, configuredKey, currentSubscription, fingerprint, notifyPushChange } from "./push";
+import { closePushNotifications, configuredKey, currentSubscription, fingerprint, notifyPushChange, PushCleanupError } from "./push";
+import { withPushLock } from "./push-lock";
 
+interface CleanupTarget {
+  id?: string;
+  member: string | null;
+  endpoint?: string | null;
+  proof?: string;
+  deleted?: boolean;
+}
+interface PushRegistration {
+  registerPush(app: string, sub: PushSubscriptionJSON, agent: string): Promise<void>;
+  removeEndpoint(endpoint: string): Promise<void>;
+}
 interface AppRow {
   url?: string | null;
   id: string;
@@ -43,9 +55,8 @@ export interface Gateway {
   firstResult(app: string, feature: string): Promise<FirstResult | null>;
   settings(app: string): Promise<AlertSettings>;
   devices(): Promise<PushDevice[]>;
-  registerPush(app: string, sub: PushSubscriptionJSON, agent: string): Promise<void>;
   removeDevice(id: string): Promise<void>;
-  removeEndpoint(endpoint: string): Promise<void>;
+  withPushRegistration<T>(action: (operations: PushRegistration) => Promise<T>): Promise<T>;
   pushEnabled(app: string, enabled: boolean): Promise<void>;
   testPush(app: string, device: string): Promise<boolean>;
   emailSetting(app: string, enabled: boolean): Promise<void>;
@@ -116,16 +127,23 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
         if (!session) initialRecovery = undefined;
       }).data.subscription : undefined;
   async function removeEndpoint(endpoint: string) {
-    await waitForCleanup();
     const {error} = await client.from("push_subscriptions").delete().eq("endpoint",endpoint);
     if (error) throw error;
   }
+  async function registerPush(app: string, sub: PushSubscriptionJSON, agent: string) {
+    const member = observedMember ?? read(lastMemberKey,null);
+    const proof = await subscriptionProof(sub);
+    const {data,error} = await client.rpc("register_push", {app,p_endpoint:sub.endpoint,
+      p_key:sub.keys?.p256dh,p_auth:sub.keys?.auth,p_agent:agent,p_fingerprint:await fingerprint(configuredKey()?.buffer)});
+    if (error || !data) throw error ?? Error("기기 등록 실패");
+    write(registeredKey,JSON.stringify({member,endpoint:sub.endpoint,proof}));
+    notifyPushChange();
+  }
   const lastMemberKey = "ship-ping-last-member";
   const cleanupKey = "ship-ping-push-cleanup";
+  const registeredKey = "ship-ping-browser-push";
   let observedMember: string | null | undefined;
   let pending: string | null = null;
-  let cleanup = Promise.resolve();
-  let revision = 0;
   function read(key: string, fallback: string | null) {
     try { return localStorage.getItem(key); } catch { return fallback; }
   }
@@ -133,54 +151,100 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
     try {
       if (value === null) localStorage.removeItem(key);
       else localStorage.setItem(key,value);
-    } catch { /* In private storage the in-memory state still applies. */ }
+    } catch { /* Web Locks still protects this tab's in-memory marker. */ }
   }
-  function markPending(value: string) {
-    pending = value;
-    write(cleanupKey,value);
+  function saveTarget(target: CleanupTarget | null) {
+    pending = target && JSON.stringify(target);
+    write(cleanupKey,pending);
   }
-  async function unregister(proof: string) {
-    const {error} = await client.rpc("revoke_push_by_proof",{proof}).abortSignal(AbortSignal.timeout(5000));
-    if (error) throw error;
-  }
-  async function clearSubscription(accountDeleted: boolean) {
-    const sub = await currentSubscription();
-    const keys = sub?.toJSON().keys;
-    const proof = sub && keys && await fingerprint(new TextEncoder()
+  async function subscriptionProof(sub: PushSubscriptionJSON) {
+    const keys = sub.keys;
+    if (!keys?.p256dh || !keys.auth) throw new PushCleanupError();
+    const proof = await fingerprint(new TextEncoder()
       .encode([sub.endpoint,keys.p256dh,keys.auth].join("\n")).buffer);
-    const saved = read(cleanupKey,pending);
-    if (saved && saved !== "1" && saved !== proof) await unregister(saved);
-    if (!sub) return;
-    if (!proof) throw Error("구독 확인 실패");
-    if (!accountDeleted) markPending(proof);
-    const [server,browser] = await Promise.allSettled([
-      accountDeleted ? undefined : unregister(proof), sub.unsubscribe(),
-    ]);
-    if (server.status === "rejected" || browser.status === "rejected" || !browser.value) {
-      throw Error("구독 정리 실패");
+    if (!proof) throw new PushCleanupError();
+    return proof;
+  }
+  async function snapshot() {
+    const sub = await currentSubscription();
+    return sub ? {endpoint:sub.endpoint,proof:await subscriptionProof({...sub.toJSON(),endpoint:sub.endpoint})} : {endpoint:null};
+  }
+  async function checkTarget(target: CleanupTarget, remove: boolean) {
+    const result = await client.rpc("cleanup_push_target",{
+      p_member:target.member,p_endpoint:target.endpoint ?? null,proof:target.proof,p_remove:remove,
+    }).abortSignal(AbortSignal.timeout(5000));
+    if (result.error || !["owned","other","missing"].includes(result.data)) throw new PushCleanupError();
+    return result.data;
+  }
+  // Runs only under the origin-wide lock. Keep the target after any failure,
+  // including when unsubscribe succeeded and discarded the browser keys.
+  async function finishCleanup(destination: () => string | null, captured?: ReturnType<typeof snapshot>) {
+    const raw = read(cleanupKey,pending);
+    if (!raw) return;
+    const member = read(lastMemberKey,null);
+    const target: CleanupTarget = raw === "1" ? {member}
+      : /^[0-9a-f]{64}$/.test(raw) ? {member,endpoint:null,proof:raw} : JSON.parse(raw);
+    if (target.endpoint === undefined) {
+      Object.assign(target,await (captured ?? snapshot()));
+      saveTarget(target);
     }
-  }
-  function cleanFor(user: string | null, accountDeleted = false) {
-    const current = ++revision;
-    markPending(read(cleanupKey,pending) ?? "1");
-    cleanup = cleanup.then(async () => {
-      const results = await Promise.allSettled([clearSubscription(accountDeleted),closePushNotifications()]);
-      if (current === revision && results.every(r => r.status === "fulfilled")) {
-        write(lastMemberKey,user);
-        write(cleanupKey,null);
-        pending = null;
+    if (target.proof && target.member) {
+      const state = await checkTarget(target,false).catch(async error => {
+        await closePushNotifications();
+        throw error;
+      });
+      if (state !== "other") await closePushNotifications();
+      if (state === "owned" || (target.deleted && state === "missing")) {
+        const sub = await currentSubscription();
+        if (sub && (!target.endpoint || target.endpoint === sub.endpoint) && await subscriptionProof({...sub.toJSON(),endpoint:sub.endpoint}) === target.proof
+            && !await sub.unsubscribe()) throw new PushCleanupError();
+        if (state === "owned") await checkTarget(target,true);
       }
-      notifyPushChange();
-    });
-    return cleanup;
+    } else {
+      await closePushNotifications();
+    }
+    const recorded = read(lastMemberKey,null);
+    if (!recorded || recorded === target.member) write(lastMemberKey,destination());
+    const registered = read(registeredKey,null);
+    if (registered) {
+      const binding: CleanupTarget = JSON.parse(registered);
+      if (binding.member === target.member && binding.proof === target.proof) write(registeredKey,null);
+    }
+    saveTarget(null);
+    notifyPushChange();
   }
-  async function waitForCleanup() {
-    await cleanup;
-    if (read(cleanupKey,pending)) throw Error("이전 구독 정리 중");
+  function cleanFor(previous: string | null, user: string | null, deleted = false) {
+    const recorded = read(lastMemberKey,previous);
+    if (recorded && previous !== recorded) return Promise.resolve();
+    let captured: ReturnType<typeof snapshot> | undefined;
+    if (!read(cleanupKey,pending)) {
+      const registered = read(registeredKey,null);
+      const binding: CleanupTarget | null = registered && JSON.parse(registered);
+      if (binding && binding.member === previous) {
+        saveTarget({...binding,id:crypto.randomUUID(),deleted});
+      } else {
+        saveTarget({id:crypto.randomUUID(),member:previous,deleted});
+        captured = snapshot();
+        // The lock can be queued behind another tab when this read fails.
+        void captured.catch(() => {});
+      }
+    }
+    const marker = read(cleanupKey,pending);
+    return withPushLock(async () => {
+      if (marker !== read(cleanupKey,pending)) return;
+      await finishCleanup(() => user === null ? null : observedMember ?? user,captured);
+    })
+      .catch(() => { /* Keep the durable marker for startup or explicit opt-in. */ });
   }
   return {
     requests,
-    removeEndpoint,
+    withPushRegistration(action) {
+      return withPushLock(async () => {
+        try { await finishCleanup(() => observedMember ?? read(lastMemberKey,null)); }
+        catch { throw new PushCleanupError(); }
+        return action({registerPush,removeEndpoint});
+      });
+    },
     async account() {
       const { data: { user } } = await client.auth.getUser();
       if (!user?.email) throw Error("로그인이 필요해요");
@@ -273,13 +337,6 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
     async devices() {
       return value(await client.from("push_subscriptions").select("id,endpoint,user_agent,created_at,vapid_fingerprint").order("created_at"));
     },
-    async registerPush(app, sub, agent) {
-      await waitForCleanup();
-      const {data,error} = await client.rpc("register_push", {app,p_endpoint:sub.endpoint,
-        p_key:sub.keys?.p256dh,p_auth:sub.keys?.auth,p_agent:agent,p_fingerprint:await fingerprint(configuredKey()?.buffer)});
-      if (error || !data) throw error ?? Error("기기 등록 실패");
-      notifyPushChange();
-    },
     async removeDevice(id) {
       const {error} = await client.from("push_subscriptions").delete().eq("id",id);
       if (error) throw error;
@@ -346,13 +403,12 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
     listen(fn) {
       const { data } = client.auth.onAuthStateChange((event, session) => {
         const user = session?.user.id ?? null;
-        if (user !== observedMember || read(cleanupKey,pending)) {
-          const previous = read(lastMemberKey,observedMember ?? null);
-          const changed = user !== observedMember;
-          observedMember = user;
-          if (previous !== user || read(cleanupKey,pending) || (changed && !user && event === "INITIAL_SESSION")) {
-            void cleanFor(user);
-          }
+        const recorded = read(lastMemberKey,observedMember ?? null);
+        const previous = observedMember === undefined ? recorded : observedMember;
+        const initialSignOut = observedMember === undefined && !user && event === "INITIAL_SESSION";
+        observedMember = user;
+        if (read(cleanupKey,pending) || (previous === recorded && (previous !== user || initialSignOut))) {
+          void cleanFor(recorded,user);
         }
         fn(user, event === "PASSWORD_RECOVERY");
       });
@@ -407,7 +463,8 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       return request;
     },
     async logout(accountDeleted) {
-      await cleanFor(null,accountDeleted);
+      const previous = observedMember ?? read(lastMemberKey,null) ?? (await client.auth.getSession()).data.session?.user.id ?? null;
+      await cleanFor(previous,null,accountDeleted);
       const { error } = await client.auth.signOut({ scope: "local" });
       if (error) throw error;
     },

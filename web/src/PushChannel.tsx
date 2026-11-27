@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AlertSettings, Gateway, PushDevice } from "./data";
-import { canInstall, configuredKey, deniedHelp, deviceType, fingerprint, install, notifyPushChange, standalone, subscribe } from "./push";
+import { canInstall, configuredKey, deniedHelp, deviceType, fingerprint, install, notifyPushChange, PushCleanupError, requestPushPermission, standalone, subscribe } from "./push";
 
 type Props = { api: Gateway; app: string; settings: AlertSettings; reload(): void };
 export function PushChannel({api, app, settings, reload}: Props) {
@@ -11,6 +11,7 @@ export function PushChannel({api, app, settings, reload}: Props) {
   const [installable, setInstallable] = useState(canInstall);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
+  const [retryCleanup, setRetryCleanup] = useState(false);
   const [version, setVersion] = useState(0);
   const type = deviceType();
   const ios = type === "iPhone" || type === "iPad";
@@ -49,7 +50,13 @@ export function PushChannel({api, app, settings, reload}: Props) {
   async function act(action: () => Promise<void>) {
     setPending(true);
     setMessage("");
+    setRetryCleanup(false);
     try { await action(); } catch (error) {
+      if (error instanceof PushCleanupError) {
+        setRetryCleanup(true);
+        setMessage(error.message);
+        return;
+      }
       setMessage(error instanceof Error && ["푸시 발송 설정을 준비 중이에요.", deniedHelp(),
         "알림을 받으려면 허용을 눌러 주세요."].includes(error.message)
         ? error.message : "푸시 설정을 완료하지 못했어요. 잠시 뒤 다시 시도해 주세요.");
@@ -60,14 +67,17 @@ export function PushChannel({api, app, settings, reload}: Props) {
     reload();
   }
   async function enable() {
-    const sub = await subscribe(api.removeEndpoint, current?.endpoint);
-    try {
-      await api.registerPush(app,sub.toJSON(),type);
-    } catch (error) {
-      if (sub.endpoint !== current?.endpoint) await sub.unsubscribe().catch(() => {});
-      throw error;
-    }
-    setEndpoint(sub.endpoint);
+    const bytes = await requestPushPermission();
+    await api.withPushRegistration(async ({removeEndpoint,registerPush}) => {
+      const sub = await subscribe(bytes,removeEndpoint,current?.endpoint);
+      try {
+        await registerPush(app,sub.toJSON(),type);
+      } catch (error) {
+        if (sub.endpoint !== current?.endpoint) await sub.unsubscribe().catch(() => {});
+        throw error;
+      }
+      setEndpoint(sub.endpoint);
+    });
     setMessage("이 기기에서 푸시를 받을 수 있어요.");
     refresh();
   }
@@ -117,5 +127,6 @@ export function PushChannel({api, app, settings, reload}: Props) {
       </details>
     </>}
     {message && <p role="status">{message}</p>}
+    {retryCleanup && <button disabled={pending} onClick={() => act(enable)}>다시 시도</button>}
   </section>;
 }
