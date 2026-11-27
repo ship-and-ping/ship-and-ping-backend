@@ -1,11 +1,124 @@
--- Automatic features retain T45's histogram precision. Deep features have exact timings.
+-- A bucket retains counts per distinct successful duration, with no event order
+-- or identifiers. Bound its size on high-cardinality traffic and use T45 bins
+-- when the exact distribution is incomplete (including pre-migration data).
+alter table private.evaluation_buckets add column duration_counts jsonb default '{}'::jsonb;
+
+create function private.merge_duration_counts(a jsonb,b jsonb) returns jsonb
+language sql immutable strict parallel safe set search_path='' as $$
+ select case when count(*)<=32 then coalesce(jsonb_object_agg(key,n),'{}'::jsonb) end
+ from (select key,sum(value::integer) n from (
+  select * from jsonb_each_text(a) union all select * from jsonb_each_text(b)
+ ) entries group by key) counts
+$$;
+
+create or replace function private.ingest_duration_batch(app_key_hash text,payload jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare
+ result jsonb := private.ingest_batch(app_key_hash,payload);
+ app uuid;
+ item jsonb;
+ feature uuid;
+ threshold integer;
+ received timestamptz := clock_timestamp();
+ version_name text := trim(payload->>'app_version');
+ legacy_offset bigint := 0;
+ bin_count integer;
+begin
+ -- The original function owns the per-app lock and returns zero for retries.
+ if (result->>'accepted')::integer=0 then return result; end if;
+ select app_id into strict app from public.app_keys where key_hash=app_key_hash;
+ for item in select value from jsonb_array_elements(payload->'stats') where value ? 'timings' loop
+  feature := private.auto_feature(app,item->>'method',item->>'route');
+  select slow_threshold_ms into strict threshold from public.features where id=feature;
+  bin_count := jsonb_array_length(item->'hist');
+  insert into private.evaluation_buckets as b
+  with timings as materialized (
+   select (t->>1)::integer ms,(t->>2)::boolean success from jsonb_array_elements(item->'timings') t
+  ), bins as (
+   select private.duration_bin(ms,bin_count) bin,count(*) n from timings where success group by 1
+  )
+  select app,feature,trim(payload->>'app_version'),(item->>'bucket')::timestamptz,
+   array(select coalesce(n,0)::integer from generate_series(1,bin_count) g left join bins on g=bin order by g),
+   min(ms) filter(where success),max(ms) filter(where success),count(success),count(*) filter(where success is not null and ms>threshold),
+   threshold,(select case when count(*)<=32 then coalesce(jsonb_object_agg(ms,n),'{}'::jsonb) end
+    from (select ms,count(*) n from timings where success group by ms) counts)
+  from timings
+  on conflict(app_id,feature_id,version,bucket) do update set
+   success_hist=private.add_hist(b.success_hist,excluded.success_hist),
+   min_ms=least(b.min_ms,excluded.min_ms),max_ms=greatest(b.max_ms,excluded.max_ms),
+   result_count=b.result_count+excluded.result_count,slow_count=b.slow_count+excluded.slow_count,
+   duration_counts=private.merge_duration_counts(b.duration_counts,excluded.duration_counts),
+   threshold_ms=case when b.threshold_ms=excluded.threshold_ms then b.threshold_ms else -1 end;
+  insert into private.latest_results
+   select app,feature,version_name,received,
+    case when jsonb_typeof(t->0)='number' then (t->>0)::bigint else legacy_offset+n end,
+    (t->>1)::int,(t->>2)::boolean
+   from jsonb_array_elements(item->'timings') with ordinality as rows(t,n) where t->>2 is not null;
+  legacy_offset := legacy_offset + jsonb_array_length(item->'timings');
+  delete from private.latest_results r where r.app_id=app and r.feature_id=feature and r.version=version_name
+   and (r.received_at,r.position) in (select received_at,position from private.latest_results
+    where app_id=app and feature_id=feature and version=version_name order by received_at desc,position desc offset 20);
+ end loop;
+ return result;
+end $$;
+
+-- Convert each occupied bin into a weighted duration. Exact counters win only
+-- when they cover all measured successes. For legacy buckets, interpolate
+-- inside each bin using the all-success mean or the midpoint when unavailable.
+create function private.duration_points(h integer[], counts jsonb, lo integer, hi integer, mean_ms numeric)
+returns table(ms integer,n integer) language sql immutable parallel safe set search_path='' as $$
+ with exact as materialized (
+  select key::int ms,value::int n from jsonb_each_text(counts)
+ ), coverage as (
+  select (select sum(e.n) from exact e)=(select sum(x) from unnest(h) x) complete
+ ), bins as (
+  select greatest(0,lo,lower_ms+1) low,least(hi,upper_ms) high,b.n
+  from private.hist_intervals(h) b where (select complete from coverage) is not true
+ ), bounds as (
+  select *,sum(low::numeric*n) over()/sum(n) over() mean_low,
+   sum(high::numeric*n) over()/sum(n) over() mean_high from bins
+ )
+ select e.ms,e.n from exact e where (select complete from coverage)
+ union all
+ select round(low+(high-low)*least(1,greatest(0,coalesce((mean_ms-mean_low)/nullif(mean_high-mean_low,0),0.5))))::int,n
+ from bounds
+$$;
+
+-- percentile_cont over weighted millisecond values without expanding counts to rows.
+create function private.duration_quantiles(durations integer[], counts bigint[], fractions numeric[])
+returns double precision[] language sql immutable strict parallel safe set search_path='' as $$
+ with ranks as (
+  select ms,n,sum(n) over(order by ms rows unbounded preceding) last_rank,sum(n) over() total
+  from unnest(durations,counts) points(ms,n)
+ ), targets as (
+  select fraction,ms,last_rank-n+1 first_rank,last_rank,1+(total-1)*fraction rank
+  from ranks cross join unnest(fractions) fraction
+ ), quantiles as (
+  select fraction,max(ms) filter(where floor(rank) between first_rank and last_rank) low,
+   max(ms) filter(where ceil(rank) between first_rank and last_rank) high,max(rank-floor(rank)) part
+  from targets group by fraction
+ )
+ select array_agg((low+(high-low)*part)::double precision order by fraction) from quantiles
+$$;
+revoke all on function private.merge_duration_counts(jsonb,jsonb),
+ private.duration_points(integer[],jsonb,integer,integer,numeric),
+ private.duration_quantiles(integer[],bigint[],numeric[]) from public,anon,authenticated,service_role;
+
+create or replace view private.speed_buckets as
+ select s.*,case when s.failures+s.client_errors=0 then s.hist else b.success_hist end as success_hist,
+  b.min_ms,b.max_ms,b.result_count,b.threshold_ms,b.slow_count,b.duration_counts,
+  case when b.result_count=s.total-s.client_errors then b.min_ms end complete_min,
+  case when b.result_count=s.total-s.client_errors then b.max_ms end complete_max,
+  case when s.failures+s.client_errors=0 then s.duration_sum_ms::numeric/nullif(s.total,0) end mean_ms
+ from public.stats_5m s left join private.evaluation_buckets b using(app_id,feature_id,version,bucket);
+
 alter table public.baselines add column p95_ms integer;
 
 create or replace function private.refresh_baselines() returns void
 language sql set search_path='' as $$
  with due as materialized (
   select f.id,f.kind,b.first_sample_at from public.features f left join public.baselines b on b.feature_id=f.id
-  where b.p95_ms is null or b.computed_at<=now()-interval '6 hours'
+  where f.method is distinct from '*' and (b.p95_ms is null or b.computed_at<=now()-interval '6 hours')
  ), outages as (
   select i.feature_id,i.opened_at,i.closed_at from public.incidents i join due on due.id=i.feature_id
   where i.kind in ('slow','failure') and (i.closed_at is null or i.closed_at>=now()-interval '7 days')
@@ -13,28 +126,35 @@ language sql set search_path='' as $$
   select a.feature_id,count(*)::int n,min(a.ended_at) stamp,min(a.duration_ms) lo,max(a.duration_ms) hi,
    percentile_cont(array[0.5,0.9,0.95]) within group(order by a.duration_ms) quantiles
   from public.attempts a join due d on a.feature_id=d.id and d.kind='deep'
-  where a.status='success' and a.duration_ms is not null and a.ended_at between now()-interval '7 days' and now()
+  where a.status='success' and a.duration_ms is not null and a.ended_at>=now()-interval '7 days' and a.ended_at<now()-interval '10 minutes'
    and not exists(select from outages i where i.feature_id=a.feature_id and a.ended_at>=i.opened_at
     and (i.closed_at is null or a.ended_at<i.closed_at))
   group by 1
- ), auto as (
-  select s.feature_id,private.sum_hist(s.success_hist) h,min(s.min_ms) lo,max(s.max_ms) hi,min(s.bucket) stamp
+ ), profiles as materialized (
+  select s.feature_id,s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms,
+   count(*) copies,min(s.bucket) stamp,min(s.min_ms) lo,max(s.max_ms) hi
   from private.speed_buckets s join due d on d.id=s.feature_id and d.kind='auto'
-  where s.bucket between now()-interval '7 days' and now() and s.success_hist is not null
-   -- Individual times within a five-minute bucket cannot be separated after ingestion.
+  where s.bucket>=now()-interval '7 days'
+   and s.bucket<date_bin('5 minutes',now()-interval '10 minutes',timestamptz 'epoch') and s.success_hist is not null
    and not exists(select from outages i where i.feature_id=s.feature_id and s.bucket+interval '5 minutes'>i.opened_at
     and (i.closed_at is null or s.bucket<i.closed_at))
-  group by 1
+  group by 1,2,3,4,5,6
+ ), points as (
+  select s.feature_id,p.ms,sum(p.n*s.copies)::bigint n,min(s.stamp) stamp,min(s.lo) lo,max(s.hi) hi
+  from profiles s cross join lateral private.duration_points(s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms) p
+  group by 1,2
+ ), auto as (
+  select feature_id,sum(n)::int n,min(stamp) stamp,min(lo) lo,max(hi) hi,
+   private.duration_quantiles(array_agg(ms order by ms),array_agg(n order by ms),array[0.5,0.9,0.95]) quantiles
+  from points group by feature_id
  ), observations as (
-  select d.id,least(d.first_sample_at,a.stamp,s.stamp) first_stamp,coalesce(a.n,(select sum(n) from unnest(s.h) n),0)::int n,
-   coalesce(a.lo,s.lo) lo,coalesce(a.hi,s.hi) hi,a.quantiles,s.h
-  from due d left join deep a on a.feature_id=d.id left join auto s on s.feature_id=d.id
+  select d.id,least(d.first_sample_at,s.stamp) first_stamp,coalesce(s.n,0) n,s.lo,s.hi,s.quantiles
+  from due d left join (select * from deep union all select * from auto) s on s.feature_id=d.id
  )
  insert into public.baselines(feature_id,first_sample_at,sample_count,observed_min_ms,observed_max_ms,p50_ms,p90_ms,p95_ms,computed_at)
  select id,first_stamp,n,lo,hi,
-  case when n>=30 then coalesce(round(quantiles[1])::int,private.hist_percentile(h,0.5)) end,
-  case when n>=30 then coalesce(round(quantiles[2])::int,private.hist_percentile(h,0.9)) end,
-  case when n>=30 then coalesce(round(quantiles[3])::int,private.hist_percentile(h,0.95)) end,now()
+  case when n>=30 then round(quantiles[1])::int end,case when n>=30 then round(quantiles[2])::int end,
+  case when n>=30 then round(quantiles[3])::int end,now()
  from observations
  on conflict(feature_id) do update set first_sample_at=excluded.first_sample_at,sample_count=excluded.sample_count,
   observed_min_ms=excluded.observed_min_ms,observed_max_ms=excluded.observed_max_ms,
@@ -45,30 +165,37 @@ create or replace view private.evaluation_signals as
  with cutoffs as (
   select feature_id,kind,max(closed_at) closed_at from public.incidents
   where closed_at>=now()-interval '1 hour' and status in ('resolved','quiet') group by 1,2
- ), windows(kind,minutes) as (values ('failure',30),('slow',30),('slow',10)), auto as (
-  select s.feature_id,k.kind,k.minutes,sum(s.total-s.client_errors) results,sum(s.failures) failures,
-   sum(s.total-s.client_errors) timed,sum(measured.n) successes,
-   private.hist_percentile(private.sum_hist(s.success_hist),0.5) p50,
-   sum(case when s.threshold_ms=f.slow_threshold_ms and s.result_count=s.total-s.client_errors then s.slow_count
-    else coalesce(private.hist_above(case when s.client_errors=0 then s.hist else s.success_hist end,f.slow_threshold_ms),0) end) slow,
-   -- A bin straddling a custom limit cannot prove a breach. Prefer exact counts when available.
-   sum(case when s.result_count=s.total-s.client_errors and s.min_ms>f.slow_threshold_ms then measured.n
-    when s.result_count=s.total-s.client_errors and s.max_ms<=f.slow_threshold_ms then 0
-    else greatest(private.hist_above(s.success_hist,f.slow_threshold_ms),
-     case when s.threshold_ms=f.slow_threshold_ms and s.result_count=s.total-s.client_errors
-      then greatest(0,s.slow_count-s.failures) end) end)*2 > sum(measured.n) over_cap,
-   max(s.bucket) latest,(array_agg(s.version order by s.bucket desc,s.version))[1] version,false as consecutive
-  from private.speed_buckets s join public.features f on f.id=s.feature_id and f.kind='auto' cross join windows k
-  cross join lateral (select coalesce(sum(n),0) n from unnest(s.success_hist) n) measured
+ ), windows(kind,minutes) as (values ('failure',30),('slow',30),('slow',10)), active as materialized (
+  select s.*,f.slow_threshold_ms from private.speed_buckets s join public.features f on f.id=s.feature_id and f.kind='auto'
+  where s.bucket between date_bin('5 minutes',now()-interval '30 minutes',timestamptz 'epoch') and now()
+ ), window_buckets as materialized (
+  select s.*,k.kind,k.minutes from active s cross join windows k
   left join cutoffs c on c.feature_id=s.feature_id and c.kind=k.kind
-  where s.bucket between now()-interval '30 minutes' and now() and s.bucket>=now()-k.minutes*interval '1 minute'
-   and (c.closed_at is null or s.bucket>c.closed_at) group by s.feature_id,k.kind,k.minutes
+  where s.bucket>=date_bin('5 minutes',now()-k.minutes*interval '1 minute',timestamptz 'epoch')
+   and (c.closed_at is null or s.bucket>c.closed_at)
+ ), points as (
+  select s.feature_id,s.minutes,p.ms,sum(p.n)::bigint n
+  from window_buckets s cross join lateral private.duration_points(s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms) p
+  where s.kind='slow' group by 1,2,3
+ ), medians as (
+  select feature_id,minutes,sum(n) successes,
+   (private.duration_quantiles(array_agg(ms order by ms),array_agg(n order by ms),array[0.5]))[1] p50
+  from points group by 1,2
+ ), totals as (
+  select s.feature_id,s.kind,s.minutes,sum(s.total-s.client_errors) results,sum(s.failures) failures,
+   sum(case when s.threshold_ms=s.slow_threshold_ms and s.result_count=s.total-s.client_errors then s.slow_count
+    else coalesce(private.hist_above(case when s.client_errors=0 then s.hist else s.success_hist end,s.slow_threshold_ms),0) end) slow,
+   max(s.bucket) latest,(array_agg(s.version order by s.bucket desc,s.version))[1] version
+  from window_buckets s group by 1,2,3
+ ), auto as (
+  select t.feature_id,t.kind,t.minutes,t.results,t.failures,t.results timed,coalesce(m.successes,0) successes,m.p50,t.slow,
+   t.latest,t.version,false as consecutive from totals t left join medians m
+   on t.kind='slow' and m.feature_id=t.feature_id and m.minutes=t.minutes
  ), deep as (
   select a.feature_id,k.kind,k.minutes,count(*) results,count(*) filter(where status='failure') failures,
    count(duration_ms) timed,count(duration_ms) filter(where status='success') successes,
    percentile_cont(0.5) within group(order by duration_ms) filter(where status='success') p50,
    count(*) filter(where duration_ms>f.slow_threshold_ms) slow,
-   percentile_cont(0.5) within group(order by duration_ms) filter(where status='success')>f.slow_threshold_ms over_cap,
    max(ended_at) latest,(array_agg(version order by ended_at desc,attempt_id))[1] version,
    (array_agg(status order by ended_at desc,attempt_id))[1:3]=array['failure','failure','failure'] consecutive
   from public.attempts a join public.features f on f.id=a.feature_id and f.kind='deep' cross join windows k
@@ -84,14 +211,13 @@ create or replace view private.evaluation_signals as
    and (c.closed_at is null or started_at>c.closed_at) group by a.feature_id
  ), recent as (
   select distinct on (r.feature_id,r.kind) r.* from (select * from auto union all select * from deep) r
-  left join public.baselines b on b.feature_id=r.feature_id
-  where r.minutes=30 or (b.p95_ms is not null and r.successes>=10)
+  where r.minutes=30 or r.successes>=10
   order by r.feature_id,r.kind,r.minutes
  )
  select f.app_id,f.id feature_id,k.kind,
   case k.kind when 'failure' then (r.results>=5 and r.failures*5>=r.results) or r.consecutive
-   when 'slow' then (r.timed>=5 and b.p95_ms is null and r.slow*2>=r.timed)
-    or (r.successes>=5 and (r.over_cap or (b.p95_ms is not null and r.p50>b.p95_ms and r.p50>=b.p50_ms::bigint+500)))
+   when 'slow' then (r.timed>=5 and f.method is distinct from '*' and b.p95_ms is null and r.slow*2>=r.timed)
+    or (r.successes>=5 and (r.p50>f.slow_threshold_ms or (b.p95_ms is not null and r.p50>b.p95_ms and r.p50>=b.p50_ms::bigint+500)))
    else m.tried>=10 and m.missing*2>=m.tried end as breached,
   case k.kind when 'failure' then r.failures::numeric/nullif(r.results,0)
    when 'slow' then r.p50::numeric/nullif(coalesce(b.p50_ms,f.slow_threshold_ms),0)
@@ -103,7 +229,7 @@ create or replace view private.evaluation_signals as
   case when k.kind='unconfirmed' then m.version else r.version end version,
   case when k.kind='unconfirmed' then m.latest else r.latest end latest
  from public.features f cross join (values ('failure'),('slow'),('unconfirmed')) k(kind)
- left join public.baselines b on b.feature_id=f.id left join recent r on r.feature_id=f.id and r.kind=k.kind
+ left join public.baselines b on b.feature_id=f.id and f.method is distinct from '*' left join recent r on r.feature_id=f.id and r.kind=k.kind
  left join missing m on m.feature_id=f.id where k.kind<>'unconfirmed' or f.kind='deep';
 
 create or replace function private.verification_progress(issue public.incidents)
@@ -112,9 +238,11 @@ language sql stable set search_path='' as $$
  select v.version,coalesce(array_position(proof.qualified,false)-1,cardinality(proof.qualified),0) as streak,
   proof.durations[1],proof.successes[1]
  from public.app_versions v join public.features f on f.id=issue.feature_id
- left join public.baselines b on b.feature_id=f.id
+ left join public.baselines b on b.feature_id=f.id and f.method is distinct from '*'
  cross join lateral (
-  select array_agg(success and (issue.kind<>'slow' or coalesce(ms<=least(f.slow_threshold_ms,b.p95_ms::bigint+500),false))
+  -- A qualifying result must also be on the healthy side of the opening rule.
+  select array_agg(success and (issue.kind<>'slow' or coalesce(ms<=least(f.slow_threshold_ms,
+    b.p95_ms::bigint+500,greatest(b.p95_ms::bigint,b.p50_ms::bigint+499)),false))
     order by rank) qualified,array_agg(ms order by rank) durations,array_agg(success order by rank) successes
   from (
    select success,ms,row_number() over w as rank from (

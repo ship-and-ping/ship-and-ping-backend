@@ -38,21 +38,21 @@ select pg_temp.record('/edge',array[5000,5000,5000,5001,5001,5001]);
 select pg_temp.record('/below',array[5000,5000,5000,5000,5001,5001]);
 create temp view speeds as select f.route,s.metric,s.breached from private.evaluation_signals s
  join features f on f.id=s.feature_id where s.kind='slow';
-select results_eq('select route,(metric->>''p50'')::int,breached from speeds order by route',
- $$values ('/below',5000,false),('/edge',5000,true),('/field',6300,true),('/long',6300,true),('/short',3300,false)$$,
+select results_eq('select route,(metric->>''p50'')::numeric,breached from speeds order by route',
+ $$values ('/below',5000,false),('/edge',5000.5,true),('/field',6300,true),('/long',6250,true),('/short',3300,false)$$,
  '30-sample medians and strict >5s on exactly half the requests');
 select evaluate_all();
 select is((select (metric_at_open->>'p50')::int from incidents join features on features.id=feature_id
- where route='/long' and incidents.kind='slow'),6300,'opening snapshot uses refined success p50');
+ where route='/long' and incidents.kind='slow'),6250,'opening snapshot uses measured success p50');
 
 -- Failed calls in the same bucket cannot move the success median.
 select pg_temp.record('/long',array_fill(50,array[31]),'5 minutes',31);
-select is((select (metric->>'p50')::int from speeds where route='/long'),6300,'only successes contribute');
+select is((select (metric->>'p50')::int from speeds where route='/long'),6250,'only successes contribute');
 select pg_temp.record('/baseline',array_fill(3300,array[30]),'4 days');
 select pg_temp.record('/baseline',array_fill(6300,array[5]));
 select evaluate_all();
 select results_eq($$select p50_ms,p90_ms from baselines join features on features.id=feature_id where route='/baseline'$$,
- 'select 3300,6300','seven-day baseline reads refined bins');
+ 'select 3300,3300','recent load is excluded from the seven-day baseline');
 select is((select breached from speeds where route='/baseline'),true,'6300 exceeds the absolute 5000ms cap');
 select pg_temp.record('/baseline',array_fill(6600,array[6]));
 select is((select breached from speeds where route='/baseline'),true,'6600 exceeds baseline p95 and the cap');
@@ -102,7 +102,6 @@ select throws_ok(format('select ingest_batch(%L,%L::jsonb)',repeat('0',64),
  jsonb_build_object('stats',jsonb_build_array(jsonb_build_object('hist_30',array_fill(0,array[16]))))),
  '22023','invalid histogram layout','optional refined array requires exactly 30 counters');
 
--- Exercise the ingest path used before the optional field was recognized,
 -- First evaluation must learn only from traffic before the detection window.
 select pg_temp.record('/review',array_fill(200,array[27])||array[400,400,400],'2 hours');
 select pg_temp.record('/review',array_fill(1400,array[10]),'2 minutes');
@@ -113,8 +112,8 @@ select results_eq($$select (metric_at_open->>'p50')::int,(metric_at_open->>'seve
  from incidents join features on features.id=feature_id where route='/review' and incidents.kind='slow'$$,
  'select 1400,7::numeric','automatic and deep report the same 1400 ms and sevenfold slowdown');
 select pg_temp.record('/normal',array_fill(200,array[27])||array[400,400,400],'2 hours');
-select pg_temp.record('/normal',array_fill(600,array[10]),'2 minutes');
 select private.refresh_baselines();
+select pg_temp.record('/normal',array_fill(600,array[10]),'2 minutes');
 select results_eq($$select breached,(metric->>'p50')::int from speeds where route='/normal'$$,
  'select false,600','600 ms is below the 700 ms opening boundary');
 select pg_temp.record('/custom',array_fill(1000,array[30]),'1 day');
@@ -140,7 +139,14 @@ select is((select breached from speeds where route='*'),false,'composition chang
 update features set slow_threshold_ms=1100 where route='*';
 select is((select breached from speeds where route='*'),true,'overflow still observes the absolute cap');
 
--- with the pre-T45 array constraint enforced on the newly inserted row.
+-- Once 33 distinct times exceed the bounded dictionary, use the measured
+-- extrema and mean inside the bin, including on subsequent upserts.
+select pg_temp.record('/many-times',array(select generate_series(601,633)));
+select pg_temp.record('/many-times',array[617]);
+select results_eq($$select (metric->>'p50')::int,breached from speeds where route='/many-times'$$,
+ 'select 617,false','high-cardinality traffic interpolates inside the original bin');
+
+-- Exercise the old ingest path with the pre-T45 constraint on the new row.
 alter table stats_5m add check (cardinality(hist)=16) not valid;
 select private.ingest_duration_batch(repeat('0',64),jsonb_build_object('batch_id',gen_random_uuid(),'app_version','v1',
  'stats',jsonb_build_array(jsonb_build_object('method','GET','route','/old-db',
