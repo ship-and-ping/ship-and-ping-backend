@@ -34,6 +34,11 @@ select is((select hook from slack_claim),'fixture','only delivery receives decry
 select slack_failed(id,claim_token,secret_id) from slack_claim;
 select ok((notification_settings(current_setting('test.app')::uuid)->>'broken')::boolean,'revocation visible to member');
 create temp table email_claim as select * from claim_notifications(1);
+select is((select app_name from email_claim),'fixture','mail claim includes its app name');
+select is((select is_overflow from email_claim),false,'test mail without a feature is not overflow');
+select ok(has_function_privilege('service_role','public.claim_notifications(integer)','execute')
+ and not has_function_privilege('authenticated','public.claim_notifications(integer)','execute')
+ and not has_function_privilege('anon','public.claim_notifications(integer)','execute'),'only delivery may claim');
 select is((select channel||' '||email from email_claim),'email member@example.invalid','revocation uses login email even with email off');
 select is((select count(*) from generate_series(1,21) where reserve_mail(current_setting('test.app')::uuid)),20::bigint,'member daily cap');
 select is((select used from private.mail_quota where day=(now() at time zone 'UTC')::date),20,'member overflow consumes no global slots');
@@ -51,5 +56,17 @@ select complete_notification(id,claim_token,true,null) from digest_claim;
 select is((select count(*) from notifications where ok),13::bigint,'one completion settles all entries in the digest');
 select disconnect_slack(current_setting('test.app')::uuid);
 select is_empty($$select from vault.decrypted_secrets where decrypted_secret='fixture'$$,'disconnect removes secret');
+insert into features(app_id,kind,method,route,name)
+ values (current_setting('test.app')::uuid,'auto','GET','/search','기타'),
+        (current_setting('test.app')::uuid,'auto','*','*','기타');
+insert into incidents(app_id,feature_id,kind,status,opened_at,opened_version)
+ select app_id,id,'failure','open',now(),'v1' from features where app_id=current_setting('test.app')::uuid;
+insert into notifications(incident_id,channel,event,sent_at,ok)
+ select id,'email','open',null,null from incidents where app_id=current_setting('test.app')::uuid;
+select results_eq(
+ $$select f.method,c.feature,c.is_overflow from claim_notifications(2) c
+   join incidents i on i.id=c.incident join features f on f.id=i.feature_id order by f.method$$,
+ $$values ('*','기타',true),('GET','기타',false)$$,
+ 'identically named features are distinguished by the overflow route');
 select * from finish();
 rollback;
