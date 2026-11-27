@@ -3,9 +3,10 @@
 // A textured rectangle inside the video aperture, before the foreground props.
 // The chosen holds exclude app state changes, the cursor flash and transitions.
 const holds=[
-  ["connect",10.56,10.76],["paste",12.69,13.12],["arrival",13.67,14.72],
-  ["alert",16.45,18.55],["copy",19.04,19.37],["preview",21.72,21.92],
-  ["update",23.67,24.74],["resolved",26.39,26.78],
+  ["connect",10.0,11.4], ["connect-copied",12.3,13.8],
+  ["paste",13.9,15.6], ["arrival",15.65,17.4],
+  ["alert",20.7,23.5], ["copy",23.82,25.7], ["copy-confirmed",25.9,27.8],
+  ["preview",28.0,30.55], ["update",30.7,33.55], ["resolved",34.0,36.14],
 ];
 export function measureHolds(file){
   return holds.map(([shot,start,end])=>{
@@ -50,7 +51,7 @@ export function measureHolds(file){
 export async function measureCamera(page){
   return page.evaluate(()=>{
     const tl=window.__timelines.main;
-    return [[9.52,10.55],[26.87,27.48]].map(([start,end])=>{
+    return [[8.25,9.97],[36.15,37.20]].map(([start,end])=>{
       const positions=[];
       for(let frame=Math.ceil(start*60);frame<=Math.floor(end*60);frame++){
         tl.seek(frame/60);

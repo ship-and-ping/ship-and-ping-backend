@@ -26,13 +26,13 @@ test("render final portrait master",async()=>{
     ["render","composition","--strict","--output","final/ship-and-ping-reel-01.mp4","--fps","60","--quality","high","--video-frame-format","png","--workers","2"],
     {env,shell:win});
 });
-test("playback of all 1830 frames and representative stills",async({page})=>{
+test("playback of all 2424 frames and representative stills",async({page})=>{
   await run(cli,["lint","composition"],{env:localEnv,shell:win});
   await page.goto(pathToFileURL(resolve("composition/index.html")).href);
   await page.evaluate(()=>document.fonts.ready);
   const bounds=await page.evaluate(()=>{
     const timeline=window.__timelines.main;
-    const subjects=[[1.7,"#hook"],[3.7,"#lost"],[5.3,"#say"],[6.9,"#unsure"],[8.7,"#promise"],[11.5,"#connect"],[16.1,"#alert"],[20.4,"#prompt"],[25,"#resolve"],[29,"#end"],[29,"#url"]];
+    const subjects=[[1.7,"#hook"],[3.7,"#lost"],[5.3,"#say"],[6.9,"#unsure"],[8.7,"#promise"],[11.5,"#connect"],[21.8,"#alert"],[28.5,"#prompt"],[35.5,"#resolve"],[39,"#end"],[39,"#url"]];
     return subjects.map(([t,selector])=>{
       timeline.seek(t);
       const range=document.createRange();range.selectNodeContents(document.querySelector(selector));
@@ -40,6 +40,19 @@ test("playback of all 1830 frames and representative stills",async({page})=>{
     });
   });
   for(const b of bounds){expect(b.left,b.selector).toBeGreaterThanOrEqual(60);expect(b.right,b.selector).toBeLessThanOrEqual(940);expect(b.top,b.selector).toBeGreaterThanOrEqual(250);expect(b.bottom,b.selector).toBeLessThanOrEqual(1500);}
+  const cards=await page.evaluate(()=>{
+    return [[21.5,"#lift"],[35.5,"#verified"]].map(([time,id])=>{
+      window.__timelines.main.seek(time);
+      const {left,right,top,bottom}=document.querySelector(id).getBoundingClientRect();
+      return {id,left,right,top,bottom};
+    });
+  });
+  for(const card of cards){
+    expect(card.left,card.id).toBeGreaterThanOrEqual(60);
+    expect(card.right,card.id).toBeLessThanOrEqual(940);
+    expect(card.bottom,card.id).toBeLessThanOrEqual(1500);
+    expect(card.top,card.id).toBeGreaterThanOrEqual(250);
+  }
   const separated=await page.evaluate(()=>{
     for(let frame=300;frame<450;frame++){
       window.__timelines.main.seek(frame/60);
@@ -52,20 +65,20 @@ test("playback of all 1830 frames and representative stills",async({page})=>{
   expect(separated,"The settled complaint bubbles must remain legible").toBe(true);
   const ffprobe=JSON.parse(execFileSync("ffprobe",["-v","error","-show_streams","-show_format","-of","json",file],{encoding:"utf8"}));
   expect(ffprobe.streams.length).toBe(1);
-  expect(ffprobe.streams[0]).toMatchObject({codec_name:"h264",width:1080,height:1920,r_frame_rate:"60/1",nb_frames:"1830"});
+  expect(ffprobe.streams[0]).toMatchObject({codec_name:"h264",width:1080,height:1920,r_frame_rate:"60/1",nb_frames:"2424"});
   const pts=JSON.parse(execFileSync("ffprobe",["-v","error","-select_streams","v:0","-show_frames",
     "-show_entries","frame=best_effort_timestamp_time","-of","json",file],{encoding:"utf8"})).frames;
-  expect(pts.length).toBe(1830);
+  expect(pts.length).toBe(2424);
   expect(pts.every((frame,i)=>Math.abs(Number(frame.best_effort_timestamp_time)-i/60)<0.00001)).toBe(true);
   const scan=spawnSync("ffmpeg",["-hide_banner","-nostats","-xerror","-i",file,"-vf","blackdetect=d=0.016:pix_th=0.05","-f","null","-"],{encoding:"utf8"});
   expect(scan.status).toBe(0);
   expect(scan.stderr).not.toContain("black_start:");
-  const times=[1.53,5.37,8.46,11.0,16.57,21.74,25.89,29.33];
+  const times=[1.53,5.37,8.35,12.8,21.7,28.67,35.78,39.23];
   for(const [i,at] of times.entries()){
     await run("ffmpeg",["-hide_banner","-loglevel","error","-y","-ss",String(at),"-i",file,"-frames:v","1","-update","1","frames/0"+(i+1)+".png"]);
   }
   await run("ffmpeg",["-hide_banner","-loglevel","error","-y","-framerate","1","-i","frames/%02d.png","-vf","scale=270:480,tile=4x2","-frames:v","1","-update","1","qa/contact.png"]);
-  await run("ffmpeg",["-hide_banner","-loglevel","error","-y","-i",file,"-vf","select=not(mod(n\\,60)),scale=216:384,tile=8x4",
+  await run("ffmpeg",["-hide_banner","-loglevel","error","-y","-i",file,"-vf","select=not(mod(n\\,60)),scale=216:384,drawtext=fontfile=composition/NotoSansKR-VF.ttf:text='%{n}s':fontsize=15:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=3:x=7:y=360,tile=7x6",
     "-frames:v","1","-update","1","qa/timeline.png"]);
   const camera=await measureCamera(page);
   const stability=measureHolds(file);
@@ -84,8 +97,8 @@ test("playback of all 1830 frames and representative stills",async({page})=>{
       total:quality.totalVideoFrames,dropped:quality.droppedVideoFrames};
   });
   expect(playback.ended).toBe(true);
-  expect(playback.duration).toBeCloseTo(30.5,1);
-  expect(playback.total).toBe(1830);
+  expect(playback.duration).toBeCloseTo(40.4,1);
+  expect(playback.total).toBe(2424);
   console.log(JSON.stringify(playback));
   await writeFile("qa/playback.json",JSON.stringify({playback,streams:ffprobe.streams},null,2));
 });
@@ -96,12 +109,12 @@ test("proof representative frames before encoding",async({page})=>{
   await page.setViewportSize({width:1080,height:1920});
   await page.goto(pathToFileURL(resolve("composition/index.html")).href);
   await page.evaluate(()=>document.fonts.ready);
-  for(const [i,time] of [1.53,5.37,8.46,11,16.57,21.74,25.89,29.33].entries()){
+  for(const [i,time] of [1.53,5.37,8.35,12.8,21.7,28.67,35.78,39.23].entries()){
     await page.evaluate(async t=>{
       const video=document.querySelector("video");
-      if(t>=10.4&&t<27.3){
+      if(t>=8&&t<37.2){
         const ready=new Promise(r=>video.addEventListener("seeked",r,{once:true}));
-        video.currentTime=t-10.4;await ready;
+        video.currentTime=t-8;await ready;
       }
       window.__timelines.main.seek(t);
     },time);
