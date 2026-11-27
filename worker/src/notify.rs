@@ -290,3 +290,100 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ORIGIN: &str = "https://web.test";
+    const APP: &str = "00000000-0000-4000-8000-000000000001";
+    const ISSUE: &str = "00000000-0000-4000-8000-000000000002";
+
+    fn notice(event: &str, kind: &str) -> Notice {
+        serde_json::from_value(json!({
+            "id": ISSUE, "claim_token": ISSUE, "app": APP, "incident": ISSUE,
+            "event": event, "channel": "email", "kind": kind, "feature": "기타",
+            "metric": {"total": 9, "failures": 9, "baseline": 1100, "p50": 3400},
+            "app_name": "트루바", "digest": false
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn subjects_identify_app_and_event() {
+        for (event, kind, subject) in [
+            ("open", "failure", "[쉽앤핑] 트루바에서 실패가 늘었어요"),
+            ("open", "slow", "[쉽앤핑] 트루바 · 느려졌어요"),
+            ("worse", "slow", "[쉽앤핑] 트루바 · 문제가 더 커졌어요"),
+            ("resolved", "failure", "[쉽앤핑] 트루바 · 문제가 해결됐어요"),
+        ] {
+            let payload = render_mail(&[notice(event, kind)], 0, Some(ORIGIN));
+            assert_eq!(payload.subject, subject);
+        }
+    }
+
+    #[test]
+    fn subject_names_are_single_line_masked_and_bounded() {
+        let mut row = notice("open", "slow");
+        for (input, expected) in [
+            (" 트\r\n루\u{0000}바\u{2028}\u{0085} ", "트루바"),
+            ("owner@example.invalid", "[가림]"),
+            ("\r\n", ""),
+        ] {
+            row.app_name = Some(input.into());
+            assert_eq!(app_name(&row).as_deref().unwrap_or_default(), expected);
+        }
+        row.app_name = Some("양".repeat(40));
+        assert_eq!(app_name(&row), row.app_name);
+        row.app_name = Some("양".repeat(41));
+        assert_eq!(app_name(&row), Some(format!("{}…", "양".repeat(40))));
+        row.app_name = None;
+        assert_eq!(render_mail(&[row], 0, None).subject, "[쉽앤핑] 앱 알림이에요");
+    }
+
+    #[test]
+    fn resend_contains_safe_html_and_plain_text() {
+        let mut row = notice("open", "failure");
+        row.app_name = Some("<script>&\"'".into());
+        row.metric["raw"] = json!("private-body");
+        let payload = render_mail(&[row], 0, Some(ORIGIN)).payload("from", "to");
+        let html = payload["html"].as_str().unwrap();
+        let text = payload["text"].as_str().unwrap();
+        assert!(html.contains("&lt;script&gt;&amp;&quot;&#39;"));
+        assert!(!html.contains("<script>"));
+        assert!(html.contains("기타 (따로 지켜보지 않는 기능 묶음)"));
+        assert!(html.contains("최근 30분 동안 9건 중 9건 실패"));
+        assert!(text.contains("<script>") && text.contains("9건 중 9건이 실패했어요."));
+        let link = format!("{ORIGIN}/apps/{APP}/issues/{ISSUE}");
+        assert!(text.contains(&link));
+        assert_eq!(html.matches(&link).count(), 2);
+        assert_eq!(html.matches(&format!("href=\"{link}\"")).count(), 2);
+        assert!(!payload.to_string().contains("private-body"));
+    }
+
+    #[test]
+    fn digest_counts_overflow_and_links_to_apps() {
+        let rows: Vec<_> = (0..11)
+            .map(|i| {
+                let mut row = notice("open", "slow");
+                row.digest = true;
+                row.app_name = Some(format!("앱({i})"));
+                row
+            })
+            .collect();
+        let mail = render_mail(&rows, 2, Some(ORIGIN));
+        assert_eq!(mail.subject, "[쉽앤핑] 모아 둔 알림 13건이에요");
+        assert!(mail.html.contains("앱(9)") && !mail.html.contains("앱(10)"));
+        assert!(mail.html.contains("3건 더") && mail.html.contains("평소 1.1초 → 최근 3.4초"));
+        assert_eq!(mail.html.matches("쉽앤핑에서 자세히 보기").count(), 1);
+        assert!(mail.html.contains("href=\"https://web.test/apps\""));
+    }
+
+    #[test]
+    fn resolved_and_invalid_origin() {
+        let mail = render_mail(&[notice("resolved", "failure")], 0, Some("javascript:alert"));
+        assert!(mail.html.contains("새 버전에서 5번 연속 성공했어요"));
+        assert!(mail.html.contains("따로 하실 일은 없어요."));
+        assert!(!mail.html.contains("href="));
+    }
+}
