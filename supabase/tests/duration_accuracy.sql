@@ -133,11 +133,13 @@ select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000046'
 select is((select success_durations(stored) from display_bucket),'{}'::jsonb,'another member cannot read durations even with the bucket key');
 reset role;
 select pg_temp.record('/boundary',array_fill(200,array[30]),'1 day');
-select pg_temp.record('/boundary',array_fill(200,array[80]),'22 minutes');
-select pg_temp.record('/boundary',array_fill(1400,array[10]),'10 minutes');
+-- At 12:13, a request at 12:01 belongs to the third bucket (12:00).
+select pg_temp.record('/boundary',array_fill(200,array[80]),'10 minutes');
+select pg_temp.record('/boundary',array_fill(1400,array[5]),'5 minutes');
+select pg_temp.record('/boundary',array_fill(1400,array[5]),'0 minutes');
 select private.refresh_baselines();
 select results_eq($$select breached,(metric->>'window')::int,(metric->>'total')::int from speeds where route='/boundary'$$,
- 'select true,10,10','the overlapping start bucket remains in the ten-minute window');
+ 'select true,10,10','only the two most recent bucket starts contribute to the short window');
 insert into app_versions(app_id,version) select id,'v2' from apps;
 update incidents set opened_at=now()-interval '1 minute' where feature_id=(select id from features where route='/review');
 insert into private.latest_results select app_id,id,'v2',now(),n,800,true from features cross join generate_series(1,5) n where route='/review';
@@ -159,6 +161,54 @@ select ok((select max(ms)>630 and min(ms)<604 and sum(n)=34
  from private.speed_buckets b join features f on f.id=b.feature_id
  cross join lateral private.duration_points(b.success_hist,b.duration_counts,b.complete_min,b.complete_max,b.mean_ms) p
  where f.route='/many-times'),'interpolation retains the observed spread for estimating p95');
+
+-- Existing Truva routes use a one-second cap before and after baseline activation.
+select pg_temp.record(route,array_fill(900,array[80]),'10 minutes')
+ from unnest(array['/places','/trips','/bookmarks']) route;
+update features set slow_threshold_ms=1000 where route in ('/places','/trips','/bookmarks');
+select pg_temp.record('/places',array_fill(700,array[5])||array_fill(1400,array[5]),'0 minutes');
+select pg_temp.record('/trips',array_fill(900,array[5])||array_fill(1050,array[5]),'0 minutes');
+select pg_temp.record('/bookmarks',array[1800,1900]||array_fill(900,array[6])||array_fill(1050,array[4]),'0 minutes',2);
+create temp view truva as select route,breached,(metric->>'slow')::int slow,
+ (metric->>'total')::int successes,(metric->>'window')::int minutes from speeds
+ where route in ('/places','/trips','/bookmarks') order by route;
+select results_eq('select * from truva',
+ $$values ('/bookmarks',false,4,10,10),('/places',true,5,10,10),('/trips',true,5,10,10)$$,
+ 'one-second cap uses strict success exceedances, including ties, before learning');
+-- Pre-T46 successes have the original counter and no exact-time dictionary.
+update private.evaluation_buckets set duration_counts='{}' where feature_id in
+ (select id from features where route in ('/places','/trips'));
+insert into baselines(feature_id,p50_ms,p95_ms,sample_count)
+ select id,1000,1500,30 from features where route in ('/places','/trips','/bookmarks');
+select results_eq('select * from truva',
+ $$values ('/bookmarks',false,4,10,10),('/places',true,5,10,10),('/trips',true,5,10,10)$$,
+ 'a learned baseline preserves the same one-second cap and excludes slow failures');
+
+-- The short cap still wins with five successes amid healthy older traffic.
+select pg_temp.record('/sparse-cap',array_fill(900,array[80]),'10 minutes');
+update features set slow_threshold_ms=1000 where route='/sparse-cap';
+insert into baselines(feature_id,p50_ms,p95_ms,sample_count)
+ select id,1000,1500,30 from features where route='/sparse-cap';
+select pg_temp.record('/sparse-cap',array[700,700,1050,1050,1050],'0 minutes');
+select results_eq($$select breached,(metric->>'window')::int,(metric->>'total')::int from speeds where route='/sparse-cap'$$,
+ 'select true,10,5','30-minute baseline fallback cannot dilute a five-success cap breach');
+update features set slow_threshold_ms=800 where route='/sparse-cap';
+select pg_temp.record('/sparse-cap',array_fill(700,array[3]),'0 minutes');
+select results_eq($$select breached,(metric->>'window')::int from speeds where route='/sparse-cap'$$,
+ 'select false,30','only the baseline can open from the fallback window despite 83 older and current exceedances');
+
+-- The cap is inside a histogram bin. The 34 distinct successes exhaust the
+-- dictionary and the bounded raw tail, and their measured median is below it.
+select pg_temp.record('/many-cap',array[100],'1 day');
+update features set slow_threshold_ms=1100 where route='/many-cap';
+select pg_temp.record('/many-cap',array(select generate_series(1001,1017))||
+ array(select generate_series(1101,1117)),'0 minutes');
+select results_eq($$select b.duration_counts is null,b.slow_count,s.breached from speeds s
+ join features f using(route) join private.evaluation_buckets b on b.feature_id=f.id
+ where s.route='/many-cap' and b.bucket=date_bin('5 minutes',now(),'epoch')$$,
+ 'select true,17,true','uncapped distinct times retain an exact half above an in-bin limit');
+select pg_temp.record('/many-cap',array[1100],'0 minutes');
+select is((select breached from speeds where route='/many-cap'),false,'17 of 35 stays normal including one at the limit');
 
 -- Exercise the old ingest path with the pre-T45 constraint on the new row.
 alter table stats_5m add check (cardinality(hist)=16) not valid;
