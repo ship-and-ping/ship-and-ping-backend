@@ -203,7 +203,7 @@ create or replace view private.evaluation_signals as
   select s.*,k.kind,k.minutes from active s cross join windows k
   left join cutoffs c on c.feature_id=s.feature_id and c.kind=k.kind
   where s.bucket>=date_bin('5 minutes',now()-k.minutes*interval '1 minute',timestamptz 'epoch')
-   + case when k.kind='slow' then interval '5 minutes' else interval '0' end
+   + case when k.minutes=10 then interval '5 minutes' else interval '0' end
    and (c.closed_at is null or s.bucket>c.closed_at)
  ), points as (
   select s.feature_id,s.minutes,p.ms,sum(p.n)::bigint n

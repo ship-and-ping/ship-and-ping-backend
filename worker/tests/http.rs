@@ -251,6 +251,14 @@ fn ingest_http_statuses() {
     assert_eq!(no_origin["slack"], 2);
     assert_eq!(no_origin["push"], json!(["gone", "gone", "unconfigured"]));
     assert_eq!(no_origin["safe"], true);
+    let simultaneous = fixture("/fixture/cron", None);
+    assert_eq!(
+        simultaneous["immediateMail"],
+        json!([
+            {"to":["member@example.invalid"],"features":["busy"]},
+            {"to":["member@example.invalid"],"features":["sparse"]}
+        ])
+    );
     let post = |addr: std::net::SocketAddr, mime: &str, auth: &str, data: &str| {
         let mut child = Command::new("curl")
             .args([
