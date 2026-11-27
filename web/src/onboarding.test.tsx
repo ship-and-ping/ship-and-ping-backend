@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
   act,
+  within,
 } from "@testing-library/react";
 import { Link, MemoryRouter } from "react-router-dom";
 import { axe } from "vitest-axe";
@@ -361,6 +362,51 @@ it("이메일 설정 저장 중에는 이전 상태를 유지하고 실패하면
   fireEvent.click(toggle);
   await screen.findByText("이메일 알림이 켜졌어요.");
   expect(toggle.getAttribute("aria-checked")).toBe("true");
+});
+it.each([false, true])("이메일 설정(%s)을 바꾼 뒤 재조회가 실패해도 저장한 값을 유지한다", async email => {
+  const api = fake();
+  const settings = {email, connected:false, broken:false, channel:null};
+  vi.mocked(api.settings).mockResolvedValueOnce(settings)
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValue({...settings, email:!email, connected:true, channel:"#모임"});
+  open("/apps/a/notifications", api);
+  const toggle = await screen.findByRole("switch");
+  fireEvent.click(toggle);
+  await screen.findByText(/최신 상태를 불러오지 못했어요/);
+  expect(toggle.getAttribute("aria-checked")).toBe(String(!email));
+  expect(screen.getByText(email ? "이메일 알림이 꺼졌어요." : "이메일 알림이 켜졌어요.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", {name:"다시 불러오기"}));
+  await screen.findByText("#모임 채널로 보내요.");
+  expect(screen.queryByText(/최신 상태를 불러오지 못했어요/)).toBeNull();
+  expect(api.emailSetting).toHaveBeenCalledTimes(1);
+  expect(api.emailSetting).toHaveBeenCalledWith("a", !email);
+});
+it.each([
+  [true, "시험 알림을 예약했어요. 잠시 뒤 슬랙에서 확인해 주세요."],
+  [false, "잠시 뒤 다시 시도해 주세요. 시험 알림은 분당 한 번 보낼 수 있어요."],
+] as const)("시험 알림 예약 결과(%s)는 재조회 중과 실패 뒤에도 버튼 옆에 남는다", async (reserved, result) => {
+  const api = fake();
+  const settings = {email:false, connected:true, broken:false, channel:"#모임"};
+  let finish!: (reserved: boolean) => void;
+  let failRefresh!: (error: Error) => void;
+  vi.mocked(api.testSlack).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  vi.mocked(api.settings).mockResolvedValueOnce(settings)
+    .mockImplementationOnce(() => new Promise((_, reject) => { failRefresh = reject; }))
+    .mockResolvedValue(settings);
+  open("/apps/a/notifications", api);
+  const send = await screen.findByRole("button", {name:"시험 알림 보내기"});
+  const panel = within(send.closest("section")!);
+  fireEvent.click(send);
+  expect(panel.getByRole<HTMLButtonElement>("button", {name:"시험 알림 요청 중"}).disabled).toBe(true);
+  await act(async () => finish(reserved));
+  expect(panel.getByRole("button", {name:"시험 알림 보내기"})).toBeTruthy();
+  expect(panel.getByRole("status").textContent).toBe(result);
+  await act(async () => failRefresh(new Error("offline")));
+  await screen.findByText(/최신 상태를 불러오지 못했어요/);
+  expect(panel.getByRole("status").textContent).toBe(result);
+  fireEvent.click(screen.getByRole("button", {name:"다시 불러오기"}));
+  await waitFor(() => expect(api.settings).toHaveBeenCalledTimes(3));
+  expect(api.testSlack).toHaveBeenCalledTimes(1);
 });
 it("받을 곳 없음, 연결 끊김, 연결됨 상태와 시험 알림을 표시한다", async () => {
   const api = fake();

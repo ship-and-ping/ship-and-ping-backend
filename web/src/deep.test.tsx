@@ -67,7 +67,10 @@ function open(api: Partial<Gateway>, tracking = "new") {
 it("빈 값은 복사할 수 없고 첫 성공은 실제 소요 시간으로 표시한다", async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
-  const saveDeep = vi.fn().mockRejectedValueOnce(new Error("response lost")).mockResolvedValue(feature);
+  let failSave!: (error: Error) => void;
+  const saveDeep = vi.fn()
+    .mockImplementationOnce(() => new Promise((_, reject) => { failSave = reject; }))
+    .mockResolvedValue(feature);
   const features = vi
     .fn()
     .mockResolvedValueOnce([]).mockResolvedValueOnce([])
@@ -102,7 +105,15 @@ it("빈 값은 복사할 수 없고 첫 성공은 실제 소요 시간으로 표
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
   }
   fireEvent.click(screen.getByRole("button", { name: "기능 추가" }));
+  const adding = screen.getByRole<HTMLButtonElement>("button", { name: "기능 추가 중", busy: true });
+  expect(adding.disabled).toBe(true);
+  fireEvent.click(adding);
+  expect(saveDeep).toHaveBeenCalledTimes(1);
+  failSave(new Error("response lost"));
   await screen.findByRole("alert");
+  expect(screen.getByLabelText<HTMLInputElement>("기능 이름").value).toBe(fields.name);
+  expect(screen.getByLabelText<HTMLInputElement>("시작").value).toBe(fields.start);
+  expect(screen.getByLabelText<HTMLInputElement>("실제 성공").value).toBe(fields.success);
   fireEvent.click(screen.getByRole("button", { name: "기능 추가" }));
   await screen.findByText("첫 결과를 기다리고 있어요");
   expect(screen.getByText("남은 할 일")).toBeTruthy();
@@ -129,7 +140,10 @@ it("다섯 개를 등록한 앱에는 한도를 안내한다", async () => {
 });
 
 it("삭제를 확인한 뒤에만 기능을 지우고 남은 자리를 갱신한다", async () => {
-  const deleteDeep = vi.fn().mockResolvedValue(undefined);
+  let failDelete!: (error: Error) => void;
+  const deleteDeep = vi.fn()
+    .mockImplementationOnce(() => new Promise((_, reject) => { failDelete = reject; }))
+    .mockResolvedValue(undefined);
   open({
     deepFeatures: vi.fn().mockResolvedValueOnce([feature]).mockResolvedValue([]),
     firstResult: vi.fn().mockResolvedValue(null),
@@ -140,6 +154,16 @@ it("삭제를 확인한 뒤에만 기능을 지우고 남은 자리를 갱신한
   fireEvent.click(screen.getByRole("button", { name: "취소" }));
   expect(deleteDeep).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "기능 삭제" }));
+  fireEvent.click(screen.getByRole("button", { name: "삭제 확인" }));
+  const deleting = screen.getByRole<HTMLButtonElement>("button", { name: "삭제 중", busy: true });
+  expect(deleting.disabled).toBe(true);
+  fireEvent.click(deleting);
+  expect(deleteDeep).toHaveBeenCalledTimes(1);
+  failDelete(new Error("response lost"));
+  await screen.findByText("삭제 결과를 확인하지 못했어요.");
+  expect(screen.getByLabelText<HTMLInputElement>("기능 이름").value).toBe(fields.name);
+  expect(screen.getByLabelText<HTMLInputElement>("시작").value).toBe(fields.start);
+  expect(screen.getByLabelText<HTMLInputElement>("실제 성공").value).toBe(fields.success);
   fireEvent.click(screen.getByRole("button", { name: "삭제 확인" }));
   await screen.findByText(/남은 자리 5개/);
   expect(deleteDeep).toHaveBeenCalledWith("a", feature.id);

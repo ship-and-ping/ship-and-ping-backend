@@ -110,15 +110,23 @@ function Settings({ app, api, origin }: Props & { app: string }) {
   const [message, setMessage] = useState("");
   const [feedbackArea, setFeedbackArea] = useState<"slack" | "email">("slack");
   const [attempt, setAttempt] = useState(0);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "failed">("loading");
+  function reload() {
+    setLoadState("loading");
+    setAttempt(n => n + 1);
+  }
   useEffect(() => {
     let active = true;
     api
       .settings(app)
       .then((value) => {
-        if (active) setSettings(value);
+        if (active) {
+          setSettings(value);
+          setLoadState("ready");
+        }
       })
       .catch(() => {
-        if (active) setMessage("설정을 불러오지 못했어요.");
+        if (active) setLoadState("failed");
       });
     return () => {
       active = false;
@@ -130,15 +138,17 @@ function Settings({ app, api, origin }: Props & { app: string }) {
     setMessage("");
     try {
       await fn();
-      const confirmed = await api.settings(app);
-      setSettings(confirmed);
-      if (action === "email")
-        setMessage(confirmed.email ? "이메일 알림이 켜졌어요." : "이메일 알림이 꺼졌어요.");
+      reload();
     } catch (error) {
       setMessage(reason(error));
     } finally {
       setPending(null);
     }
+  }
+  async function saveEmail(enabled: boolean) {
+    await api.emailSetting(app, enabled);
+    setSettings(current => current && { ...current, email: enabled });
+    setMessage(enabled ? "이메일 알림이 켜졌어요." : "이메일 알림이 꺼졌어요.");
   }
   async function connect() {
     const result = await api.slack("install", origin, { app });
@@ -224,7 +234,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                 aria-checked={settings.email}
                 disabled={busy}
                 onClick={() =>
-                  act("email", () => api.emailSetting(app, !settings.email))
+                  act("email", () => saveEmail(!settings.email))
                 }
               >
                 이메일로도 받기 · {settings.email ? "켜짐" : "꺼짐"}
@@ -238,6 +248,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
               {feedbackArea === "email" && <p role="status">{pending === "email" ? "이메일 알림 설정을 저장하는 중이에요." : message}</p>}
             </section>
           </div>
+          {loadState === "loading" && <p role="status">최신 상태를 불러오는 중이에요.</p>}
           <details>
             <summary>슬랙 연결이 안 될 때</summary>
             <p>
@@ -247,12 +258,15 @@ function Settings({ app, api, origin }: Props & { app: string }) {
             </p>
           </details>
         </>
-      ) : message ? (
-        <button onClick={() => { setMessage(""); setAttempt((n) => n + 1); }}>다시 불러오기</button>
-      ) : (
+      ) : loadState === "loading" ? (
         <p role="status">알림 설정을 불러오는 중</p>
+      ) : null}
+      {loadState === "failed" && (
+        <div className="load-state" role="alert">
+          {settings ? "최신 상태를 불러오지 못했어요." : "설정을 불러오지 못했어요."}{" "}
+          <button onClick={reload}>다시 불러오기</button>
+        </div>
       )}
-      {!settings && message && <p role="status">{message}</p>}
     </>
   );
 }
