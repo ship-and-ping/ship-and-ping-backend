@@ -39,7 +39,7 @@ begin
   )
   select app,feature,trim(payload->>'app_version'),(item->>'bucket')::timestamptz,
    array(select coalesce(n,0)::integer from generate_series(1,bin_count) g left join bins on g=bin order by g),
-   min(ms) filter(where success),max(ms) filter(where success),count(success),count(*) filter(where success is not null and ms>threshold),
+   min(ms) filter(where success),max(ms) filter(where success),count(success),count(*) filter(where success and ms>threshold),
    threshold,(select case when count(*)<=32 then coalesce(jsonb_object_agg(ms,n),'{}'::jsonb) end
     from (select ms,count(*) n from timings where success group by ms) counts)
   from timings
@@ -48,7 +48,11 @@ begin
    min_ms=least(b.min_ms,excluded.min_ms),max_ms=greatest(b.max_ms,excluded.max_ms),
    result_count=b.result_count+excluded.result_count,slow_count=b.slow_count+excluded.slow_count,
    duration_counts=private.merge_duration_counts(b.duration_counts,excluded.duration_counts),
-   threshold_ms=case when b.threshold_ms=excluded.threshold_ms then b.threshold_ms else -1 end;
+   -- A legacy counter in a mixed bucket may include slow failures. Invalidate
+   -- it only when merging that bucket, preserving counters for pure successes.
+   threshold_ms=case when b.threshold_ms=excluded.threshold_ms and
+    (b.duration_counts is distinct from '{}'::jsonb or b.slow_count=0 or
+     b.result_count=(select sum(n) from unnest(b.success_hist) n)) then b.threshold_ms else -1 end;
   insert into private.latest_results
    select app,feature,version_name,received,
     case when jsonb_typeof(t->0)='number' then (t->>0)::bigint else legacy_offset+n end,
@@ -199,6 +203,7 @@ create or replace view private.evaluation_signals as
   select s.*,k.kind,k.minutes from active s cross join windows k
   left join cutoffs c on c.feature_id=s.feature_id and c.kind=k.kind
   where s.bucket>=date_bin('5 minutes',now()-k.minutes*interval '1 minute',timestamptz 'epoch')
+   + case when k.kind='slow' then interval '5 minutes' else interval '0' end
    and (c.closed_at is null or s.bucket>c.closed_at)
  ), points as (
   select s.feature_id,s.minutes,p.ms,sum(p.n)::bigint n
@@ -210,19 +215,22 @@ create or replace view private.evaluation_signals as
   from points group by 1,2
  ), totals as (
   select s.feature_id,s.kind,s.minutes,sum(s.total-s.client_errors) results,sum(s.failures) failures,
-   sum(case when s.threshold_ms=s.slow_threshold_ms and s.result_count=s.total-s.client_errors then s.slow_count
-    else coalesce(private.hist_above(case when s.client_errors=0 then s.hist else s.success_hist end,s.slow_threshold_ms),0) end) slow,
+   sum(case when s.threshold_ms=s.slow_threshold_ms and s.result_count=s.total-s.client_errors
+     and (s.failures=0 or s.slow_count=0 or s.duration_counts is distinct from '{}'::jsonb) then s.slow_count
+    else coalesce((select coalesce(sum(value::int) filter(where key::int>s.slow_threshold_ms),0)
+     from jsonb_each_text(s.duration_counts) having sum(value::int)=s.total-s.client_errors-s.failures),
+     private.hist_above(s.success_hist,s.slow_threshold_ms),0) end) slow,
    max(s.bucket) latest,(array_agg(s.version order by s.bucket desc,s.version))[1] version
   from window_buckets s group by 1,2,3
  ), auto as (
-  select t.feature_id,t.kind,t.minutes,t.results,t.failures,t.results timed,coalesce(m.successes,0) successes,m.p50,t.slow,
+  select t.feature_id,t.kind,t.minutes,t.results,t.failures,t.results-t.failures timed,coalesce(m.successes,0) successes,m.p50,t.slow,
    t.latest,t.version,false as consecutive from totals t left join medians m
    on t.kind='slow' and m.feature_id=t.feature_id and m.minutes=t.minutes
  ), deep as (
   select a.feature_id,k.kind,k.minutes,count(*) results,count(*) filter(where status='failure') failures,
-   count(duration_ms) timed,count(duration_ms) filter(where status='success') successes,
+   count(duration_ms) filter(where status='success') timed,count(duration_ms) filter(where status='success') successes,
    percentile_cont(0.5) within group(order by duration_ms) filter(where status='success') p50,
-   count(*) filter(where duration_ms>f.slow_threshold_ms) slow,
+   count(*) filter(where status='success' and duration_ms>f.slow_threshold_ms) slow,
    max(ended_at) latest,(array_agg(version order by ended_at desc,attempt_id))[1] version,
    (array_agg(status order by ended_at desc,attempt_id))[1:3]=array['failure','failure','failure'] consecutive
   from public.attempts a join public.features f on f.id=a.feature_id and f.kind='deep' cross join windows k
@@ -236,23 +244,27 @@ create or replace view private.evaluation_signals as
   from public.attempts a left join cutoffs c on c.feature_id=a.feature_id and c.kind='unconfirmed'
   where started_at between now()-interval '1 hour' and now()
    and (c.closed_at is null or started_at>c.closed_at) group by a.feature_id
+ ), observations as (
+  select r.*,(r.kind='slow' and r.minutes=10 and r.timed>=5 and r.slow*2>=r.timed) cap_breached
+  from (select * from auto union all select * from deep) r
  ), recent as (
-  select distinct on (r.feature_id,r.kind) r.* from (select * from auto union all select * from deep) r
+  select distinct on (r.feature_id,r.kind) r.* from observations r
   join public.features f on f.id=r.feature_id left join public.baselines b on b.feature_id=r.feature_id
-  where r.minutes=30 or (r.successes>=10 and (b.p95_ms is not null or f.method='*'))
-  order by r.feature_id,r.kind,r.minutes
+  where r.minutes=10 or r.kind='failure' or (b.p95_ms is not null and f.method is distinct from '*')
+  -- A sparse short-window cap breach has its own evidence and takes priority.
+  order by r.feature_id,r.kind,(r.minutes=10 and (r.cap_breached or r.successes>=10)) desc,r.minutes desc
  )
  select f.app_id,f.id feature_id,k.kind,
   case k.kind when 'failure' then (r.results>=5 and r.failures*5>=r.results) or r.consecutive
-   when 'slow' then (r.timed>=5 and f.method is distinct from '*' and b.p95_ms is null and r.slow*2>=r.timed)
-    or (r.successes>=5 and (r.p50>f.slow_threshold_ms or (b.p95_ms is not null and r.p50>b.p95_ms and r.p50>=b.p50_ms::bigint+500)))
+   when 'slow' then coalesce(r.cap_breached or
+    (r.successes>=5 and b.p95_ms is not null and r.p50>b.p95_ms and r.p50>=b.p50_ms::bigint+500),false)
    else m.tried>=10 and m.missing*2>=m.tried end as breached,
   case k.kind when 'failure' then r.failures::numeric/nullif(r.results,0)
    when 'slow' then r.p50::numeric/nullif(coalesce(b.p50_ms,f.slow_threshold_ms),0)
    else m.missing::numeric/nullif(m.tried,0) end severity,
   case k.kind when 'failure' then jsonb_build_object('total',r.results,'failures',r.failures,'consecutive',r.consecutive)
    when 'slow' then jsonb_build_object('total',r.timed,'p50',r.p50,'baseline',b.p50_ms,'baseline_p50',b.p50_ms,
-    'baseline_p95',b.p95_ms,'window',coalesce(r.minutes,30),'slow',r.slow,'threshold',f.slow_threshold_ms)
+    'baseline_p95',b.p95_ms,'window',coalesce(r.minutes,10),'slow',r.slow,'threshold',f.slow_threshold_ms)
    else jsonb_build_object('total',m.tried,'unconfirmed',m.missing) end metric,
   case when k.kind='unconfirmed' then m.version else r.version end version,
   case when k.kind='unconfirmed' then m.latest else r.latest end latest
