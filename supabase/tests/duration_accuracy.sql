@@ -163,86 +163,6 @@ select ok((select max(ms)>630 and min(ms)<604 and sum(n)=34
  where f.route='/many-times'),'interpolation retains the observed spread for estimating p95');
 
 -- Existing Truva routes use a one-second cap before and after baseline activation.
--- CI mutation only, rolled back at the end of this test.
-create or replace view private.evaluation_signals as
- with cutoffs as (
-  select feature_id,kind,max(closed_at) closed_at from public.incidents
-  where closed_at>=now()-interval '1 hour' and status in ('resolved','quiet') group by 1,2
- ), windows(kind,minutes) as (values ('failure',30),('slow',30),('slow',10)), active as materialized (
-  select s.*,f.slow_threshold_ms from private.speed_buckets s join public.features f on f.id=s.feature_id and f.kind='auto'
-  where s.bucket between date_bin('5 minutes',now()-interval '30 minutes',timestamptz 'epoch') and now()
- ), window_buckets as materialized (
-  select s.*,k.kind,k.minutes from active s cross join windows k
-  left join cutoffs c on c.feature_id=s.feature_id and c.kind=k.kind
-  where s.bucket>=date_bin('5 minutes',now()-k.minutes*interval '1 minute',timestamptz 'epoch')
-   + case when k.kind='slow' then interval '5 minutes' else interval '0' end
-   and (c.closed_at is null or s.bucket>c.closed_at)
- ), points as (
-  select s.feature_id,s.minutes,p.ms,sum(p.n)::bigint n
-  from window_buckets s cross join lateral private.duration_points(s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms) p
-  where s.kind='slow' group by 1,2,3
- ), medians as (
-  select feature_id,minutes,sum(n) successes,
-   (private.duration_quantiles(array_agg(ms order by ms),array_agg(n order by ms),array[0.5]))[1] p50
-  from points group by 1,2
- ), totals as (
-  select s.feature_id,s.kind,s.minutes,sum(s.total-s.client_errors) results,sum(s.failures) failures,
-   sum(case when s.threshold_ms=s.slow_threshold_ms and s.result_count=s.total-s.client_errors
-     and (s.failures=0 or s.slow_count=0 or s.duration_counts is distinct from '{}'::jsonb) then s.slow_count
-    else coalesce((select coalesce(sum(value::int) filter(where key::int>s.slow_threshold_ms),0)
-     from jsonb_each_text(s.duration_counts) having sum(value::int)=s.total-s.client_errors-s.failures),
-     private.hist_above(s.success_hist,s.slow_threshold_ms),0) end) slow,
-   max(s.bucket) latest,(array_agg(s.version order by s.bucket desc,s.version))[1] version
-  from window_buckets s group by 1,2,3
- ), auto as (
-  select t.feature_id,t.kind,t.minutes,t.results,t.failures,t.results-t.failures timed,coalesce(m.successes,0) successes,m.p50,t.slow,
-   t.latest,t.version,false as consecutive from totals t left join medians m
-   on t.kind='slow' and m.feature_id=t.feature_id and m.minutes=t.minutes
- ), deep as (
-  select a.feature_id,k.kind,k.minutes,count(*) results,count(*) filter(where status='failure') failures,
-   count(duration_ms) filter(where status='success') timed,count(duration_ms) filter(where status='success') successes,
-   percentile_cont(0.5) within group(order by duration_ms) filter(where status='success') p50,
-   count(*) filter(where status='success' and duration_ms>f.slow_threshold_ms) slow,
-   max(ended_at) latest,(array_agg(version order by ended_at desc,attempt_id))[1] version,
-   (array_agg(status order by ended_at desc,attempt_id))[1:3]=array['failure','failure','failure'] consecutive
-  from public.attempts a join public.features f on f.id=a.feature_id and f.kind='deep' cross join windows k
-  left join cutoffs c on c.feature_id=a.feature_id and c.kind=k.kind
-  where ended_at between now()-interval '30 minutes' and now() and ended_at>=now()-k.minutes*interval '1 minute'
-   and status in ('success','failure')
-   and (c.closed_at is null or ended_at>c.closed_at) group by a.feature_id,k.kind,k.minutes,f.slow_threshold_ms
- ), missing as (
-  select a.feature_id,count(*) tried,count(*) filter(where status='unconfirmed') missing,
-   max(started_at) latest,(array_agg(version order by started_at desc,attempt_id))[1] version
-  from public.attempts a left join cutoffs c on c.feature_id=a.feature_id and c.kind='unconfirmed'
-  where started_at between now()-interval '1 hour' and now()
-   and (c.closed_at is null or started_at>c.closed_at) group by a.feature_id
- ), observations as (
-  select r.*,(r.kind='slow' and r.minutes=10 and r.timed>=5 and r.slow*2>r.timed) cap_breached
-  from (select * from auto union all select * from deep) r
- ), recent as (
-  select distinct on (r.feature_id,r.kind) r.* from observations r
-  join public.features f on f.id=r.feature_id left join public.baselines b on b.feature_id=r.feature_id
-  where r.minutes=10 or r.kind='failure' or (b.p95_ms is not null and f.method is distinct from '*')
-  -- A sparse short-window cap breach has its own evidence and takes priority.
-  order by r.feature_id,r.kind,(r.minutes=10 and (r.cap_breached or r.successes>=10)) desc,r.minutes desc
- )
- select f.app_id,f.id feature_id,k.kind,
-  case k.kind when 'failure' then (r.results>=5 and r.failures*5>=r.results) or r.consecutive
-   when 'slow' then coalesce(r.cap_breached or
-    (r.successes>=5 and b.p95_ms is not null and r.p50>b.p95_ms and r.p50>=b.p50_ms::bigint+500),false)
-   else m.tried>=10 and m.missing*2>=m.tried end as breached,
-  case k.kind when 'failure' then r.failures::numeric/nullif(r.results,0)
-   when 'slow' then r.p50::numeric/nullif(coalesce(b.p50_ms,f.slow_threshold_ms),0)
-   else m.missing::numeric/nullif(m.tried,0) end severity,
-  case k.kind when 'failure' then jsonb_build_object('total',r.results,'failures',r.failures,'consecutive',r.consecutive)
-   when 'slow' then jsonb_build_object('total',r.timed,'p50',r.p50,'baseline',b.p50_ms,'baseline_p50',b.p50_ms,
-    'baseline_p95',b.p95_ms,'window',coalesce(r.minutes,10),'slow',r.slow,'threshold',f.slow_threshold_ms)
-   else jsonb_build_object('total',m.tried,'unconfirmed',m.missing) end metric,
-  case when k.kind='unconfirmed' then m.version else r.version end version,
-  case when k.kind='unconfirmed' then m.latest else r.latest end latest
- from public.features f cross join (values ('failure'),('slow'),('unconfirmed')) k(kind)
- left join public.baselines b on b.feature_id=f.id and f.method is distinct from '*' left join recent r on r.feature_id=f.id and r.kind=k.kind
- left join missing m on m.feature_id=f.id where k.kind<>'unconfirmed' or f.kind='deep';
 select pg_temp.record(route,array_fill(900,array[80]),'10 minutes')
  from unnest(array['/places','/trips','/bookmarks']) route;
 update features set slow_threshold_ms=1000 where route in ('/places','/trips','/bookmarks');
@@ -299,7 +219,7 @@ select pg_temp.record('/many-cap',array(select generate_series(1001,1017))||
 select results_eq($$select b.duration_counts is null,b.slow_count,s.breached from speeds s
  join features f using(route) join private.evaluation_buckets b on b.feature_id=f.id
  where s.route='/many-cap' and b.bucket=date_bin('5 minutes',now(),'epoch')$$,
- 'select true,17,true','uncapped distinct times retain an exact half above an in-bin limit');
+ 'select true,17,true','the exact counter survives the dictionary and tail limits');
 select pg_temp.record('/many-cap',array[1100],'0 minutes');
 select is((select breached from speeds where route='/many-cap'),false,'17 of 35 stays normal including one at the limit');
 
