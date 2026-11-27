@@ -55,12 +55,46 @@ async function fixture(page, stage) {
   });
 }
 
+async function checkRefreshWindows(browser) {
+  const context = await browser.newContext();
+  try {
+    await context.clock.install({time:new Date(end)});
+    await context.clock.pauseAt(new Date(end + 1000));
+    const windows = [];
+    const reads = [0,0];
+    for (const index of [0,1]) {
+      const page = await context.newPage();
+      windows.push(page);
+      await fixture(page,"fixed");
+      page.on("request",request => { if (request.url().includes("/rpc/demo_insights")) reads[index]++; });
+      await page.goto(origin+"/apps/demo");
+      await page.getByText(/최근 1시간 성공 요청의/).waitFor();
+      if (await page.evaluate(() => document.visibilityState) !== "visible") throw Error("Expected two visible monitors");
+    }
+    const [leader,follower] = windows;
+    async function refresh(action,page) {
+      await Promise.all([page.waitForResponse(r => r.url().includes("/rpc/demo_insights")),action()]);
+      await page.locator(".refresh-button:not([disabled])").waitFor();
+    }
+    await refresh(() => context.clock.fastForward(60000),leader);
+    await refresh(() => follower.getByRole("button",{name:"새로고침",exact:true}).click(),follower);
+    if (reads.join() !== "2,2") throw Error("Duplicate automatic refresh or delayed manual refresh: "+reads);
+    await leader.close();
+    await follower.waitForFunction(async () => (await navigator.locks.query()).held.some(l =>
+      l.name === "ship-and-ping:monitor:demo"));
+    await refresh(() => context.clock.fastForward(60000),follower);
+    if (reads.join() !== "2,3") throw Error("Automatic refresh did not move to the remaining window: "+reads);
+  } finally { await context.close(); }
+}
+
 let browser;
 try {
   await mkdir(output,{recursive:true});
   await server.listen();
   browser = await chromium.launch({channel:process.platform === "win32" ? "msedge" : "chrome"});
-  for (const stage of ["before","load","fixed"]) for (const width of [1440,390]) for (const colorScheme of ["light","dark"]) {
+  await checkRefreshWindows(browser);
+  const widths = process.argv.includes("--mobile") ? [390] : [1440,390];
+  for (const stage of ["before","load","fixed"]) for (const width of widths) for (const colorScheme of ["light","dark"]) {
     const page = await browser.newPage({viewport:{width,height:width === 390 ? 844 : 900},colorScheme,
       hasTouch:width === 390,reducedMotion:width === 390 ? "reduce" : "no-preference"});
     const errors = [];
@@ -84,6 +118,18 @@ try {
       if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw Error("Horizontal overflow");
       await page.screenshot({path:fileURLToPath(new URL([stage,screen,width,colorScheme].join("-")+".png",output)),fullPage:true});
       if (stage === "fixed") {
+        if (width === 390) {
+          for (const help of await page.locator(".stat-panel .panel-help button").all()) {
+            await help.focus();
+            const box = await page.locator(".panel-help [role=tooltip]").boundingBox();
+            if (!box || box.x < 0 || box.x+box.width > width) throw Error("Stat help outside viewport");
+            if (screen === "home" && await help.getAttribute("aria-label") === "사용 건수 설명") {
+              await page.locator(".stat-grid").screenshot({
+                path:fileURLToPath(new URL("help-home-390-"+colorScheme+".png",output))});
+            }
+            await help.press("Escape");
+          }
+        }
         await page.addScriptTag({path:createRequire(import.meta.url).resolve("axe-core/axe.min.js")});
         const violations = await page.evaluate(async () => (await window.axe.run(document,{runOnly:["wcag2a","wcag2aa","wcag21aa"]})).violations.map(v => [v.id,v.nodes.map(n => n.target)]));
         if (violations.length) throw Error(JSON.stringify(violations));
@@ -97,6 +143,12 @@ try {
         await page.locator(".metrics-board").screenshot({style:".dashboard-dock { visibility:hidden }",
           path:fileURLToPath(new URL(["hover",screen,width,colorScheme].join("-")+".png",output))});
         if (width === 390) {
+          const tip = await page.locator(".flow-tip").boundingBox();
+          for (const label of await page.locator(".flow-key, .flow-x, .flow-marks").all()) {
+            const box = await label.boundingBox();
+            if (tip.y < box.y+box.height && box.y < tip.y+tip.height && tip.x < box.x+box.width && box.x < tip.x+tip.width)
+              throw Error("Selected values cover chart, legend or time axis");
+          }
           await plot.evaluate(el => el.scrollIntoView({block:"center"}));
           const box = await plot.boundingBox();
           const point = slot => [{x:Math.round(box.x+box.width*(slot-.5)/24),y:Math.round(box.y+box.height/2)}];

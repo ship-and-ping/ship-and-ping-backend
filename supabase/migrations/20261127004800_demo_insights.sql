@@ -1,3 +1,34 @@
+-- Keep successful durations identifiable when mixed five-minute buckets become hours.
+-- An all-success hour can use its existing histogram, including pre-migration rows.
+alter table public.stats_1h add column success_hist integer[];
+
+create or replace function private.rollup_5m(as_of timestamptz) returns void
+language sql set search_path = '' as $$
+ with expired as (
+  delete from public.stats_5m where bucket < as_of - interval '7 days' returning *
+ ), hours as (
+  select e.app_id,e.feature_id,e.version,date_bin('1 hour',e.bucket,timestamptz 'epoch') bucket,
+   sum(e.total) total,sum(e.failures) failures,sum(e.client_errors) client_errors,
+   sum(e.duration_sum_ms) duration_sum_ms,private.sum_hist(e.hist) hist,
+   case when sum(e.failures+e.client_errors)>0 then private.sum_hist(
+    case when e.failures+e.client_errors=0 then e.hist else b.success_hist end) end success_hist
+  from expired e left join private.evaluation_buckets b using(app_id,feature_id,version,bucket)
+  group by 1,2,3,4
+ )
+ insert into public.stats_1h as s
+  (app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist,success_hist)
+ select * from hours
+ on conflict (app_id,feature_id,version,bucket) do update set
+  total=s.total+excluded.total,failures=s.failures+excluded.failures,
+  client_errors=s.client_errors+excluded.client_errors,duration_sum_ms=s.duration_sum_ms+excluded.duration_sum_ms,
+  hist=private.add_hist(s.hist,excluded.hist),
+  success_hist=case when s.failures+s.client_errors+excluded.failures+excluded.client_errors>0 then
+   (select private.sum_hist(h) from (values
+    (case when s.failures+s.client_errors=0 then s.hist else s.success_hist end),
+    (case when excluded.failures+excluded.client_errors=0 then excluded.hist else excluded.success_hist end)
+   ) parts(h)) end
+$$;
+
 -- The chart and this RPC share T46's successful timings and its fallback for older buckets.
 create function public.demo_insights(target_app uuid)
 returns table(feature_id uuid, fast bigint, measured bigint, failures bigint,
@@ -18,13 +49,13 @@ begin
   select s.feature_id,s.version,s.bucket>=now()-interval '1 hour' recent,
    s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms,count(*) copies,sum(s.failures) failed
   from private.speed_buckets s join features f on f.id=s.feature_id and f.kind='auto'
-  where s.app_id=target_app and s.bucket between now()-interval '7 days' and now()
+  where s.app_id=target_app and s.bucket between now()-interval '30 days' and now()
    and (s.bucket>=now()-interval '1 hour' or s.version in (select v.version from versions v))
   group by 1,2,3,4,5,6,7,8
  ), attempts as materialized (
   select a.feature_id,a.version,a.ended_at>=now()-interval '1 hour' recent,a.duration_ms,a.status,count(*) n
   from public.attempts a join features f on f.id=a.feature_id and f.kind='deep'
-  where a.app_id=target_app and a.ended_at between now()-interval '7 days' and now()
+  where a.app_id=target_app and a.ended_at between now()-interval '30 days' and now()
    and a.status in ('success','failure')
    and (a.ended_at>=now()-interval '1 hour' or a.version in (select v.version from versions v))
   group by 1,2,3,4,5
@@ -33,6 +64,13 @@ begin
   from profiles s cross join lateral
    private.duration_points(s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms) p
   where s.success_hist is not null
+  union all select h.feature_id,h.version,false,p.ms,p.n from public.stats_1h h
+  join features f on f.id=h.feature_id and f.kind='auto'
+  join versions v on v.version=h.version
+  cross join lateral private.duration_points(
+   case when h.failures+h.client_errors=0 then h.hist else h.success_hist end,null,null,null,
+   case when h.failures+h.client_errors=0 then h.duration_sum_ms::numeric/nullif(h.total,0) end) p
+  where h.app_id=target_app and h.bucket between now()-interval '30 days' and now()
   union all select a.feature_id,a.version,a.recent,a.duration_ms,a.n from attempts a
   where a.status='success' and a.duration_ms is not null
  ), hourly as (

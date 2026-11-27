@@ -5,7 +5,8 @@ import {chromium} from "playwright";
 const directory = new URL("../../docs/design/qa/demo-insights/",import.meta.url);
 const browser = await chromium.launch({channel:process.platform === "win32" ? "msedge" : "chrome"});
 try {
-  for (const width of [1440,390]) for (const theme of ["light","dark"]) for (const screen of ["home","detail"]) {
+  const widths = process.argv.includes("--mobile") ? [390] : [1440,390];
+  for (const width of widths) for (const theme of ["light","dark"]) for (const screen of ["home","detail"]) {
     const desktop = width === 1440;
     const column = desktop ? 1088 : 358;
     const page = await browser.newPage({viewport:{width:3*column+64,height:1500},colorScheme:theme});

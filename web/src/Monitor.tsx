@@ -118,15 +118,44 @@ function MonitorPage({
   }, [reload]);
   useEffect(() => {
     if (issue || !interval) return;
-    let timer:number | undefined;
+    let stop: AbortController | undefined;
+    function cancel() {
+      stop?.abort();
+    }
     function schedule() {
-      window.clearInterval(timer);
-      if (document.visibilityState === "visible") timer = window.setInterval(() => void reload(),interval*1000);
+      cancel();
+      if (document.visibilityState !== "visible") return;
+      stop = new AbortController();
+      const { signal } = stop;
+      function poll(focusedOnly = false) {
+        return new Promise<void>(resolve => {
+          if (signal.aborted) { resolve(); return; }
+          const timer = window.setInterval(() => {
+            if (!focusedOnly || document.hasFocus()) void reload();
+          }, interval * 1000);
+          signal.addEventListener("abort", () => {
+            window.clearInterval(timer);
+            resolve();
+          }, { once: true });
+        });
+      }
+      if (navigator.locks) {
+        // Keep the lock between ticks. The next visible window takes over on release.
+        void navigator.locks.request("ship-and-ping:monitor:" + id, { signal }, () => poll())
+          .catch(() => { if (!signal.aborted) void poll(true); });
+      } else void poll(true);
     }
     schedule();
     document.addEventListener("visibilitychange",schedule);
-    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange",schedule); };
-  }, [interval,issue,reload]);
+    window.addEventListener("pagehide",cancel);
+    window.addEventListener("pageshow",schedule);
+    return () => {
+      cancel();
+      document.removeEventListener("visibilitychange",schedule);
+      window.removeEventListener("pagehide",cancel);
+      window.removeEventListener("pageshow",schedule);
+    };
+  }, [id,interval,issue,reload]);
   const loaded = Boolean(data);
   useEffect(() => {
     if (!loaded) return;

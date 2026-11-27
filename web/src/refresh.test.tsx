@@ -1,21 +1,52 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MonitorRoute } from "./Monitor";
 import type { Gateway } from "./data";
 import type { Monitor } from "./monitor-data";
 
 const snapshot: Monitor = { name:"내 앱", features:[], incidents:[], stats:[], versions:[], samples:[], errorKinds:[], now:0 };
+beforeEach(() => { vi.spyOn(document,"hasFocus").mockReturnValue(true); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
+function mount(monitor: Gateway["monitor"]) {
+  return render(<MemoryRouter initialEntries={["/apps/demo"]}>
+    <Routes><Route path="/apps/:id" element={<MonitorRoute api={{monitor} as unknown as Gateway} />} /></Routes>
+  </MemoryRouter>);
+}
 async function open() {
   vi.useFakeTimers();
   const monitor = vi.fn<Gateway["monitor"]>().mockResolvedValue(snapshot);
-  await act(async () => { render(<MemoryRouter initialEntries={["/apps/demo"]}>
-    <Routes><Route path="/apps/:id" element={<MonitorRoute api={{monitor} as unknown as Gateway} />} /></Routes>
-  </MemoryRouter>); });
+  await act(async () => { mount(monitor); });
   return monitor;
 }
 const advance = (ms:number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+it("두 창에서 앱마다 한 창만 자동 조회하고 대기 창의 수동 조회와 인계를 허용한다", async () => {
+  vi.useFakeTimers();
+  const locks = new Map<string,Promise<void>>();
+  const request = (key:string, {signal}:{signal:AbortSignal}, lead:()=>Promise<void>) => {
+    const pending = (locks.get(key) ?? Promise.resolve()).then(() => { if (!signal.aborted) return lead(); });
+    locks.set(key,pending);
+    return pending;
+  };
+  const original = Object.getOwnPropertyDescriptor(navigator,"locks");
+  Object.defineProperty(navigator,"locks",{configurable:true,value:{request}});
+  try {
+    const first = vi.fn<Gateway["monitor"]>().mockResolvedValue(snapshot);
+    const second = vi.fn<Gateway["monitor"]>().mockResolvedValue(snapshot);
+    const leader = mount(first);
+    const follower = mount(second);
+    await advance(60000);
+    expect([first.mock.calls.length,second.mock.calls.length]).toEqual([2,1]);
+    await act(async () => { fireEvent.click(within(follower.container).getByRole("button",{name:"새로고침"})); });
+    expect(second).toHaveBeenCalledTimes(2);
+    await act(async () => { leader.unmount(); });
+    await advance(60000);
+    expect([first.mock.calls.length,second.mock.calls.length]).toEqual([2,3]);
+  } finally {
+    if (original) Object.defineProperty(navigator,"locks",original);
+    else Reflect.deleteProperty(navigator,"locks");
+  }
+});
 it("기본 1분, 숨긴 탭 일시 중지, 30초 및 끔을 적용한다", async () => {
   const monitor = await open();
   await advance(59999);

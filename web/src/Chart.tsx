@@ -163,7 +163,9 @@ function StatPanel({title,help,value,series,selection,points,p95}:{title:string;
       {series.map((n,i) => n !== null && (series[i-1] == null && series[i+1] == null || i === active) &&
         <circle key={i} cx={center(i,series.length)} cy={pointY(n)} r="1.5" fill="currentColor"/>)}
       {active !== undefined && <line className="spark-cursor" x1={center(active,series.length)} x2={center(active,series.length)} y1="0" y2="30" vectorEffect="non-scaling-stroke"/>}
-    </svg><CursorTarget owner={title} points={points} selection={selection} p95={p95}/></div>
+    </svg><CursorTarget owner={title} points={points} selection={selection} p95={p95}/>
+      {selection.active?.owner === title && <CursorTip index={selection.active.index} points={points} p95={p95}/>}
+    </div>
   </article>;
 }
 
@@ -212,6 +214,9 @@ function Plot({ points, labels, duration = false, baseline, p95 = null, samples 
       </div>
       <div className="flow-x">{labels.map(({ left, label }) => <span key={label}
         style={{ left: `clamp(0%, calc(${left}% - var(--tick-width) / 2), calc(100% - var(--tick-width)))` }}>{label}</span>)}</div>
+      {selection.active?.owner === title && <div className="plot-readout">
+        <CursorTip index={selection.active.index} points={points} p95={p95}/>
+      </div>}
     </div>
   </figure>;
 }
@@ -256,12 +261,16 @@ function CursorTarget({owner,points,p95,selection,crosshair=false}:{owner:string
       }}>
       {crosshair && active !== undefined && <span className="flow-selection" style={{left:percent(center(active,points.length))}}/>}
     </div>
-    {active !== undefined && selection.active?.owner === owner && <div role="tooltip" className="flow-tip"
-      style={active < points.length/2 ? {left:`min(calc(${center(active,points.length)}% + 8px), 100% - var(--tip-width))`} :
-        {right:`min(calc(${100-center(active,points.length)}% + 8px), 100% - var(--tip-width))`}}>
-      <strong>{points[active].label}</strong>{values(points[active],p95).map(([name,value]) =>
-        <span key={name}><span className="tip-label">{" · "+name+" "}</span><em>{value}</em></span>)}</div>}
   </>;
+}
+
+function CursorTip({index,points,p95}:{index:number; points:Bucket[]; p95:number|null}) {
+  const x = center(index,points.length);
+  return <div role="tooltip" className="flow-tip"
+    style={x < 50 ? {left:`min(calc(${x}% + 8px), 100% - var(--tip-width))`} :
+      {right:`min(calc(${100-x}% + 8px), 100% - var(--tip-width))`}}>
+    <strong>{points[index].label}</strong>{values(points[index],p95).map(([name,value]) =>
+      <span key={name}><span className="tip-label">{" · "+name+" "}</span><em>{value}</em></span>)}</div>;
 }
 
 export function Chart({ rows, days, now, baseline, p95 = null, samples, learnsRange = true, thresholds, aggregate }: {
