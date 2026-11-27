@@ -116,26 +116,67 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
         if (!session) initialRecovery = undefined;
       }).data.subscription : undefined;
   async function removeEndpoint(endpoint: string) {
+    await waitForCleanup();
     const {error} = await client.from("push_subscriptions").delete().eq("endpoint",endpoint);
     if (error) throw error;
   }
-  // Auth redirects can replace the account while this page is closed.
-  // Only the page uses this marker to detect that transition on its next load.
   const lastMemberKey = "ship-ping-last-member";
+  const cleanupKey = "ship-ping-push-cleanup";
   let observedMember: string | null | undefined;
-  async function unregister(sub: PushSubscription) {
-    const keys = sub.toJSON().keys;
-    await client.rpc("unregister_browser_push", {p_endpoint:sub.endpoint,
-      p_key:keys?.p256dh,p_auth:keys?.auth}).abortSignal(AbortSignal.timeout(5000));
+  let pending: string | null = null;
+  let cleanup = Promise.resolve();
+  let revision = 0;
+  function read(key: string, fallback: string | null) {
+    try { return localStorage.getItem(key); } catch { return fallback; }
   }
-  async function clearDevice(accountDeleted = false) {
-    async function revoke() {
-      const sub = await currentSubscription();
-      if (sub) await Promise.allSettled([
-        accountDeleted ? undefined : unregister(sub), sub.unsubscribe(),
-      ]);
+  function write(key: string, value: string | null) {
+    try {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key,value);
+    } catch { /* In private storage the in-memory state still applies. */ }
+  }
+  function markPending(value: string) {
+    pending = value;
+    write(cleanupKey,value);
+  }
+  async function unregister(proof: string) {
+    const {error} = await client.rpc("revoke_push_by_proof",{proof}).abortSignal(AbortSignal.timeout(5000));
+    if (error) throw error;
+  }
+  async function clearSubscription(accountDeleted: boolean) {
+    const sub = await currentSubscription();
+    const keys = sub?.toJSON().keys;
+    const proof = sub && keys && await fingerprint(new TextEncoder()
+      .encode([sub.endpoint,keys.p256dh,keys.auth].join("\n")).buffer);
+    const saved = read(cleanupKey,pending);
+    if (saved && saved !== "1" && saved !== proof) await unregister(saved);
+    if (!sub) return;
+    if (!proof) throw Error("구독 확인 실패");
+    if (!accountDeleted) markPending(proof);
+    const [server,browser] = await Promise.allSettled([
+      accountDeleted ? undefined : unregister(proof), sub.unsubscribe(),
+    ]);
+    if (server.status === "rejected" || browser.status === "rejected" || !browser.value) {
+      throw Error("구독 정리 실패");
     }
-    await Promise.allSettled([closePushNotifications(), revoke()]);
+  }
+  function cleanFor(user: string | null, accountDeleted = false) {
+    const current = ++revision;
+    markPending(read(cleanupKey,pending) ?? "1");
+    cleanup = cleanup.then(async () => {
+      const results = await Promise.allSettled([clearSubscription(accountDeleted),closePushNotifications()]);
+      if (current === revision && results.every(r => r.status === "fulfilled")) {
+        write(lastMemberKey,user);
+        write(cleanupKey,null);
+        pending = null;
+      }
+      notifyPushChange();
+    });
+    return cleanup;
+  }
+  async function waitForCleanup() {
+    await cleanup;
+    if (read(cleanupKey,pending)) throw Error("이전 구독 정리 중");
   }
   return {
     requests,
@@ -233,6 +274,7 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       return value(await client.from("push_subscriptions").select("id,endpoint,user_agent,created_at,vapid_fingerprint").order("created_at"));
     },
     async registerPush(app, sub, agent) {
+      await waitForCleanup();
       const {data,error} = await client.rpc("register_push", {app,p_endpoint:sub.endpoint,
         p_key:sub.keys?.p256dh,p_auth:sub.keys?.auth,p_agent:agent,p_fingerprint:await fingerprint(configuredKey()?.buffer)});
       if (error || !data) throw error ?? Error("기기 등록 실패");
@@ -304,16 +346,12 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
     listen(fn) {
       const { data } = client.auth.onAuthStateChange((event, session) => {
         const user = session?.user.id ?? null;
-        if (user !== observedMember) {
-          let previous = observedMember;
-          try {
-            previous = localStorage.getItem(lastMemberKey);
-            if (user) localStorage.setItem(lastMemberKey,user);
-            else localStorage.removeItem(lastMemberKey);
-          } catch { /* Private storage can be unavailable. */ }
+        if (user !== observedMember || read(cleanupKey,pending)) {
+          const previous = read(lastMemberKey,observedMember ?? null);
+          const changed = user !== observedMember;
           observedMember = user;
-          if (previous !== user || (!user && event === "INITIAL_SESSION")) {
-            void clearDevice().catch(() => {}).finally(notifyPushChange);
+          if (previous !== user || read(cleanupKey,pending) || (changed && !user && event === "INITIAL_SESSION")) {
+            void cleanFor(user);
           }
         }
         fn(user, event === "PASSWORD_RECOVERY");
@@ -369,7 +407,7 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       return request;
     },
     async logout(accountDeleted) {
-      await clearDevice(accountDeleted).catch(() => {});
+      await cleanFor(null,accountDeleted);
       const { error } = await client.auth.signOut({ scope: "local" });
       if (error) throw error;
     },

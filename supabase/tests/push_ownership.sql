@@ -47,5 +47,36 @@ insert into notifications(test_app,channel,event,ok,sent_at,push_device,queued_a
  select current_setting('test.app')::uuid,'push','test',null,null,id,now()-interval '5 minutes' from push_subscriptions;
 insert into notifications(test_app,channel,event,ok,sent_at) values(current_setting('test.app')::uuid,'email','test',null,null);
 select is((select channel from claim_notifications(1)),'email','a new email wins the last slot over older push rows');
+create temp table claimed_pushes as select * from claim_notifications(10);
+create temp table chosen as select c.*,n.push_device from claimed_pushes c join notifications n using(id)
+ order by c.id limit 2;
+select ok(prepare_push_delivery(id,claim_token,app)->>'endpoint'=push_target->>'endpoint',
+ 'active lease gets live credentials') from chosen;
+select is(prepare_push_delivery(id,gen_random_uuid(),app),null::jsonb,'stale lease denied') from chosen;
+select ok((select count(*) from chosen c join notifications n using(id) where n.claim_token=c.claim_token)=2,
+ 'stale lease cannot cancel a live delivery');
+update push_subscriptions set user_id='00000000-0000-0000-0000-000000000048'
+ where id=(select push_device from chosen order by id limit 1);
+delete from push_subscriptions where id=(select push_device from chosen order by id desc limit 1);
+select is(prepare_push_delivery(id,claim_token,app),null::jsonb,'removed or reassigned after claim') from chosen;
+select is((select count(*) from chosen c join notifications n using(id) where n.sent_at is not null
+ and n.ok=false and n.error='푸시 발송 취소' and n.retries=0 and n.claim_token is null),2::bigint,'both cancellations terminal');
+select ok(not has_function_privilege('authenticated','prepare_push_delivery(uuid,uuid,uuid)','execute')
+ and not has_function_privilege('anon','prepare_push_delivery(uuid,uuid,uuid)','execute')
+ and has_function_privilege('service_role','prepare_push_delivery(uuid,uuid,uuid)','execute'),'only worker can prepare delivery');
+-- Use a fresh device as the two preceding cancellation targets were randomly ordered.
+select register_push(current_setting('test.app')::uuid,'https://web.push.apple.com/revoke','B'||repeat('A',86),repeat('Z',22),'PC');
+select set_config('test.proof',encode(extensions.digest(endpoint || chr(10) || p256dh || chr(10) || auth,'sha256'),'hex'),true)
+ from push_subscriptions where endpoint='https://web.push.apple.com/revoke';
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000048',true);
+set local role authenticated;
+select revoke_push_by_proof(repeat('0',64));
+reset role;
+select ok(exists(select from push_subscriptions where endpoint='https://web.push.apple.com/revoke'),'incorrect proof preserves device');
+set local role authenticated;
+select revoke_push_by_proof(current_setting('test.proof'));
+reset role;
+select is_empty($$select from push_subscriptions where endpoint='https://web.push.apple.com/revoke'$$,'next account can replay exact revocation');
+select ok(not has_function_privilege('anon','revoke_push_by_proof(text)','execute'),'anonymous revocation denied');
 select * from finish();
 rollback;

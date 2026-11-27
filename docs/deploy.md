@@ -45,7 +45,7 @@ GitHub 저장소 Settings → Environments에서 `production`을 만들고 배�
 | 2 | 같은 Worker의 Variables and Secrets → Add → Secret | `VAPID_PUBLIC_KEY` | 공개키 |
 | 3 | GitHub 저장소 → Settings → Environments → production → Environment secrets → Add environment secret | `VITE_VAPID_PUBLIC_KEY` | 2번과 같은 공개키 |
 
-T46(#44) 다음에 T49를 병합하고 Supabase 마이그레이션을 적용한다. 아래 3장의 순서대로 Worker, Pages를 배포한다. iOS 16.4 이상에서 Safari의 공유 버튼 → 홈 화면에 추가를 누른 뒤 홈 화면의 쉽앤핑을 열어 로그인한다. **알림 설정 → 푸시 켜기 → 허용 → 시험 푸시 보내기**를 누르고 다음 분에 알림을 확인한다. 시험 알림을 누르면 해당 앱의 알림 설정이 열리고, 실제 문제 알림을 누르면 그 문제 화면이 열린다.
+T46(#44) 다음에 T49를 병합하고 Supabase 마이그레이션을 적용한다. 아래 3장의 순서대로 Worker, Pages를 배포한다. iOS 16.4 이상에서 Safari의 공유 버튼 → 홈 화면에 추가를 누른 뒤 홈 화면의 쉽앤핑을 열어 로그인한다. **알림 설정 → 푸시 켜기 → 허용 → 시험 푸시 보내기**를 누르고 다음 분에 알림을 확인한다. 시험 알림을 누르면 알림이 닫힌다. 실제 문제 알림을 누르면 해당 문제의 상세 화면이 열린다.
 
 ## 3. Worker와 Pages 배포 · 사람
 

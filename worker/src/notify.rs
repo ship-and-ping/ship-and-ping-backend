@@ -27,8 +27,6 @@ struct Notice {
     secret_id: Option<uuid::Uuid>,
     email: Option<String>,
     digest: bool,
-    #[cfg(target_arch = "wasm32")]
-    push_target: Option<push::Target>,
 }
 
 fn feature_name(n: &Notice) -> String {

@@ -163,15 +163,12 @@ fn configured<'a>(private: Option<&'a str>, public: Option<&'a str>) -> Option<(
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(super) async fn send(n: &Notice, env: &worker::Env) -> &'static str {
+pub(super) async fn send(n: &Notice, target: &Target, env: &worker::Env) -> &'static str {
     use worker::*;
     let private = env.secret("VAPID_PRIVATE_KEY").ok().map(|v| v.to_string());
     let public = super::setting(env, "VAPID_PUBLIC_KEY");
     let Some((private, public)) = configured(private.as_deref(), public.as_deref()) else {
         return "unconfigured";
-    };
-    let Some(target) = &n.push_target else {
-        return "disabled";
     };
     let Some(origin) = push_origin(&target.endpoint) else {
         return "retry";

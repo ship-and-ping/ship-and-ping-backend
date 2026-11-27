@@ -1,6 +1,10 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { gateway } from "./data";
+
+const {webcrypto,hash} = await vi.importActual<{
+  webcrypto: Crypto; hash(algorithm: string, input: string): string;
+}>("node:crypto");
 
 it.each([429, 503])("승인 요청 생성이 %s여도 일반 메일 로그인과 가입을 계속한다", async status => {
   const auth = {
@@ -233,7 +237,13 @@ it("화면 구독 전 도착한 복구 이벤트를 한 번만 다시 전달한�
   }
 });
 
+afterEach(() => {
+  localStorage.removeItem("ship-ping-push-cleanup");
+  localStorage.removeItem("ship-ping-last-member");
+});
+
 function pushFixture() {
+  vi.stubGlobal("crypto",webcrypto);
   const endpoint = "https://web.push.apple.com/shared";
   const close = vi.fn();
   const unsubscribe = vi.fn(async () => true);
@@ -247,18 +257,19 @@ function pushFixture() {
   type Listener = (event:string,session:{user:{id:string}} | null)=>void;
   const onAuthStateChange = vi.fn<(fn:Listener) => {data:{subscription:{unsubscribe:()=>void}}}>()
     .mockReturnValue({data:{subscription:{unsubscribe:vi.fn()}}});
-  const api = gateway({rpc,auth:{onAuthStateChange,signOut}} as unknown as SupabaseClient);
-  return {api,sub,registration,abortSignal,rpc,close,signOut,onAuthStateChange,keys};
+  const reload = () => gateway({rpc,auth:{onAuthStateChange,signOut}} as unknown as SupabaseClient);
+  const proof = hash("sha256",[endpoint,keys.p256dh,keys.auth].join("\n"));
+  return {api:reload(),reload,sub,registration,abortSignal,rpc,close,signOut,onAuthStateChange,proof};
 }
 
 it.each(["success","server offline","browser failure","both offline","deleted account"])("ends the local session after push cleanup (%s)", async reason => {
-  const {api,sub,keys,rpc,abortSignal,close,signOut} = pushFixture();
+  const {api,sub,proof,rpc,abortSignal,close,signOut} = pushFixture();
   if (reason === "server offline" || reason === "both offline") abortSignal.mockRejectedValue(Error("offline"));
   if (reason === "browser failure" || reason === "both offline") sub.unsubscribe.mockRejectedValue(Error("browser unavailable"));
   try {
     await api.logout(reason === "deleted account" || undefined);
     if (reason === "deleted account") expect(rpc).not.toHaveBeenCalled();
-    else expect(rpc).toHaveBeenCalledExactlyOnceWith("unregister_browser_push",{p_endpoint:sub.endpoint,p_key:keys.p256dh,p_auth:keys.auth});
+    else expect(rpc).toHaveBeenCalledExactlyOnceWith("revoke_push_by_proof",{proof});
     expect(sub.unsubscribe).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
     expect(signOut).toHaveBeenCalledExactlyOnceWith({scope:"local"});
@@ -277,18 +288,52 @@ it("closes displayed notifications even without a subscription", async () => {
 });
 
 it.each(["SIGNED_IN","INITIAL_SESSION"])("discards the previous member's subscription on a live switch or redirect (%s)", async event => {
-  const {api,sub,rpc,keys,close,onAuthStateChange} = pushFixture();
+  const {api,sub,rpc,proof,close,onAuthStateChange} = pushFixture();
   localStorage.setItem("ship-ping-last-member","former");
   const stop = api.listen(vi.fn());
   const emit = onAuthStateChange.mock.calls[0][0];
   try {
     emit(event,{user:{id:"next"}});
     await vi.waitFor(() => expect(sub.unsubscribe).toHaveBeenCalledOnce());
-    expect(rpc).toHaveBeenCalledExactlyOnceWith("unregister_browser_push",{p_endpoint:sub.endpoint,p_key:keys.p256dh,p_auth:keys.auth});
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("revoke_push_by_proof",{proof});
     expect(close).toHaveBeenCalledOnce();
     emit("SIGNED_IN",{user:{id:"next"}});
     expect(sub.unsubscribe).toHaveBeenCalledOnce();
+    expect(localStorage.getItem("ship-ping-last-member")).toBe("next");
   } finally { stop(); localStorage.removeItem("ship-ping-last-member"); vi.unstubAllGlobals(); }
+});
+
+it.each(["pending RPC","RPC error","pending unsubscribe","unsubscribe false"])("resumes interrupted account cleanup on startup (%s)", async phase => {
+  const {api,reload,sub,registration,rpc,proof,abortSignal,onAuthStateChange} = pushFixture();
+  const key = "ship-ping-last-member";
+  const marker = "ship-ping-push-cleanup";
+  localStorage.setItem(key,"former");
+  if (phase === "pending RPC") abortSignal.mockImplementationOnce(() => new Promise(() => {}));
+  if (phase === "RPC error") abortSignal.mockResolvedValueOnce({error:Error("offline")});
+  if (phase === "pending unsubscribe") sub.unsubscribe.mockImplementationOnce(() => new Promise(() => {}));
+  if (phase === "unsubscribe false") sub.unsubscribe.mockResolvedValueOnce(false);
+  const session = {user:{id:"next"}};
+  const stop = api.listen(vi.fn());
+  try {
+    onAuthStateChange.mock.calls[0][0]("SIGNED_IN",session);
+    expect(localStorage.getItem(marker)).toBeTruthy();
+    await vi.waitFor(() => expect(sub.unsubscribe).toHaveBeenCalledOnce());
+    expect(localStorage.getItem(key)).toBe("former");
+    expect(localStorage.getItem(marker)).toBe(proof);
+    stop(); // Discard this tab's gateway and its unfinished promises.
+    if (phase === "pending RPC" || phase === "RPC error") registration.pushManager.getSubscription.mockResolvedValue(null);
+    // Returning to the recorded account must also honor an outstanding marker.
+    const restart = reload().listen(vi.fn());
+    try {
+      const restored = phase === "RPC error" ? "former" : "next";
+      onAuthStateChange.mock.calls[1][0]("INITIAL_SESSION",{user:{id:restored}});
+      await vi.waitFor(() => expect(localStorage.getItem(marker)).toBeNull());
+      expect(localStorage.getItem(key)).toBe(restored);
+      expect(rpc).toHaveBeenCalledTimes(2);
+      expect(rpc).toHaveBeenLastCalledWith("revoke_push_by_proof",{proof});
+      expect(sub.unsubscribe).toHaveBeenCalledTimes(phase === "pending RPC" || phase === "RPC error" ? 1 : 2);
+    } finally { restart(); }
+  } finally { vi.unstubAllGlobals(); }
 });
 
 it("keeps an existing subscription on a page reload in the same session", () => {
@@ -319,6 +364,6 @@ it("does not register a device again when the same member logs back in", async (
     expect(await registration.pushManager.getSubscription()).toBeNull();
     expect(sub.unsubscribe).toHaveBeenCalledOnce();
     expect(rpc).toHaveBeenCalledTimes(1);
-    expect(rpc.mock.calls[0]).toContain("unregister_browser_push");
+    expect(rpc.mock.calls[0]).toContain("revoke_push_by_proof");
   } finally { stop(); localStorage.removeItem("ship-ping-last-member"); vi.unstubAllGlobals(); }
 });

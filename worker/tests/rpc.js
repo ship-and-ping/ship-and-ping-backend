@@ -10,6 +10,7 @@ report.releases = [];
 report.retry = [];
 report.push = [];
 let round=0;
+const liveTargets = new Map();
 let stateIssued=false;
 async function rows() {
   round++;
@@ -33,6 +34,13 @@ async function rows() {
     p256dh:encode(await crypto.subtle.exportKey("raw",receiver.publicKey)),
     auth:encode(crypto.getRandomValues(new Uint8Array(16))),
   }});
+  liveTargets.set(id(11), result.at(-1).push_target);
+  if (round === 2) {
+    const claimed = result.at(-1);
+    const removed = {...claimed.push_target, endpoint:"https://web.push.apple.com/revoked"};
+    liveTargets.set(id(12),removed);
+    result.push({...claimed,id:id(12),push_target:removed});
+  }
   return result;
 }
 async function fixtureHash(suffix) {
@@ -45,6 +53,7 @@ export default {
     const url=new URL(request.url);
     if(url.pathname==="/fixture-report") return Response.json(report);
     if(url.hostname==="web.push.apple.com") {
+      if (url.pathname === "/revoked") report.safe = false;
       const bytes = new Uint8Array(await request.arrayBuffer());
       report.safe &&= request.method==="POST" && request.headers.get("Content-Encoding")==="aes128gcm"
         && request.headers.get("Urgency")==="high" && Number(request.headers.get("TTL"))>0
@@ -73,6 +82,7 @@ export default {
         && payload.text.includes("12건 더") && payload.text.includes("트루바")
         && payload.html.includes("트루바") && payload.html.includes('href="https://web.test/apps"')
         && ![sensitive,"private-body","private-route",hook].some(value=>payload.html.includes(value));
+      liveTargets.delete(id(12)); // The browser opts out while the email is being sent.
       report.mail++;return Response.json({});
     }
     if(url.hostname==="slack.com"){
@@ -115,6 +125,10 @@ export default {
         return Response.json({status:"missing"});
       case "evaluate_all": return new Response(null,{status:503});
       case "claim_notifications": return Response.json(await rows());
+      case "prepare_push_delivery":
+        report.safe &&= body.token===id(3) && body.app===id(4);
+        if (body.id === id(12) && !liveTargets.has(body.id)) report.revokedAtSend = true;
+        return Response.json(liveTargets.get(body.id) ?? null);
       case "complete_push":
         report.push.push(body.id===id(11) && body.token===id(3) ? body.result : "wrong lease");
         return Response.json(null);

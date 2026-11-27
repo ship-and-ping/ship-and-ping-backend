@@ -1,3 +1,4 @@
+use super::push::Target;
 use super::{Notice, render_mail, sentence};
 use crate::endpoint::Supabase;
 use serde_json::{Value, json};
@@ -142,6 +143,17 @@ async fn slack(hook: &str, body: String) -> Outcome {
         Outcome::Failed("슬랙 발송 실패")
     }
 }
+async fn current_push_target(db: &Supabase, notice: &Notice) -> Result<Option<Target>> {
+    rpc(
+        db,
+        "prepare_push_delivery",
+        json!({"id":notice.id,"token":notice.claim_token,"app":notice.app}),
+    )
+    .await?
+    .json()
+    .await
+}
+
 pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
     // Ten rows leave room for one provider request, reservation and completion per row.
     let rows: Vec<Notice> = rpc(db, "claim_notifications", json!({"limit":10}))
@@ -172,7 +184,15 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
     for (_, rows) in groups {
         let first = &rows[0];
         if first.channel == "push" {
-            let result = super::push::send(first, env).await;
+            let target = match current_push_target(db, first).await {
+                Ok(Some(target)) => target,
+                Ok(None) => continue, // Revoked or superseded lease, already settled by the DB.
+                Err(_) => {
+                    console_error!("Push target lookup failed");
+                    continue; // Leave the lease for recovery.
+                }
+            };
+            let result = super::push::send(first, &target, env).await;
             if rpc(
                 db,
                 "complete_push",
