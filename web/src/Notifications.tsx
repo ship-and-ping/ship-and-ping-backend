@@ -150,6 +150,10 @@ function Settings({ app, api, origin }: Props & { app: string }) {
     setSettings(current => current && { ...current, email: enabled });
     setMessage(enabled ? "이메일 알림이 켜졌어요." : "이메일 알림이 꺼졌어요.");
   }
+  async function disconnect() {
+    await api.disconnectSlack(app);
+    setSettings(current => current && { ...current, connected: false, broken: false, channel: null });
+  }
   async function connect() {
     const result = await api.slack("install", origin, { app });
     if (
@@ -196,7 +200,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                     <button
                       className="secondary"
                       disabled={busy}
-                      onClick={() => act("disconnect", () => api.disconnectSlack(app))}
+                      onClick={() => act("disconnect", disconnect)}
                     >
                       {pending === "disconnect" ? "연결 끊는 중" : "슬랙 연결 끊기"}
                     </button>

@@ -408,6 +408,31 @@ it.each([
   await waitFor(() => expect(api.settings).toHaveBeenCalledTimes(3));
   expect(api.testSlack).toHaveBeenCalledTimes(1);
 });
+it.each(["지연", "실패"] as const)("슬랙 해제 후 재조회 %s 중에도 해제된 상태를 표시한다", async (refresh) => {
+  const api = fake();
+  let finishDisconnect!: () => void;
+  vi.mocked(api.disconnectSlack).mockImplementationOnce(() => new Promise(resolve => { finishDisconnect = resolve; }));
+  vi.mocked(api.settings)
+    .mockResolvedValueOnce({ email: false, connected: true, broken: false, channel: "#모임" })
+    .mockImplementationOnce(() => refresh === "지연" ? new Promise(() => {}) : Promise.reject(new Error("offline")));
+  open("/apps/a/notifications", api);
+  const disconnect = await screen.findByRole("button", { name: "슬랙 연결 끊기" });
+  expect(screen.getByRole("button", { name: "시험 알림 보내기" })).toBeTruthy();
+  expect(screen.queryByText("알림을 받을 곳이 없어요.")).toBeNull();
+  fireEvent.click(disconnect);
+  expect(screen.getByText(/연결됐어요/)).toBeTruthy();
+  await act(async () => finishDisconnect());
+  if (refresh === "지연") {
+    await screen.findByText("최신 상태를 불러오는 중이에요.");
+  } else {
+    await screen.findByText(/최신 상태를 불러오지 못했어요/);
+  }
+  expect(api.disconnectSlack).toHaveBeenCalledWith("a");
+  expect(screen.queryByText(/연결됐어요/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "시험 알림 보내기" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Slack에 추가" })).toBeTruthy();
+  expect(screen.getByText("알림을 받을 곳이 없어요.")).toBeTruthy();
+});
 it("받을 곳 없음, 연결 끊김, 연결됨 상태와 시험 알림을 표시한다", async () => {
   const api = fake();
   open("/apps/a/notifications", api);
