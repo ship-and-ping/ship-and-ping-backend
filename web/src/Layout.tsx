@@ -10,6 +10,7 @@ import { Sheep } from "./Sheep";
 import { StatusBadge, Timeline, IssueListItem } from "./IncidentSummary";
 import { displayText } from "./normalize";
 import mark from "./assets/wordmark.png";
+import "./styles/layout.css";
 
 type AppHeading = { id: string; name: string; issues?: number };
 export const CurrentAppName = createContext<(heading: AppHeading) => void>(

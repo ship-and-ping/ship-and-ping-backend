@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -15,6 +16,113 @@ import { gateway } from "./data";
 import vectors from "../../docs/specs/sanitize-vectors.json";
 
 afterEach(cleanup);
+it("빈 시간은 0건으로 표시하고 사용과 걸린 시간에 각각 눈금을 붙인다", async () => {
+  setup("/apps/a/features/f");
+  const usage = await screen.findByRole("figure", { name: "사용과 실패" });
+  const duration = screen.getByRole("figure", { name: "걸린 시간" });
+  expect(within(usage).getByText("4건")).toBeTruthy();
+  expect(within(usage).getByText("0건")).toBeTruthy();
+  expect(within(duration).getByText("0초")).toBeTruthy();
+  expect(within(usage).getAllByText(/^(오전|오후) \d+시$/).length).toBeGreaterThanOrEqual(5);
+  expect(screen.getByText("아직 사용 기록이 적어요. 쌓이면 흐름이 보여요.")).toBeTruthy();
+  const table = screen.getByText("최근 24시간 기록").closest("table")!;
+  expect(Array.from(table.tBodies[0].rows).filter(row => row.cells[1].textContent === "0").length).toBeGreaterThanOrEqual(23);
+  const mark = within(usage).getByRole("slider", { name: "사용과 실패" });
+  expect(usage.querySelector('rect[fill="var(--sp-chart)"][height="75%"]')).toBeTruthy();
+  expect(within(duration).getByText("최근 1시간 보통 0.1초")).toBeTruthy();
+  fireEvent.focus(mark);
+  const tip = within(usage).getByRole("tooltip");
+  expect(tip.textContent).toMatch(/(오전|오후).*사용 4건.*실패 1건.*보통 시간 0.1초/);
+  expect(within(duration).getByText("0.1초", {selector: ".isolated-value"})).toBeTruthy();
+  fireEvent.keyDown(mark, { key: "Escape" });
+  expect(within(usage).queryByRole("tooltip")).toBeNull();
+  fireEvent.keyDown(mark, { key: "ArrowLeft" });
+  expect(within(usage).getByRole("tooltip").textContent).toBe(mark.getAttribute("aria-valuetext"));
+  fireEvent.click(screen.getByRole("button", { name: "7일" }));
+  const week = screen.getByRole("figure", { name: "사용과 실패" });
+  expect(within(week).getAllByText(/\d+일.*[월화수목금토일]/).length).toBeGreaterThanOrEqual(4);
+});
+it("그래프에 포인터가 들어오면 가리킨 구간을 표시하고 나가면 키보드 구간을 복원한다", async () => {
+  setup("/apps/a/features/f");
+  const usage = await screen.findByRole("figure", { name: "사용과 실패" });
+  const plot = within(usage).getByRole("slider");
+  vi.spyOn(plot, "getBoundingClientRect").mockReturnValue(new DOMRect(48, 0, 264, 112));
+  fireEvent.focus(plot);
+  fireEvent.keyDown(plot, { key: "ArrowLeft" });
+  const focused = within(usage).getByRole("tooltip").textContent;
+  expect(plot.getAttribute("aria-valuenow")).toBe("23");
+  const rows = screen.getByText("최근 24시간 기록").closest("table")!.tBodies[0].rows;
+  fireEvent(plot, new MouseEvent("pointerover", { bubbles: true, clientX: 50 }));
+  expect(within(usage).getByRole("tooltip").textContent).toContain(rows[0].cells[0].textContent);
+  fireEvent(plot, new MouseEvent("pointermove", { bubbles: true, clientX: 309 }));
+  expect(within(usage).getByRole("tooltip").textContent).toContain(rows[23].cells[0].textContent);
+  fireEvent.pointerOut(plot);
+  expect(within(usage).getByRole("tooltip").textContent).toBe(focused);
+  fireEvent.keyDown(plot, { key: "ArrowRight" });
+  expect(plot.getAttribute("aria-valuenow")).toBe("24");
+});
+it("그래프는 좌우와 Home·End로 이동하고 위아래 스크롤 키는 브라우저에 맡긴다", async () => {
+  setup("/apps/a/features/f");
+  const plot = await screen.findByRole("slider", { name: "사용과 실패" });
+  fireEvent.focus(plot);
+  for (const [key, value] of [["Home", "1"], ["ArrowRight", "2"], ["End", "24"], ["ArrowLeft", "23"]]) {
+    expect(fireEvent.keyDown(plot, { key })).toBe(false);
+    expect(plot.getAttribute("aria-valuenow")).toBe(value);
+  }
+  for (const key of ["ArrowUp", "ArrowDown"]) {
+    expect(fireEvent.keyDown(plot, { key })).toBe(true);
+    expect(plot.getAttribute("aria-valuenow")).toBe("23");
+  }
+});
+it("그래프 터치 영역은 세로 스크롤과 두 손가락 확대를 허용한다", async () => {
+  setup("/apps/a/features/f");
+  const plot = await screen.findByRole("slider", { name: "사용과 실패" });
+  const declarations = Array.from(document.styleSheets)
+    .flatMap(sheet => Array.from(sheet.cssRules))
+    .filter((rule): rule is CSSStyleRule => rule.type === CSSRule.STYLE_RULE)
+    .filter(rule => plot.matches(rule.selectorText))
+    .map(rule => rule.style.getPropertyValue("touch-action"))
+    .filter(Boolean);
+  expect(declarations.at(-1)?.split(/\s+/).sort()).toEqual(["pan-y", "pinch-zoom"]);
+});
+it("그래프 밖에 초점이 있어도 Escape로 마우스 툴팁을 닫는다", async () => {
+  setup("/apps/a/features/f");
+  const plot = await screen.findByRole("slider", { name: "사용과 실패" });
+  const button = screen.getByRole("button", { name: "7일" });
+  button.focus();
+  vi.spyOn(plot, "getBoundingClientRect").mockReturnValue(new DOMRect(48, 0, 264, 112));
+  fireEvent(plot, new MouseEvent("pointerover", { bubbles: true, clientX: 50 }));
+  expect(screen.getByRole("tooltip")).toBeTruthy();
+  fireEvent.keyDown(button, { key: "Escape" });
+  expect(screen.queryByRole("tooltip")).toBeNull();
+  expect(document.activeElement).toBe(button);
+});
+it("첫 실패나 사용량 최대 구간과 구별해서 실패가 가장 많은 구간을 요약한다", async () => {
+  setup("/apps/a/features/f", [], rows => {
+    const stat = (rows.stats_5m as object[])[0];
+    rows.stats_5m = [[4, 12, 2], [2, 7, 6], [0, 4, 1]].map(([hours, total, failures]) => ({
+      ...stat, bucket: new Date(Date.now() - (hours + 0.25) * 3600000).toISOString(), total, failures,
+    }));
+  });
+  const usage = await screen.findByRole("figure", { name: "사용과 실패" });
+  const table = screen.getByText("최근 24시간 기록").closest("table")!;
+  const label = table.tBodies[0].rows[21].cells[0].textContent;
+  expect(within(usage).getByText(label + " 구간에 실패 6건이 있었어요.")).toBeTruthy();
+});
+it("시간 기록 사이의 빈 구간에서 선을 끊는다", async () => {
+  setup("/apps/a/features/f", [], rows => {
+    const stat = (rows.stats_5m as object[])[0];
+    rows.stats_5m = [1.25, 2.25, 5.25, 6.25].map(hours => ({
+      ...stat, bucket: new Date(Date.now() - hours * 3600000).toISOString(),
+    }));
+  });
+  const duration = await screen.findByRole("figure", { name: "걸린 시간" });
+  const lines = duration.querySelectorAll("path.duration-run");
+  expect(lines).toHaveLength(2);
+  for (const line of lines) expect(line.getAttribute("d")).toMatch(/^M[^M]+L[^ML]+$/);
+  expect(screen.queryByText(/아직 사용 기록이 적어요/)).toBeNull();
+  expect(within(duration).getByText("최근 1시간에 걸린 시간 기록이 없어요.")).toBeTruthy();
+});
 it("앱 홈의 기능 목록에 기능 지도의 이름을 바로 표시한다", async () => {
   setup("/apps/a#features", [], rows => {
     Object.assign((rows.features as object[])[0], {kind:"auto", name:"참가 신청", name_source:"ai"});

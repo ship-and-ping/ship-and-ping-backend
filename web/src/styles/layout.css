@@ -1,0 +1,10 @@
+@media (min-width: 1024px) {
+  .shell > .rail {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+}

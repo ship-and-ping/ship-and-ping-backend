@@ -1,0 +1,100 @@
+.monitor .hero-card:has(+ .usage-panel) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--sp-space-3);
+  padding: var(--sp-space-6);
+}
+.monitor .hero-card:has(+ .usage-panel) > .sheep {
+  position: static;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: clamp(48px, 9vw, 84px);
+  margin: 0;
+}
+.monitor .usage-panel { min-width: 0; gap: var(--sp-space-2); word-break: keep-all; overflow-wrap: anywhere; }
+.usage-panel .flow-range, .flow-key, .flow-x, .flow-y {
+  color: var(--sp-ink-2);
+  font-size: var(--sp-text-xs);
+}
+.usage-panel .flow-range { margin-block: var(--sp-space-1); }
+.flow-note {
+  background: var(--sp-surface-2);
+  padding: var(--sp-space-2) var(--sp-space-3);
+  border-radius: var(--sp-radius-sm);
+}
+.usage-panel .flow-figure {
+  margin: var(--sp-space-2) 0 0;
+  padding: var(--sp-space-4) 0 0;
+  border: 0;
+  border-top: 1px solid var(--sp-line);
+  border-radius: 0;
+}
+.flow-figure figcaption { font-size: var(--sp-text-lg); font-weight: 700; }
+.flow-summary { margin: var(--sp-space-1) 0; font-size: var(--sp-text-sm); }
+.flow-key { display: flex; flex-wrap: wrap; gap: var(--sp-space-3); margin: var(--sp-space-2) 0 var(--sp-space-5); }
+.flow-key span { display: inline-flex; align-items: center; gap: var(--sp-space-1); }
+.flow-key span::before { content: ""; width: 0.9em; height: 0.9em; }
+.success-key::before { background: var(--sp-chart); }
+.excluded-key::before { background: var(--sp-line-strong); }
+.failure-key::before { background: repeating-linear-gradient(135deg, var(--sp-chart-failure) 0 3px, var(--sp-surface) 3px 4px); }
+.flow-key .median-key::before, .flow-key .baseline-key::before { height: 0; width: 1.3em; border-top: 2px solid var(--sp-chart-time); }
+.flow-key .baseline-key::before { border-top: 2px dashed var(--sp-chart-usual); }
+.flow-coordinates { display: grid; grid-template-columns: minmax(3.2em, max-content) minmax(0, 1fr); column-gap: var(--sp-space-2); }
+.flow-y { display: flex; flex-direction: column; justify-content: space-between; text-align: end; line-height: 1; }
+.flow-plot { height: 112px; position: relative; border-block: 1px solid var(--sp-line-strong); }
+.flow-figure + .flow-figure .flow-plot { height: 78px; border-top-color: transparent; }
+.flow-marks { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.flow-marks circle { fill: var(--sp-chart-time); }
+.duration-run { fill: none; stroke: var(--sp-chart-time); stroke-width: 2; }
+.usual-duration { stroke: var(--sp-chart-usual); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.flow-hit {
+  position: absolute;
+  inset: 0;
+  touch-action: pan-y pinch-zoom;
+  user-select: none;
+  cursor: crosshair;
+}
+.flow-hit:focus-visible, .flow-selection { outline: 2px solid var(--sp-chart); outline-offset: -2px; }
+.flow-selection { position: absolute; inset-block: 0; pointer-events: none; }
+.flow-tip {
+  position: absolute;
+  z-index: 2;
+  inset-inline: 0;
+  bottom: calc(100% + var(--sp-space-1));
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
+  padding: var(--sp-space-2);
+  border-radius: var(--sp-radius-sm);
+  color: var(--sp-hero-ink);
+  background: var(--sp-hero);
+  font-size: var(--sp-text-sm);
+  pointer-events: none;
+}
+.isolated-value {
+  position: absolute;
+  transform: translate(6px, -50%);
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--sp-surface);
+  color: var(--sp-ink);
+  font-size: var(--sp-text-xs);
+}
+.isolated-value.on-left { transform: translate(calc(-100% - 6px), -50%); }
+.flow-x { grid-column: 2; position: relative; min-height: 2.8em; line-height: 1.2; }
+.flow-x { --tick-width: min(16%, 6.5em); }
+.flow-x span {
+  position: absolute;
+  top: var(--sp-space-2);
+  width: var(--tick-width);
+  text-align: center;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+.usage-panel details table { width: 100%; }
+@media (max-width: 600px) {
+  .flow-x { min-height: 3.5em; }
+  .flow-x span { font-size: var(--sp-text-xs); }
+  .flow-x:has(> :nth-child(7)) span:nth-child(even) { display: none; }
+}

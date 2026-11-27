@@ -9,7 +9,8 @@ import { exampleEmail, mockPage, now } from "./fixtures.mjs";
 const phase = process.argv[2] ?? "screens";
 const require = createRequire(import.meta.url);
 const patterns = ["patterns-before", "patterns-after"].includes(phase);
-if (!patterns && !["screens", "before", "after","qa3-before","qa3-after"].includes(phase)) throw Error("Unknown QA phase");
+const chart = ["chart-before", "chart-after"].includes(phase);
+if (!patterns && !chart && !["screens", "before", "after","qa3-before","qa3-after"].includes(phase)) throw Error("Unknown QA phase");
 const qa3 = phase.startsWith("qa3-");
 const gallery = phase === "screens";
 const dir = gallery ? resolve("../docs/design/screens") : resolve("../docs/design/qa", phase);
@@ -75,11 +76,13 @@ const flow = [
   const [,path,state,ready] = cases[index];
   return [title,path,variant ?? state,ready];
 });
-const profiles = qa3 ? [[1440,"light",1,false],[1440,"dark",1,false],[390,"light",1,false],[390,"dark",1,true]] : gallery ? [[1440,"light",1,false],[390,"light",1,false]] : [
+const profiles = chart ? [[1440,"light",1,false],[390,"light",1,true]] : qa3 ? [[1440,"light",1,false],[1440,"dark",1,false],[390,"light",1,false],[390,"dark",1,true]] : gallery ? [[1440,"light",1,false],[390,"light",1,false]] : [
   [1440,"light",1,false], [1280,"dark",1,false], [390,"light",1,false], [390,"dark",2,true],
 ];
 const selected = process.argv.slice(3);
-const scenes = patterns ? [...cases,
+const chartScenes = ["many","few","cluster","scrolled"].map(state =>
+  [state === "scrolled" ? "아래로 내린 회원 메뉴" : "사용 흐름", "/apps/demo/features/apply", state, ".chart-period"]);
+const scenes = chart ? chartScenes : patterns ? [...cases,
   ["내 앱 불러오기","/apps","loading","main h1"],
   ["이메일 알림 저장","/apps/demo/notifications","email-saving","[role=switch]"],
 ] : gallery || qa3 ? flow : cases;
@@ -99,6 +102,7 @@ try {
     for (const [index,[title,path,state,ready]] of scenes.entries()) {
       if (selected.length && !selected.includes(String(index))) continue;
       const page = await browser.newPage({ viewport:{width,height:width===390?844:900}, colorScheme,
+        hasTouch: phase === "chart-after" && width === 390,
         reducedMotion: reduced ? "reduce" : "no-preference", locale:"ko-KR",timezoneId:"Asia/Seoul", serviceWorkers:"block" });
       try {
         await page.clock.setFixedTime(new Date(now));
@@ -149,12 +153,53 @@ try {
             throw Error("Dismiss action hierarchy");
         }
         const overflow = await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth);
+        if (phase === "chart-after" && overflow > 0) throw Error("Chart overflow at " + width);
+        if (phase === "chart-after") {
+          const hero = page.locator(".hero-card");
+          const contained = await hero.evaluate(card => {
+            const frame = card.getBoundingClientRect();
+            const sheep = card.querySelector(".sheep").getBoundingClientRect();
+            return sheep.top >= frame.top && sheep.bottom <= frame.bottom && sheep.right <= frame.right;
+          });
+          if (!contained) throw Error("Feature summary clips its sheep");
+          const usage = page.getByRole("figure", {name:"사용과 실패"});
+          const mark = usage.getByRole("slider");
+          await tabTo(page, mark);
+          await usage.getByRole("tooltip").waitFor();
+          if (width === 390 && state === "cluster") await checkMixedChartInput(page, usage, mark);
+          if (width === 390 && state === "scrolled") {
+            const duration = page.getByRole("figure", {name:"걸린 시간"});
+            const label = await duration.locator(".isolated-value").boundingBox();
+            const dot = await duration.locator("circle").boundingBox();
+            const gap = dot.x - (label.x + label.width);
+            if (gap < 0 || gap > 6 || Math.abs(label.y + label.height / 2 - dot.y - dot.height / 2) > 2)
+              throw Error("Single measurement label is detached from the last point");
+            if (await duration.locator(".isolated-value").evaluate(el => {
+              const text = document.createRange();
+              text.selectNodeContents(el);
+              return text.getClientRects().length !== 1;
+            })) throw Error("Single measurement label wraps");
+            await duration.screenshot({path:resolve(dir,"isolated-390.jpg")});
+          }
+          await page.keyboard.press("Escape");
+          await usage.getByRole("tooltip").waitFor({state:"hidden"});
+          await mark.evaluate(el => el.blur());
+          await page.getByRole("button", {name:"7일",exact:true}).click();
+          await page.getByText("표로 보기", {exact:true}).click();
+          if (await page.evaluate(()=>document.documentElement.scrollWidth > innerWidth))
+            throw Error("Seven-day chart table overflow");
+          await page.getByText("표로 보기", {exact:true}).click();
+          await page.getByRole("button", {name:"24시간",exact:true}).click();
+          await page.getByRole("button", {name:"24시간",exact:true}).evaluate(el=>el.blur());
+          await page.mouse.move(0,0);
+          await page.evaluate(()=>window.scrollTo(0,0));
+        }
         if ((gallery || phase === "after" || qa3) && scale === 1 && (gallery || width === 390)) {
           const endings = await page.evaluate(shortKoreanEndings);
           if (endings.length) console.warn("Short last lines", index, endings);
         }
         const issues = [];
-        if (phase === "after" || phase === "qa3-after" || phase === "patterns-after") {
+        if (phase.endsWith("after")) {
           await page.addScriptTag({path:require.resolve("axe-core/axe.min.js")});
           const violations = await page.evaluate(async () => (await window.axe.run(document, {
             runOnly:{type:"tag",values:["wcag2a","wcag2aa","wcag21aa"]},
@@ -167,8 +212,9 @@ try {
           : String(index).padStart(2,"0")+"-"+state+"-"+width+"-"+colorScheme+".jpg";
         const capture = phase === "patterns-after" ? existsSync(resolve(dir,"../patterns-before",file))
           : phase !== "qa3-after" || state === "approval-mismatch" || existsSync(resolve(dir,"../qa3-before",file));
+        if (state === "scrolled") await checkScrolledMenu(page, phase === "chart-after");
         if (capture) {
-          const bytes = await page.screenshot({path:resolve(dir,file),type:"jpeg",quality:80,fullPage:true,animations:"disabled"});
+          const bytes = await page.screenshot({path:resolve(dir,file),type:"jpeg",quality:80,fullPage:state !== "scrolled",animations:"disabled"});
           if (gallery && bytes.length > 500000) throw Error(file+" exceeds 500 KB");
         }
         const smallTargets = qa3 && width === 390 ? await page.locator("main :is(button,summary,input:not([type=checkbox]),select,a)").evaluateAll(nodes =>
@@ -309,6 +355,39 @@ function shortKoreanEndings() {
   return findings;
 }
 
+async function checkMixedChartInput(page, figure, slider) {
+  await slider.evaluate(el => el.scrollIntoView({block:"center"}));
+  const box = await slider.boundingBox();
+  const y = Math.round(box.y + box.height / 2);
+  const x = slot => Math.round(box.x + box.width * (slot - 0.5) / 24);
+  const tap = slot => page.touchscreen.tap(x(slot), y);
+  const screenshot = name => page.screenshot({path:resolve(dir,name + "-390.jpg")});
+  await tap(3);
+  if (await slider.getAttribute("aria-valuenow") !== "3") throw Error("Touch did not select the third bucket");
+  if (page.context().browser().browserType().name() === "chromium") {
+    const session = await page.context().newCDPSession(page);
+    await session.send("Input.dispatchTouchEvent", {type:"touchStart", touchPoints:[{x:x(3), y}]});
+    await session.send("Input.dispatchTouchEvent", {type:"touchMove", touchPoints:[{x:x(21), y}]});
+    await session.send("Input.dispatchTouchEvent", {type:"touchEnd", touchPoints:[]});
+    await session.detach();
+  } else {
+    await tap(21);
+  }
+  if (await slider.getAttribute("aria-valuenow") !== "21") throw Error("Touch did not select the peak bucket");
+  const tip = figure.getByRole("tooltip");
+  await tip.filter({hasText:"실패 10건"}).waitFor();
+  await screenshot("touch");
+  await page.keyboard.press("ArrowLeft");
+  await tip.filter({hasText:"실패 8건"}).waitFor();
+  const focusedText = await tip.textContent();
+  await page.mouse.move(x(21), y);
+  await tip.filter({hasText:"실패 10건"}).waitFor();
+  await screenshot("mouse");
+  await page.mouse.move(box.x - 4, y);
+  await tip.filter({hasText:focusedText}).waitFor();
+  await screenshot("keyboard-restored");
+}
+
 async function tabTo(page,target) {
   await target.waitFor();
   for (let n=0;n<80;n++) {
@@ -316,4 +395,39 @@ async function tabTo(page,target) {
     await page.keyboard.press("Tab");
   }
   throw Error("Keyboard could not reach "+target);
+}
+
+async function checkScrolledMenu(page, verify) {
+  const viewport = page.viewportSize();
+  const rail = page.locator("#member-menu");
+  await page.getByText("표로 보기", {exact:true}).click();
+  await page.evaluate(() => window.scrollTo(0, 900));
+  if (await page.evaluate(() => scrollY) < 800) throw Error("Missing long-page fixture");
+  if (!verify) return;
+  if (viewport.width === 390) {
+    if (await rail.isVisible() || await page.evaluate(() => document.documentElement.scrollWidth > innerWidth))
+      throw Error("Mobile menu must stay collapsed without horizontal overflow");
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const toggle = page.getByRole("button", {name:"메뉴", exact:true});
+    await toggle.click();
+    const firstLink = rail.getByRole("link", {name:"내 앱", exact:true});
+    if (!await firstLink.evaluate(el => el === document.activeElement && getComputedStyle(el.closest("aside")).position === "static"))
+      throw Error("Mobile menu layout or initial focus changed");
+    await page.keyboard.press("Escape");
+    if (!await toggle.evaluate(el => el === document.activeElement)) throw Error("Menu toggle lost focus");
+  } else {
+    const pinned = await rail.evaluate(el => el.getBoundingClientRect().top === 0 &&
+      el.offsetHeight === innerHeight && getComputedStyle(el).position === "sticky");
+    if (!pinned) throw Error("Desktop member menu scrolled off screen");
+    await page.setViewportSize({width:viewport.width,height:360});
+    await rail.getByRole("link", {name:"내 계정"}).focus();
+    await page.keyboard.press("Tab");
+    const last = rail.getByRole("button", {name:"로그아웃"});
+    if (!await last.evaluate(el => el === document.activeElement && el.closest("aside").scrollTop > 0 &&
+      el.getBoundingClientRect().bottom <= innerHeight && scrollY === 900))
+      throw Error("Keyboard focus must scroll the short menu independently of the document");
+    await last.evaluate(el => el.blur());
+    await page.setViewportSize(viewport);
+  }
+  await page.evaluate(() => window.scrollTo(0, 900));
 }

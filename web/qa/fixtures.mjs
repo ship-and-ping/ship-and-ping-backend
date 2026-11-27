@@ -75,6 +75,17 @@ export async function mockPage(page, state, member, origin) {
       incident_verification: { version: null, consecutive_successes: 0 },
     };
     if (!Object.hasOwn(rows, name)) throw Error("Missing QA fixture: " + name);
+    if (name === "stats_5m" && ["many","few","cluster"].includes(state)) {
+      const hours = state === "few" ? [2, 9, 18] : Array.from({ length: 24 }, (_, i) => i);
+      rows.stats_5m = hours.map(hour => {
+        const total = state === "few" ? 1 : 8 + (hour * 7) % 17;
+        const failures = state === "cluster" && hour >= 3 && hour <= 5 ? 10 - 2 * (hour - 3) : 0;
+        const hist = Array(16).fill(0);
+        hist[state === "few" ? 1 : (hour % 4) + 2] = total;
+        return { feature_id: "apply", version: "1.0", total, failures, hist,
+          bucket: new Date(Date.parse(now) - hour * 3600000 - 300000).toISOString() };
+      });
+    }
     return route.fulfill({ json: rows[name], headers: { "content-range": "*/" + Number(problem && state !== "resolved") } });
   });
 }

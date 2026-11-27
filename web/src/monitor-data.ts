@@ -299,3 +299,8 @@ export function summarize(rows: Stat[]) {
     max: measured ? bounds[hist.map((n) => n > 0).lastIndexOf(true)] : null,
   };
 }
+
+export function formatDuration(ms: number | null) {
+  if (ms === null) return "기록 없음";
+  return ms === Infinity ? "30초 초과" : +(ms / 1000).toFixed(2) + "초";
+}

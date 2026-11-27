@@ -5,24 +5,21 @@ import { Copy } from "./Connect";
 import { status, StatusBadge, Timeline, IssueListItem } from "./IncidentSummary";
 import type { Gateway } from "./data";
 import { Hero, CurrentAppName } from "./Layout";
+import { Chart } from "./Chart";
 import { displayText, sanitizeRoute } from "./normalize";
 import { buildIssuePrompt, displayVersion, noErrorSamples } from "./issue-prompt";
 import {
   summarize,
+  formatDuration,
   type Monitor,
   type Feature,
   type Incident,
-  type Stat,
 } from "./monitor-data";
 
 const day = 86400000;
 const when = (s: string) => new Date(s).toLocaleString("ko-KR", { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
 const time = (ms: number | string | null) =>
-  typeof ms === "string" ? displayText(ms) : ms == null
-    ? "기록 없음"
-    : ms === Infinity
-      ? "30초 초과"
-      : +(ms / 1000).toFixed(2) + "초";
+  typeof ms === "string" ? displayText(ms) : formatDuration(ms);
 
 function observedAt(v: Monitor["versions"][number], i?: Incident) {
   return i && Date.parse(v.first_seen_at) <= Date.parse(i.opened_at) ? v.last_seen_at : v.first_seen_at;
@@ -262,116 +259,6 @@ function Home({ data, base }: { data: Monitor; base: string }) {
     </>
   );
 }
-function Chart({
-  rows,
-  days,
-  now,
-  baseline,
-}: {
-  rows: Stat[];
-  days: number;
-  now: number;
-  baseline: number | null;
-}) {
-  const count = days === 1 ? 12 : 7,
-    width = (days * day) / count,
-    start = now - days * day;
-  const points = Array.from({ length: count }, (_, i) => ({
-    label: new Date(start + i * width).toLocaleString(
-      "ko-KR",
-      days === 1
-        ? { hour: "numeric", minute: "2-digit" }
-        : { month: "numeric", day: "numeric" },
-    ),
-    ...summarize(
-      rows.filter(
-        (r) =>
-          Date.parse(r.bucket) >= start + i * width &&
-          Date.parse(r.bucket) < start + (i + 1) * width,
-      ),
-    ),
-  }));
-  const current = points.slice().reverse().find((p) => p.median != null)?.median;
-  const max = Math.max(1, ...points.map((p) => p.total));
-  const speed = (n: number) => Math.min(n, 30001);
-  const peak = Math.max(1, speed(baseline ?? 0), ...points.map((p) => speed(p.median ?? 0)));
-  const failureHeight = (n: number) => n ? Math.max(4, 45 * n / max) : 0;
-  const x = (i: number) => (i * 600) / count + 300 / count;
-  return (
-    <>
-      <p>지금 {time(current ?? null)}{baseline != null && " · 평소 " + time(baseline)}</p>
-      <svg
-        viewBox="0 0 600 210"
-        width="100%"
-        role="img"
-        aria-label="사용·실패 건수와 보통 시간 추이. 아래 표에서 수치를 확인할 수 있어요."
-      >
-        {points.map((p, i) => (
-          <g key={i}>
-            <rect
-              x={x(i) - 180 / count}
-              y={105 - failureHeight(p.failures) - (p.failures ? 2 : 0) - (45 * p.total) / max}
-              width={360 / count}
-              height={(45 * p.total) / max}
-              fill="var(--sp-chart)"
-            />
-            <rect
-              x={x(i) - 180 / count}
-              y={105 - failureHeight(p.failures)}
-              width={360 / count}
-              height={failureHeight(p.failures)}
-              fill="var(--sp-chart-failure)"
-            />
-            {p.median !== null && (
-              <circle
-                cx={x(i)}
-                cy={205 - (90 * speed(p.median)) / peak}
-                r="2"
-                fill="var(--sp-chart-time)"
-              />
-            )}
-            {p.median !== null && i > 0 && points[i - 1].median !== null && (
-              <line
-                x1={x(i - 1)}
-                x2={x(i)}
-                y1={205 - (90 * speed(points[i - 1].median!)) / peak}
-                y2={205 - (90 * speed(p.median)) / peak}
-                stroke="var(--sp-chart-time)"
-                strokeWidth="2.5"
-              />
-            )}
-          </g>
-        ))}
-        {baseline != null && <line x1="0" x2="600" y1={205 - 90 * speed(baseline) / peak}
-          y2={205 - 90 * speed(baseline) / peak} stroke="var(--sp-chart-usual)" strokeDasharray="5 4" strokeWidth="2.5" />}
-      </svg>
-      <p className="chart-legend"><span>사용</span> <span>실패</span> <span className="time-line">보통 시간</span> {baseline != null && <span className="usual-line">평소 속도</span>} · {when(new Date(start).toISOString())} ~ {when(new Date(now).toISOString())}</p>
-      <details>
-        <summary>표로 보기</summary>
-        <table>
-          <caption>최근 {days === 1 ? "24시간" : "7일"} 기록</caption>
-          <thead>
-            <tr>
-              {["시작 시각", "사용", "실패", "보통 시간"].map((h) => (
-                <th key={h}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {points.map((p, i) => (
-              <tr key={i}>
-                <th>{p.label}</th>
-                <td>{p.total}</td>
-                <td>{p.failures}</td>
-                <td>{time(p.median)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </details>
-    </>
-  );
-}
 function FeaturePage({
   data,
   feature: f,
@@ -425,14 +312,14 @@ function FeaturePage({
         }
         detail={"보통 걸린 시간 " + time(summary.median)}
       />
-      <section className="panel">
+      <section className="panel usage-panel">
         <h2>사용 흐름</h2>
         <div className="chart-period" role="group" aria-label="조회 기간">{[1, 7].map((d) => (
           <button key={d} aria-pressed={d === days} onClick={() => period(d)}>
             {d === 1 ? "24시간" : "7일"}
           </button>
         ))}</div>
-        <Chart rows={rows} days={days} now={data.now} baseline={f.baselines?.p50_ms ?? null} />
+        <Chart key={days} rows={rows} days={days} now={data.now} baseline={f.baselines?.p50_ms ?? null} />
       </section>
       <section>
         <h2>최근 버전 비교</h2>
