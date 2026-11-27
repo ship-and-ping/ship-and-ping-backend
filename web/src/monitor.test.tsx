@@ -61,6 +61,42 @@ it("그래프에 포인터가 들어오면 가리킨 구간을 표시하고 나�
   fireEvent.keyDown(plot, { key: "ArrowRight" });
   expect(plot.getAttribute("aria-valuenow")).toBe("24");
 });
+it("그래프는 좌우와 Home·End로 이동하고 위아래 스크롤 키는 브라우저에 맡긴다", async () => {
+  setup("/apps/a/features/f");
+  const plot = await screen.findByRole("slider", { name: "사용과 실패" });
+  fireEvent.focus(plot);
+  for (const [key, value] of [["Home", "1"], ["ArrowRight", "2"], ["End", "24"], ["ArrowLeft", "23"]]) {
+    expect(fireEvent.keyDown(plot, { key })).toBe(false);
+    expect(plot.getAttribute("aria-valuenow")).toBe(value);
+  }
+  for (const key of ["ArrowUp", "ArrowDown"]) {
+    expect(fireEvent.keyDown(plot, { key })).toBe(true);
+    expect(plot.getAttribute("aria-valuenow")).toBe("23");
+  }
+});
+it("그래프 터치 영역은 세로 스크롤과 두 손가락 확대를 허용한다", async () => {
+  setup("/apps/a/features/f");
+  const plot = await screen.findByRole("slider", { name: "사용과 실패" });
+  const declarations = Array.from(document.styleSheets)
+    .flatMap(sheet => Array.from(sheet.cssRules))
+    .filter((rule): rule is CSSStyleRule => rule.type === CSSRule.STYLE_RULE)
+    .filter(rule => plot.matches(rule.selectorText))
+    .map(rule => rule.style.getPropertyValue("touch-action"))
+    .filter(Boolean);
+  expect(declarations.at(-1)?.split(/\s+/).sort()).toEqual(["pan-y", "pinch-zoom"]);
+});
+it("그래프 밖에 초점이 있어도 Escape로 마우스 툴팁을 닫는다", async () => {
+  setup("/apps/a/features/f");
+  const plot = await screen.findByRole("slider", { name: "사용과 실패" });
+  const button = screen.getByRole("button", { name: "7일" });
+  button.focus();
+  vi.spyOn(plot, "getBoundingClientRect").mockReturnValue(new DOMRect(48, 0, 264, 112));
+  fireEvent(plot, new MouseEvent("pointerover", { bubbles: true, clientX: 50 }));
+  expect(screen.getByRole("tooltip")).toBeTruthy();
+  fireEvent.keyDown(button, { key: "Escape" });
+  expect(screen.queryByRole("tooltip")).toBeNull();
+  expect(document.activeElement).toBe(button);
+});
 it("첫 실패나 사용량 최대 구간과 구별해서 실패가 가장 많은 구간을 요약한다", async () => {
   setup("/apps/a/features/f", [], rows => {
     const stat = (rows.stats_5m as object[])[0];

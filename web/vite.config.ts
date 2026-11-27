@@ -26,5 +26,5 @@ export default defineConfig(({ mode }) => ({
     ...(mode === "pages" ? [pagesHeaders()] : []),
   ],
   build: { rollupOptions: { output: { manualChunks: { supabase: ["@supabase/supabase-js"] } } } },
-  test: { environment: "jsdom" },
+  test: { environment: "jsdom", css: { include: [/\/styles\/chart\.css$/] } },
 }));

@@ -51,7 +51,7 @@
 .flow-hit {
   position: absolute;
   inset: 0;
-  touch-action: pan-y;
+  touch-action: pan-y pinch-zoom;
   user-select: none;
   cursor: crosshair;
 }

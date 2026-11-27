@@ -1,4 +1,4 @@
-import { useId, useState, type PointerEvent } from "react";
+import { useEffect, useId, useState, type PointerEvent } from "react";
 import { formatDuration, summarize, type Stat } from "./monitor-data";
 import "./styles/chart.css";
 
@@ -102,6 +102,17 @@ function Plot({ points, labels, duration, baseline, summary }: {
   const [showSelection, setShowSelection] = useState(false);
   const [hovered, setHovered] = useState<number | null>(null);
   const active = hovered ?? (showSelection ? selected : null);
+  const tooltipVisible = active !== null;
+  useEffect(() => {
+    if (!tooltipVisible) return;
+    function dismiss(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setHovered(null);
+      setShowSelection(false);
+    }
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [tooltipVisible]);
   function pointAt(event: PointerEvent<HTMLDivElement>) {
     const { left, width } = event.currentTarget.getBoundingClientRect();
     const index = Math.floor((event.clientX - left) / width * points.length);
@@ -152,10 +163,9 @@ function Plot({ points, labels, duration, baseline, summary }: {
           }}
           onPointerLeave={() => setHovered(null)}
           onKeyDown={e => {
-            if (e.key === "Escape") { setHovered(null); setShowSelection(false); return; }
             switch (e.key) {
-              case "ArrowLeft": case "ArrowDown": select(Math.max(0, selected - 1)); break;
-              case "ArrowRight": case "ArrowUp": select(Math.min(points.length - 1, selected + 1)); break;
+              case "ArrowLeft": select(Math.max(0, selected - 1)); break;
+              case "ArrowRight": select(Math.min(points.length - 1, selected + 1)); break;
               case "Home": select(0); break;
               case "End": select(points.length - 1); break;
               default: return;
