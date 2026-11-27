@@ -1,0 +1,19 @@
+{
+  "name": "ship-and-ping-reel-01",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "capture": "playwright test --config capture.config.mjs --workers=1",
+    "render": "playwright test --config production.config.mjs --grep render",
+    "verify": "playwright test --config production.config.mjs --grep playback"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "2.119.2",
+    "hyperframes": "0.9.85",
+    "playwright": "1.65.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router-dom": "7.18.7",
+    "vite": "7.3.8"
+  }
+}

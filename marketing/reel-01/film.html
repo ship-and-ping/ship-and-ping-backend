@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=1080,height=1920">
+<script src="gsap.min.js"></script>
+<style>
+@font-face{font-family:"Noto Sans KR";src:url("NotoSansKR-VF.ttf") format("truetype");font-weight:100 900;font-display:block}
+*{box-sizing:border-box}html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#261B40}
+#film{position:relative;width:1080px;height:1920px;overflow:hidden;background:#261B40;color:#f8f4fc;font-family:"Noto Sans KR",sans-serif;font-synthesis:none}
+.scene{position:absolute;inset:0;overflow:hidden;visibility:hidden}
+.dark{background:radial-gradient(ellipse at 74% 64%,#49345f 0%,#302247 47%,#261B40 75%)}
+.studio{background:#f8f4fc;color:#261b40}
+.end{background:#c3a6ff;color:#261b40}
+.kicker{position:absolute;left:78px;top:272px;display:flex;align-items:center;gap:18px;font-size:27px;font-weight:650;letter-spacing:.01em}
+.kicker i{width:40px;height:4px;background:currentColor}.dark .kicker{color:#c3a6ff}.studio .kicker{color:#664e86}
+h1,h2,p{margin:0}h1,h2,.pain{position:absolute;left:72px;top:354px;letter-spacing:-.068em;line-height:1.2;font-size:89px;font-weight:850;word-break:keep-all}
+em{font-style:normal;color:#c3a6ff}.studio em{color:#604481}.end em{color:#43305d}
+.field{position:absolute;width:1750px;height:940px;top:1320px;left:-370px;border-radius:50%;background:linear-gradient(157deg,#685483,#433257 57%,#332546);transform:rotate(-7deg)}
+.contact{position:absolute;left:185px;top:1320px;width:445px;height:40px;border-radius:50%;background:#1f162e;opacity:.32;filter:blur(9px)}
+.mascot{position:absolute;transform-origin:50% 95%}.mascot svg{width:100%;height:100%;overflow:visible}
+.big{left:155px;top:802px;width:510px;height:542px}
+.bubble{position:absolute;padding:20px 35px 24px;border-radius:38px 38px 38px 9px;color:#261b40;background:#f8f4fc;font-size:39px;line-height:1.22;letter-spacing:-.055em;font-weight:700;box-shadow:0 12px 42px #1a132c22;white-space:nowrap}
+#complaint{left:570px;top:790px}
+#pain1,#pain2,#pain3{top:384px}.bubble.small{font-size:35px}.b1{left:675px;top:997px}.b2{left:545px;top:819px;background:#d5c4eb}.b3{left:660px;top:714px}
+#promise{position:absolute;top:361px;left:72px;padding:42px 49px 48px;background:#c3a6ff;color:#261b40;border-radius:57px 57px 57px 10px;width:827px}
+#promise::after{content:"";position:absolute;bottom:-33px;left:67px;border-top:38px solid #c3a6ff;border-right:52px solid transparent}
+#promise h2{position:static;font-size:81px;line-height:1.23}
+.mark{position:absolute;object-fit:contain;border-radius:18px}.answer-mark{left:700px;top:1134px;width:170px;height:170px}
+.studio h2{top:360px;font-size:81px;line-height:1.25}
+#screenboard{position:absolute;left:50px;top:810px;width:920px;height:600px;background:#261b40;border-radius:36px;box-shadow:0 24px 72px #3224431f}
+#boardlabel{position:absolute;top:24px;left:32px;color:#f8f4fc;font-size:27px;letter-spacing:-.035em;font-weight:700;display:flex;align-items:center;gap:12px}
+#boardlabel::before{content:"";width:12px;height:12px;border-radius:100%;background:#76e7c4}
+#viewlabel{position:absolute;top:26px;right:34px;color:#cfc0e2;font-size:23px}
+#aperture{position:absolute;left:24px;top:81px;width:872px;height:440px;overflow:hidden;border-radius:15px;background:#faf9fc}
+#capture{position:absolute;inset:0;width:872px;height:440px;object-fit:fill}
+#pointer{position:absolute;left:0;top:0;width:32px;height:43px;opacity:0;filter:drop-shadow(0 2px 3px #261b4040)}
+.steps{position:absolute;bottom:26px;left:32px;right:32px;display:flex;gap:16px;align-items:center}
+.step{flex:1;display:flex;align-items:center;gap:9px;color:#a496b4;font-weight:550;font-size:20px;white-space:nowrap}
+.step::before{content:"";height:3px;flex:1;border-radius:2px;background:#695a7a}.step.active{color:#fff}.step.active::before{background:#76e7c4}
+.mini{left:726px;top:633px;width:172px;height:183px}
+#mint-ring{position:absolute;left:702px;top:620px;width:216px;height:216px;border:7px solid #56bd9e;border-radius:50%;opacity:0}
+.end h2{font-size:88px}.end .field{background:#a58bcf;top:1350px}.end .big{left:118px;top:823px;width:495px;height:527px}.end .contact{left:138px;top:1330px}
+.end .mark{left:650px;top:1020px;width:219px;height:219px;border-radius:23px}
+.url{position:absolute;left:78px;top:1433px;font-size:33px;font-weight:650;letter-spacing:-.035em}
+</style></head><body><main id="film" data-composition-id="main" data-width="1080" data-height="1920" data-start="0" data-duration="30.5">
+<section id="intro" class="scene dark"><div class="kicker"><i></i>앱 모니터링</div>
+<h1>AI로 만든 내 앱,<br>고장 난 걸 사용자한테<br><em>먼저 들었나요?</em></h1>
+<div class="field"></div><div class="contact"></div><div id="sleeper" class="mascot big">SHEEP</div><p class="bubble" id="complaint">신청이 안 돼요</p></section>
+<section id="pain" class="scene dark"><div class="kicker"><i></i>앱 모니터링</div>
+<p class="pain" id="pain1">어디가 문제인지<br><em>모르고</em></p><p class="pain" id="pain2">AI에겐 <em>"안 돼요"</em>만<br>말하고</p>
+<p class="pain" id="pain3">고쳐졌는지도<br><em>모르고</em></p><div class="field"></div><div class="contact"></div><div id="worry" class="mascot big">SHEEP</div>
+<p class="bubble small b1">안 돼요</p><p class="bubble small b2">안 돼요</p><p class="bubble small b3">안 돼요</p></section>
+<section id="answer" class="scene dark"><div class="kicker"><i></i>쉽앤핑</div><div id="promise"><h2>이제 쉽앤핑이<br>대신 지켜볼게요</h2></div>
+<div class="field"></div><div class="contact"></div><div id="awake" class="mascot big">SHEEP</div><img id="answer-wordmark" class="mark answer-mark" data-start="7.8" data-duration="2.6" data-track-index="3" src="wordmark.png"></section>
+<section id="demo" class="scene studio"><div class="kicker"><i></i>쉽앤핑 사용 흐름</div>
+<h2 id="hc">요청문 붙여넣기<br><em>한 번이면 연결 끝</em></h2>
+<h2 id="ha">문제가 생기면<br>쉬운 말로 <em>먼저 알려 줘요</em></h2>
+<h2 id="hp">AI에 보낼 말까지<br><em>정리해 줘요</em></h2>
+<h2 id="hr">고친 뒤엔<br><em>실제 사용으로</em> 확인해요</h2>
+<div id="mint-ring"></div><div id="watch" class="mascot mini">SHEEP</div>
+<div id="screenboard"><div id="boardlabel">예제 웹앱</div><div id="viewlabel"></div>
+<div id="aperture"><video id="capture" data-start="10.4" data-duration="16.9" data-track-index="2" src="desktop.mp4" muted playsinline></video>
+<svg id="pointer" viewBox="0 0 32 43" aria-hidden="true"><path d="M2 2 28 25 16 26 22 39 16 41 10 28 3 35Z" fill="white" stroke="#261b40" stroke-width="2.4" stroke-linejoin="round"/></svg></div>
+<div class="steps"><span class="step">연결</span><span class="step">알림</span><span class="step">AI 요청문</span><span class="step">해결 확인</span></div></div></section>
+<section id="end" class="scene end"><div class="kicker"><i></i>쉽앤핑</div><h2>내 앱, 이제<br><em>쉽앤핑에</em> 맡겨 보세요</h2>
+<div class="field"></div><div class="contact"></div><div id="wave" class="mascot big">SHEEP</div><img id="closing-wordmark" class="mark" data-start="27.3" data-duration="3.2" data-track-index="3" src="wordmark.png"><div class="url">ship-and-ping.pages.dev</div></section>
+</main><script>ANIMATION</script></body></html>
