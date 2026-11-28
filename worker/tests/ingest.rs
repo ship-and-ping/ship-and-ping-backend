@@ -242,6 +242,24 @@ fn validates_path_after_removing_query_and_fragment() {
 }
 
 #[test]
+fn auth_status_alone_produces_a_sample() {
+    let rows = [401, 403, 404].map(|status| {
+        let mut row = request();
+        row["status"] = json!(status);
+        row
+    });
+    let rpc = run(batch(rows.to_vec())).unwrap();
+    let samples = rpc["payload"]["error_samples"].as_array().unwrap();
+    assert_eq!(samples.len(), 2);
+    assert_eq!(samples[0]["http_status"], 401);
+    assert_eq!(samples[1]["http_status"], 403);
+    for sample in samples {
+        assert!(sample["error_kind"].is_null());
+        assert!(sample["message"].is_null());
+    }
+}
+
+#[test]
 fn request_error_samples_and_status_bounds() {
     let mut rows = vec![];
     let short = short_key();

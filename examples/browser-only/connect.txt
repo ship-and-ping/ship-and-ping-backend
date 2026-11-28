@@ -25,6 +25,8 @@ Python — 백그라운드 루프에서 cpu, wall = time.process_time(), time.mo
 Go — var m runtime.MemStats; runtime.ReadMemStats(&m); prev := m.PauseTotalNs; ticker := time.NewTicker(time.Minute); defer ticker.Stop(); for range ticker.C { runtime.ReadMemStats(&m); sendResources(map[string]float64{"gc_pause_ms": float64(m.PauseTotalNs-prev)/1e6}); prev = m.PauseTotalNs }
 8. 배포 후 앱을 한 번 써 보고 프로필과 기록 전송 응답이 202인지 확인하는 방법을 알려 줘.
 
+쉽앤핑 MCP를 연결하면 문제 조사 때 직접 조회할 수 있어요. 앱 설정의 ‘AI 연결’에서 AI 조회 키를 발급하고 사용자 환경 변수에 저장한 뒤, 사용하는 코딩 AI의 설정 예시대로 연결하세요.
+
 이 공개 키는 브라우저에 보여도 되는 쓰기 전용 키야. 레포에 직접 적지 말고 빌드 환경 변수로 넣어.
 키를 코드·커밋·로그에 직접 쓰지 마. 환경 변수 SHIP_AND_PING_KEY(브라우저만이면 빌드 환경 변수)에서 읽게 만들어.
 로컬은 .env(또는 해당 프레임워크 방식)에 넣고, .env가 .gitignore에 들어 있는지 확인해. 없으면 추가해.

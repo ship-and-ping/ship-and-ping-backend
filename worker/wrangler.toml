@@ -1,5 +1,5 @@
 name = "ship-and-ping-ingest-poc"
-main = "build/index.js"
+main = "src/entry.js"
 compatibility_date = "2026-11-24"
 
 [build]

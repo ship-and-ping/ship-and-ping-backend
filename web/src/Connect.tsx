@@ -34,6 +34,7 @@ export function Copy({
   previewKey,
   onCopy,
   compact = false,
+  successMessage,
 }: {
   text: string | (() => Promise<string>);
   title: string;
@@ -41,6 +42,7 @@ export function Copy({
   previewKey?: string;
   onCopy?: () => void;
   compact?: boolean;
+  successMessage?: string;
 }) {
   const [state, setState] = useState<"ready" | "busy" | "done" | "fail" | "revealed" | "unavailable">(
     "ready",
@@ -94,7 +96,7 @@ export function Copy({
       }
     }
     setState("done");
-    showToast({ kind: "success", title: "복사했어요", detail: secret ? "배포 설정에 넣으세요." : "코딩 AI 대화창에 붙여 넣으세요." });
+    showToast({ kind: "success", title: "복사했어요", detail: successMessage ?? (secret ? "배포 설정에 넣으세요." : "코딩 AI 대화창에 붙여 넣으세요.") });
     onCopy?.();
   }
   return (

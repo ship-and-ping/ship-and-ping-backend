@@ -447,6 +447,8 @@ try {
     queuePct:slow.metric_at_open.queue_pct,cpuPct:queueDetail.serverContext?.peaks?.system_cpu_pct,
     stealPct:queueDetail.serverContext?.peaks?.steal_pct}).text;
   assert.match(slowPrompt,/CPU·스레드 풀·인스턴스 크기부터/);
+  assert.match(slowPrompt,/서버 자원 부족으로 보여요/);
+  assert.match(slowPrompt,/전체 응답 시간의 .*%를 처리 시작 전에 기다렸어요/);
   assert.match(slowPrompt,/서버 CPU 최대 96%/);
   assert.match(slowPrompt,/CPU steal 최대 73%/);
   assert.doesNotMatch(slowPrompt,/응답 멈춤/);

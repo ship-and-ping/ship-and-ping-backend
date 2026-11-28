@@ -77,6 +77,7 @@ export async function mockPage(page, state, member, origin) {
       list_push_devices: [],
       server_series: waiting ? [] : [{slot:0, peaks:{process_cpu_pct:28, mem_used_pct:62, gc_pause_ms:13}}],
       incident_verification: { version: null, consecutive_successes: 0 },
+      incident_server_context: {since:at, until:now, peaks:{process_cpu_pct:28}},
       incident_prompt_context: { slow_start: state === "slow" ? at : null, usual_rpm: 1, incident_rpm: 4,
         client_errors: 0, server_errors: state === "failure" ? 6 : 0 },
     };

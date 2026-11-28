@@ -762,7 +762,8 @@ impl Aggregate {
                 let error_kind = terminal.map(str::to_owned).or(error_kind);
                 let client = terminal.is_none() && (400..500).contains(&status);
                 let failed = !client && (status == 0 || status >= 500 || error_kind.is_some());
-                if (failed || client) && (error_message.is_some() || error_kind.is_some()) {
+                let has_details = error_message.is_some() || error_kind.is_some();
+                if matches!(status, 401 | 403) || (failed || client) && has_details {
                     self.samples.push(json!({"route":path,"method":method,"at":ts,"http_status":status,"error_kind":error_kind.as_deref().and_then(self::error_kind),"message":error_message.as_deref().and_then(error_name)}));
                 }
                 let row = self
