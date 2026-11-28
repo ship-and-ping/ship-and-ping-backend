@@ -296,8 +296,8 @@ async function prepareScene(page,state) {
   } else if (["approval-ok","approval-deny","approval-mismatch"].includes(state)) {
     if (state !== "approval-deny") await page.getByRole("textbox").fill(state === "approval-ok" ? "07" : "70");
     await button(state === "approval-deny" ? "거절" : "이 PC 로그인 승인").click();
-    const expected = {"approval-ok":"승인했어요", "approval-deny":"거절했어요", "approval-mismatch":"숫자가 맞지 않아 요청을 취소했어요"};
-    await page.getByRole("status").filter({hasText:expected[state]}).waitFor();
+    if (state === "approval-ok") await page.getByRole("heading",{name:"승인했어요."}).waitFor();
+    else await page.getByRole("status").filter({hasText:state === "approval-deny" ? "거절했어요" : "숫자가 맞지 않아 요청을 취소했어요"}).waitFor();
   } else if (["prompt","masked","replacement"].includes(state)) {
     page.once("dialog", dialog => dialog.accept());
     await button("수집 키 재발급").click();

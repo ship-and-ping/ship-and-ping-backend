@@ -51,6 +51,10 @@ begin
  select coalesce(jsonb_object_agg(key,value),'{}') into evidence from jsonb_each(coalesce(i.metric_worst,i.metric_at_open,'{}'))
  where key in ('total','failures','p50','baseline','baseline_p50','baseline_p95','window','unconfirmed','severity')
  and jsonb_typeof(value)='number';
+ if i.kind='silent' and i.metric_at_open->>'last_received' ~
+  '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$' then
+  evidence:=evidence || jsonb_build_object('last_received',i.metric_at_open->'last_received');
+ end if;
  return jsonb_build_object('id',i.id,'kind',i.kind,'status',i.status,'opened',i.opened_at,'closed',i.closed_at,
  'feature',coalesce(private.ai_text(f.name),'앱 전체'),'route',private.ai_text(private.route(f.route)),'feature_id',i.feature_id,
  'versions',case when latest is not null then array[latest,i.opened_version] else array_remove(array[i.opened_version,previous],null) end,
@@ -136,8 +140,8 @@ begin
     select s.bucket,s.last_received,(select coalesce(jsonb_object_agg(key,value),'{}') from jsonb_each(s.resources)
      where key in ('process_cpu_pct','system_cpu_pct','steal_pct','mem_used_pct','gc_pause_ms','event_loop_lag_ms',
       'busy_threads','db_pool_in_use','db_pool_max') and jsonb_typeof(value)='number') resources
-    from public.server_minutes s where s.app_id=k.app_id and s.bucket between stamp-span and stamp
-    order by s.bucket desc limit 60) r;
+    from public.server_minutes s where s.app_id=k.app_id and s.bucket between date_trunc('minute',now()-span) and now()
+    order by s.bucket desc limit 61) r;
   end if;
  else data:='{}';
  end case;

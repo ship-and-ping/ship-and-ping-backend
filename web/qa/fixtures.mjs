@@ -38,7 +38,9 @@ export async function mockPage(page, state, member, origin) {
         switch (action) {
           case "approve": loginStatus = match_code === matchCode ? "approved" : "mismatch"; break;
           case "deny": loginStatus = "denied"; break;
-          case "local": loginStatus = "used"; break;
+          case "local":
+            loginStatus = "used";
+            return route.fulfill({json:{status:loginStatus,local_consumed:true}});
           default: throw Error("Unknown QA login action: " + action);
         }
         return route.fulfill({json:{status:loginStatus}});
@@ -74,6 +76,8 @@ export async function mockPage(page, state, member, origin) {
       notification_settings: { email: true, connected: false, broken: false, channel: null, push:true, subscribed:false },
       list_push_devices: [],
       incident_verification: { version: null, consecutive_successes: 0 },
+      incident_prompt_context: { slow_start: state === "slow" ? at : null, usual_rpm: 1, incident_rpm: 4,
+        client_errors: 0, server_errors: state === "failure" ? 6 : 0 },
     };
     if (!Object.hasOwn(rows, name)) throw Error("Missing QA fixture: " + name);
     if (name === "stats_5m" && ["many","few","cluster"].includes(state)) {

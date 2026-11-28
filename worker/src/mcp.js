@@ -136,7 +136,7 @@ function planMessage(message, headers) {
     if (tool.name === "get_incident") {
       const e = data.evidence;
       data.investigation_prompt = buildIssuePrompt({ ...data, ...e, route: data.route ?? "", baseline: e.baseline_p50 ?? e.baseline,
-        baselineP95: e.baseline_p95 }).text;
+        baselineP95: e.baseline_p95, lastReceived: e.last_received }).text;
       data.versions = data.versions.map(displayVersion);
     }
     if (tool.name === "check_resolution" && data.version != null) data.version = displayVersion(data.version);

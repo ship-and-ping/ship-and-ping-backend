@@ -16,6 +16,7 @@ import {
   formatDuration,
   approximateDuration,
   usualDuration,
+  concurrentIssues,
   type Monitor,
   type Feature,
   type Incident,
@@ -484,7 +485,7 @@ function FeaturePage({
 function Samples({ data }: { data: Monitor }) {
   return data.samples.length ? (
     <ul>
-      {data.samples.map((s, i) => (
+      {data.samples.slice(0,5).map((s, i) => (
         <li key={i}>
           {when(s.at)} {errorKind(s.error_kind) ?? errorName(s.message) ?? "(내용 저장 안 함)"}
         </li>
@@ -527,6 +528,7 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
           .map((v) => v.version),
       ];
   const metric = i.metric_worst ?? i.metric_at_open;
+  const opening = i.metric_at_open ?? metric;
   const input = {
     feature: f.name,
     route: f.route ?? "",
@@ -534,19 +536,25 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
     step: data.step,
     kind: i.kind,
     consecutive: i.metric_at_open?.consecutive,
-    unconfirmed: metric?.unconfirmed,
+    unconfirmed: opening?.unconfirmed,
     opened: i.opened_at,
+    closed: i.closed_at,
+    versionFirstSeen: data.versions.find(v => v.version === i.opened_version)?.first_seen_at,
+    now: data.now,
+    context: data.promptContext,
+    related: concurrentIssues(i, data.promptContext?.incident_start ?? data.promptContext?.slow_start ?? i.opened_at, data.incidents, data.features),
     mode: again
       ? ("again" as const)
       : i.notifications.some((n) => n.event === "worse")
         ? ("worse" as const)
         : ("first" as const),
-    total: metric?.total,
-    failures: metric?.failures,
-    p50: metric?.p50,
-    baseline: metric?.baseline_p50 ?? metric?.baseline,
-    baselineP95: metric?.baseline_p95,
-    window: metric?.window,
+    total: opening?.total,
+    failures: opening?.failures,
+    p50: opening?.p50,
+    worst: i.metric_worst?.p50,
+    baseline: opening?.baseline_p50 ?? opening?.baseline,
+    baselineP95: opening?.baseline_p95,
+    window: opening?.window,
     errors: data.samples,
   };
   return { proof, version, fresh, after, streak, duration, slow, again, metric, input };

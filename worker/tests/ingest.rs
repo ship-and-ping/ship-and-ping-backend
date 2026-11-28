@@ -151,8 +151,12 @@ fn request_error_samples_and_status_bounds() {
     let stats = &rpc["payload"]["stats"][0];
     assert_eq!(stats["failures"], 2);
     assert_eq!(stats["client_errors"], 1);
+    assert_eq!(stats["server_errors"], 1);
     let samples = rpc["payload"]["error_samples"].as_array().unwrap();
     assert_eq!(samples.len(), 3);
+    assert_eq!(samples[0]["http_status"], 200);
+    assert_eq!(samples[1]["http_status"], 404);
+    assert_eq!(samples[2]["http_status"], 599);
     assert_eq!(samples[0]["error_kind"], Value::Null);
     assert_eq!(samples[1]["error_kind"], Value::Null);
     assert!(samples.iter().all(|s| s["message"].is_null()));

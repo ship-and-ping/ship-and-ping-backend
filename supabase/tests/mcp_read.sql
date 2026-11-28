@@ -74,7 +74,7 @@ do $$ begin
  end if;
 end $$;
 insert into incidents(id,app_id,kind,status,opened_at,opened_version,metric_at_open)
- values('00000000-0000-4000-a000-000000000099',current_setting('test.app')::uuid,'silent','open',now(),'v1.0.0','{"window":10}'),
+ values('00000000-0000-4000-a000-000000000099',current_setting('test.app')::uuid,'silent','open',now(),'v1.0.0','{"window":10,"last_received":"2026-11-28T12:00:45+00:00"}'),
  ('00000000-0000-4000-b000-000000000099',current_setting('test.other')::uuid,'silent','open',now(),'v1.0.0','{"window":10}');
 select is(pg_temp.read_tool('get_status')#>>'{data,open_incidents}','2','status counts feature and app-wide incidents');
 select is(jsonb_array_length(pg_temp.read_tool('list_incidents')#>'{data,incidents}'),2,'both incidents are listed for the key');
@@ -82,7 +82,7 @@ select ok((pg_temp.read_tool('list_incidents')#>'{data,incidents}') @>
  '[{"id":"00000000-0000-4000-a000-000000000099","kind":"silent","feature":"앱 전체","feature_id":null}]',
  'list identifies the app-wide incident');
 select ok(pg_temp.read_tool('get_incident','{"id":"00000000-0000-4000-a000-000000000099"}') @>
- '{"status":200,"data":{"kind":"silent","feature":"앱 전체","feature_id":null,"route":null,"evidence":{"window":10}}}',
+ '{"status":200,"data":{"kind":"silent","feature":"앱 전체","feature_id":null,"route":null,"evidence":{"window":10,"last_received":"2026-11-28T12:00:45+00:00"}}}',
  'app-wide detail has its own evidence and no feature route');
 select is(pg_temp.read_tool('get_incident','{"id":"00000000-0000-4000-b000-000000000099"}')->>'status','404',
  'foreign app-wide detail is hidden');
@@ -95,6 +95,14 @@ insert into public.server_minutes(app_id,bucket,last_received,version,resources)
 select is(pg_temp.read_tool('get_server_metrics','{"range":"5m"}')#>'{data,samples,0,resources}','{"busy_threads":3}'::jsonb,
  'only numeric T54 allowlist for this app');
 select is(jsonb_array_length(pg_temp.read_tool('get_server_metrics','{"range":"1h"}')#>'{data,samples}'),1,'server rows scoped');
+insert into public.server_minutes(app_id,bucket,last_received,version,resources)
+ select current_setting('test.app')::uuid,minute,minute+interval '45 seconds','v1.0.0','{}'
+ from generate_series(date_trunc('minute',now())-interval '61 minutes',
+                      date_trunc('minute',now())-interval '1 minute',interval '1 minute') minute;
+select is((pg_temp.read_tool('get_server_metrics','{"range":"5m"}')#>>'{data,samples,0,bucket}')::timestamptz,
+ date_trunc('minute',now())-interval '5 minutes','5m starts with the overlapping minute and excludes its predecessor');
+select is((pg_temp.read_tool('get_server_metrics','{"range":"1h"}')#>>'{data,samples,0,bucket}')::timestamptz,
+ date_trunc('minute',now())-interval '1 hour','full hour retains the overlapping minute even with a current sample');
 select is(pg_temp.read_tool('get_incident',jsonb_build_object('id',current_setting('test.other')))->>'status','404','foreign incident hidden');
 select is(pg_temp.read_tool('check_resolution',jsonb_build_object('id',current_setting('test.other')))->>'status','404','foreign progress hidden');
 select is(pg_temp.read_tool('get_feature_metrics',jsonb_build_object('feature',current_setting('test.other'),'range','1h'))->>'status','404','foreign metrics hidden');
