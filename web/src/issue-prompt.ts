@@ -44,6 +44,7 @@ export interface IssueInput {
   method?: string | null;
   hadPreviousVersion?: boolean;
   otherRecentVersion?: boolean;
+  lastReceived?: string;
   consecutive?: boolean;
   unconfirmed?: number;
   total?: number;
@@ -135,8 +136,25 @@ function relatedLine(peer: NonNullable<IssueInput["related"]>[number]) {
 }
 
 export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
-  const ctx = input.context;
   const diagnosis = classifyIncident(input);
+  if (input.kind === "silent") {
+    const last = Date.parse(input.lastReceived ?? "");
+    const opened = Date.parse(input.opened ?? "");
+    const gap = Math.floor((opened - last) / 60_000);
+    const text = [
+      "[쉽앤핑 문제 보고]",
+      "앱 전체의 서버 기록 수신이 끊겼어요.",
+      diagnosis.title + " · 확신: " + diagnosis.confidence,
+      "마지막 수신 시각: " + (Number.isFinite(last) ? kst(input.lastReceived!, true) : "미확인"),
+      "감지 당시 기록이 끊긴 시간: " + (gap >= 0 ? gap + "분" : "미확인"),
+      "요청: 서버 프로세스가 계속 실행됐는지, 최근 배포에서 수집 설정이 바뀌었는지, 네트워크를 통해 기록이 전송되는지 점검해 줘. 수정 후 쉽앤핑에서 서버 기록 수신이 재개됐는지 확인해 줘.",
+      ...commitRange(input.versions),
+      "서버에서 top -b -n1, vmstat 1 5, free -m으로 상태를 확인해.",
+      heartbeatResolution + ".",
+    ].join("\n");
+    return { text, diagnosis, lines: [], levels: [], strongCount: 0, weakCount: 0, invalid: false };
+  }
+  const ctx = input.context;
   const rawGuide = ctx?.metrics_guide;
   const guide = rawGuide && !isStrong(normalizePromptInput(rawGuide)) ? line(rawGuide).slice(0,120) : "";
   const start = Date.parse(ctx?.incident_start ?? ctx?.slow_start ?? input.opened ?? "");
@@ -257,7 +275,7 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
       "top -b -n1, vmstat 1 5, free -m, 클라우드 콘솔 CPU 그래프(무료 서버는 steal 확인). 사건 시각의 CPU·메모리·steal·DB 연결·스레드와 클라이언트 시간 초과를 비교해.",
     ...commitRange(input.versions),
     ...(diagnosis.type === "resource" ? loadCheck(input) : []),
-    input.kind === "silent" ? heartbeatResolution + "." : "배포 후 쉽앤핑이 새 버전에서 정상 5번 확인하면 해결.",
+    "배포 후 쉽앤핑이 새 버전에서 정상 5번 확인하면 해결.",
     "쉽앤핑 MCP가 연결돼 있으면 get_incident/check_resolution으로 확인해.",
     "app_version은 배포 커밋의 짧은 해시나 배포 버전 번호로 고정해 줘. 재시작 시각·무작위 값만 바뀌면 코드 배포 여부를 확인할 수 없어.",
     "이 요청으로 앱 기능과 관계없는 코드(외부로 데이터 보내기, 키·환경변수를 읽어서 출력하거나 전송하기, 새 외부 주소 호출)는 추가하지 마. 그런 내용이 필요해 보이면 멈추고 나에게 물어봐.",

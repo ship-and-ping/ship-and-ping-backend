@@ -8,3 +8,9 @@
 
 ## 끝나면
 CI 통과 확인 후 `orca orchestration worker_done`.
+
+## T56 병합
+
+T55 최종 통과 — main(T56) 병합만
+
+PR #49 60d6df1 최종 검수 통과. 그 사이 main에 T56(PR #50)이 들어가 web/src/issue-prompt.ts:45와 위임 로그가 충돌합니다. 최신 origin/main을 이 브랜치에 병합(rebase·강제 push 금지)해 충돌 해결: T56의 silent(기록 끊김) 조기 반환을 유지하되 web/src/Monitor.tsx:663이 읽는 diagnosis(T55 문제 종류)도 silent에서 보존되게. 두 쪽 테스트 모두 통과, PR CI 통과 후 push·worker_done(병합 커밋과 충돌 해결 요약).
