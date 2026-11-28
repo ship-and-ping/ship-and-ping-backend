@@ -11,7 +11,7 @@ import { MonitorToolbar, periodName } from "./MonitorToolbar";
 import { SpeedInsights } from "./SpeedInsights";
 import "./styles/dashboard.css";
 import { displayText, sanitizeRoute } from "./normalize";
-import { buildIssuePrompt, displayVersion, noErrorSamples } from "./issue-prompt";
+import { buildIssuePrompt, displayVersion, noErrorSamples, queueDescription } from "./issue-prompt";
 import {
   summarize,
   formatDuration,
@@ -37,7 +37,7 @@ const title = (f: Feature | undefined, i: Incident) =>
   {
     silent: "기록이 끊겼어요",
     slow: "이 느려졌어요",
-    failure: i.metric_at_open?.consecutive ? "에서 3건 연속 실패했어요" : "에서 실패가 늘었어요",
+    failure: i.metric_at_open?.interruptions ? "의 응답이 잠시 멈췄어요" : i.metric_at_open?.consecutive ? "에서 3건 연속 실패했어요" : "에서 실패가 늘었어요",
     unconfirmed: "의 기록 전송이 끊겼을 수 있어요",
   }[i.kind];
 const route = (f: Feature) =>
@@ -540,6 +540,11 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
     kind: i.kind === "silent" ? undefined : i.kind,
     consecutive: i.metric_at_open?.consecutive,
     unconfirmed: opening?.unconfirmed,
+    interruptions: metric?.interruptions ?? i.metric_at_open?.interruptions,
+    queueMs: metric?.queue_ms,
+    queuePct: metric?.queue_pct,
+    cpuPct: data.serverContext?.peaks?.system_cpu_pct,
+    stealPct: data.serverContext?.peaks?.steal_pct,
     opened: i.opened_at,
     closed: i.closed_at,
     versionFirstSeen: data.versions.find(v => v.version === i.opened_version)?.first_seen_at,
@@ -618,6 +623,7 @@ function Issue({
   const hasFailureCounts = i.kind === "failure" && metric?.total != null && metric.failures != null;
   function summaryTitle() {
     if (i.status === "resolved") return verificationMessage();
+    if (input.interruptions) return displayText(f.name) + "의 응답이 잠시 멈췄어요";
     if (hasFailureCounts && !i.metric_at_open?.consecutive) {
       return displayText(f.name) + " " + displayText(String(metric.total)) + "건 중 " +
         displayText(String(metric.failures)) + "건 실패";
@@ -628,6 +634,7 @@ function Issue({
     if (i.status === "dismissed" && i.closed_at)
       return when(new Date(Date.parse(i.closed_at) + day).toISOString()) + "까지 다시 알리지 않아요.";
     if (i.status === "resolved") return "해결 전 기록 · " + details(i, metric, f);
+    if (input.interruptions) return "10초 동안 완료 응답 0건 · 끊김 또는 시간 초과 " + input.interruptions + "건";
     if (i.kind === "unconfirmed" && metric?.unconfirmed != null)
       return "사용 결과를 확인하지 못한 기록 " + displayText(String(metric.unconfirmed)) + "건";
     return hasFailureCounts && !i.metric_at_open?.consecutive ? "감지 구간 · 최근 30분" : details(i, metric, f);
@@ -651,6 +658,7 @@ function Issue({
       <Hero showSheep={false} badge={<StatusBadge state={i.status} />}
         mood={i.status === "open" ? "worried" : "relieved"} arrived={i.status === "resolved"}
         title={summaryTitle()} detail={summaryDetail()} />
+      {queueDescription(input.queueMs, input.queuePct) && <p>{queueDescription(input.queueMs, input.queuePct)}</p>}
       <div className="issue-copy">
         <div className="incident-actions"><Copy compact text={prompt.text} title={copyTitle} />
           <span>코딩 AI에 붙여 넣으세요</span></div>

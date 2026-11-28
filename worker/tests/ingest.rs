@@ -38,6 +38,54 @@ fn server_heartbeat_requires_a_server_source_and_no_request_records() {
 }
 
 #[test]
+fn queue_share_uses_only_requests_with_valid_measured_wait() {
+    let mut rows = vec![request()];
+    for wait in [
+        json!(0),
+        json!(35),
+        json!(-1),
+        json!(51),
+        json!(600001),
+        json!("9"),
+    ] {
+        let mut r = request();
+        r["queue_ms"] = wait;
+        rows.push(r);
+    }
+    let rpc = run(batch(rows)).unwrap();
+    let s = &rpc["payload"]["stats"][0];
+    assert_eq!(s["total"], 7);
+    assert_eq!(s["queue_count"], 2);
+    assert_eq!(s["queue_ms_sum"], 35);
+    assert_eq!(s["queue_total_ms"], 100);
+}
+
+#[test]
+fn terminal_outcomes_override_http_status_and_respect_deadline() {
+    let mut rows = vec![];
+    for (status, ms, limit, kind) in [
+        (499, 560, Some(10000), Some("aborted")),
+        (200, 10001, None, None),
+        (200, 10000, None, None),
+        (200, 1934, Some(1000), None),
+        (0, 100, None, Some("timeout")),
+    ] {
+        let mut r = request();
+        r["status"] = json!(status);
+        r["duration_ms"] = json!(ms);
+        r["timeout_ms"] = json!(limit);
+        r["queue_ms"] = json!(0);
+        r["error_kind"] = json!(kind);
+        rows.push(r);
+    }
+    let rpc = run(batch(rows)).unwrap();
+    let s = &rpc["payload"]["stats"][0];
+    assert_eq!(s["failures"], 4);
+    assert_eq!(s["client_errors"], 0);
+    assert_eq!(rpc["payload"]["error_samples"][1]["error_kind"], "timeout");
+}
+
+#[test]
 fn aggregates_only_measured_request_timings() {
     let mut measured = request();
     measured["db_ms"] = json!(0);

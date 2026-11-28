@@ -5,6 +5,18 @@ import { buildIssuePrompt, displayVersion } from "./issue-prompt";
 import { shown, hidden } from "../../worker/tests/version-vectors.mjs";
 
 const base = { feature: "결제", route: "/buy", versions: ["v1"], errors: [] };
+it("Trova에서 대기가 큰 경우 서버 자원을 먼저 조사한다", () => {
+  const measured = { ...base, versions: ["3e66a68"], queueMs: 433, queuePct: 77, interruptions: 124, cpuPct: 96, stealPct: 73 };
+  const {text} = buildIssuePrompt(measured);
+  expect(text).toContain("처리 전 대기 평균 0.4초(전체의 77%)");
+  expect(text).toContain("응답 멈춤");
+  expect(text).toContain("서버 CPU 최대 96%");
+  expect(text).toContain("CPU steal 최대 73%");
+  expect(text).toContain("CPU·스레드 풀·인스턴스 크기부터");
+  expect(text).not.toContain("바뀐 코드부터");
+  expect(buildIssuePrompt({...measured, queuePct: 49}).text).not.toContain("인스턴스 크기부터");
+  expect(buildIssuePrompt(base).text).not.toContain("처리 전 대기");
+});
 it.each(["first", "again", "worse"] as const)("S7 %s 두 복사 방식 모두 앱 키를 가린다", mode => {
   const pub = "sp_pub_" + "a".repeat(64);
   const srv = "sp_srv_" + "b".repeat(64);

@@ -183,6 +183,8 @@ enum Data {
         method: String,
         status: u16,
         duration_ms: u32,
+        queue_ms: Option<Value>,
+        timeout_ms: Option<u32>,
         db_ms: Option<u32>,
         external_ms: Option<u32>,
         error_kind: Option<String>,
@@ -211,6 +213,11 @@ struct Stats {
     server_errors: u32,
     client_errors: u32,
     duration_sum_ms: u64,
+    queue_ms_sum: u64,
+    queue_total_ms: u64,
+    queue_count: u32,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    flow: BTreeMap<i64, [u32; 2]>,
     db_ms_sum: u64,
     db_ms_count: u32,
     external_ms_sum: u64,
@@ -723,6 +730,8 @@ impl Aggregate {
                 method,
                 status,
                 duration_ms,
+                queue_ms,
+                timeout_ms,
                 db_ms,
                 external_ms,
                 error_kind,
@@ -736,7 +745,16 @@ impl Aggregate {
                         && db_ms.is_none_or(|n| n <= 600000)
                         && external_ms.is_none_or(|n| n <= 600000),
                 )?;
-                let client = (400..500).contains(&status);
+                let measured = queue_ms.is_some() || timeout_ms.is_some();
+                let deadline = timeout_ms.filter(|n| *n > 0).unwrap_or(10000);
+                let terminal = match error_kind.as_deref() {
+                    Some("aborted") => Some("aborted"),
+                    Some("timeout") => Some("timeout"),
+                    _ if measured && duration_ms > deadline => Some("timeout"),
+                    _ => None,
+                };
+                let error_kind = terminal.map(str::to_owned).or(error_kind);
+                let client = terminal.is_none() && (400..500).contains(&status);
                 let failed = !client && (status == 0 || status >= 500 || error_kind.is_some());
                 if (failed || client) && (error_message.is_some() || error_kind.is_some()) {
                     self.samples.push(json!({"route":path,"method":method,"at":ts,"http_status":status,"error_kind":error_kind.as_deref().and_then(self::error_kind),"message":error_message.as_deref().and_then(error_name)}));
@@ -750,6 +768,18 @@ impl Aggregate {
                 row.server_errors += u32::from(status >= 500);
                 row.client_errors += u32::from(client);
                 row.duration_sum_ms += u64::from(duration_ms);
+                if let Some(ms) = queue_ms
+                    .and_then(|v| v.as_u64())
+                    .filter(|n| *n <= u64::from(duration_ms))
+                {
+                    row.queue_ms_sum += ms;
+                    row.queue_total_ms += u64::from(duration_ms);
+                    row.queue_count += 1;
+                }
+                if measured || terminal.is_some() {
+                    let counts = row.flow.entry(ts.timestamp()).or_default();
+                    counts[usize::from(terminal.is_some())] += 1;
+                }
                 if let Some(ms) = db_ms {
                     row.db_ms_sum += u64::from(ms);
                     row.db_ms_count += 1;

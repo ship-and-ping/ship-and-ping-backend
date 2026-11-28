@@ -30,6 +30,9 @@ export interface Stat {
   success_durations?: Record<string, number>;
 }
 interface Metric {
+  queue_ms?: number;
+  queue_pct?: number;
+  interruptions?: number;
   unconfirmed?: number;
   consecutive?: boolean;
   total?: number;

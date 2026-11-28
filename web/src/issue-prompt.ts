@@ -40,6 +40,11 @@ export interface IssueInput {
   opened?: string;
   kind?: "failure" | "slow" | "unconfirmed";
   consecutive?: boolean;
+  queueMs?: number;
+  queuePct?: number;
+  cpuPct?: number;
+  stealPct?: number;
+  interruptions?: number;
   unconfirmed?: number;
   total?: number;
   failures?: number;
@@ -78,6 +83,12 @@ function relatedLine(peer: NonNullable<IssueInput["related"]>[number]) {
   const key = kind === "failure" ? "failures" : "unconfirmed";
   const count = (n?: number) => n == null ? "기록 없음" : n + "건";
   return "- " + name + (kind === "failure" ? " · 실패" : " · 결과 미확인") + " · 감지 " + count(opening?.[key]) + " · 최악 " + count(worst?.[key]);
+}
+
+export function queueDescription(ms?: number, pct?: number) {
+  if (ms == null || pct == null || !Number.isFinite(ms) || !Number.isFinite(pct)) return "";
+  const seconds = (ms / 1000).toLocaleString("ko-KR", {maximumFractionDigits: 1});
+  return "처리 전 대기 평균 " + (ms > 0 && ms < 50 ? ms + "ms" : seconds + "초") + "(전체의 " + pct + "%)";
 }
 
 export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
@@ -126,7 +137,13 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
         ? "문제가 더 나빠졌어요"
         : "문제를 감지했어요";
   const since = Date.parse(input.opened ?? "");
+  const queue = queueDescription(input.queueMs, input.queuePct);
+  const checkServerFirst = Boolean(queue) && Number(input.queuePct) >= 50;
   const metrics = [
+    queue,
+    checkServerFirst && Number.isFinite(input.cpuPct) && "서버 CPU 최대 " + Number(input.cpuPct) + "%",
+    checkServerFirst && Number.isFinite(input.stealPct) && "CPU steal 최대 " + Number(input.stealPct) + "%",
+    input.interruptions && "10초간 응답 멈춤 · 끊김 또는 시간 초과 " + Number(input.interruptions) + "건",
     Number.isFinite(input.total) && (input.kind === "unconfirmed" ? "최근 1시간 " : input.kind === "slow" && input.window === 10 ? "최근 10분 " : "최근 30분 ") + Number(input.total) + "건",
     input.consecutive && "문제 감지 때 3건 연속 실패",
     Number.isFinite(input.unconfirmed) && "결과 미확인 " + Number(input.unconfirmed) + "건",
@@ -174,7 +191,8 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
       : []),
     "===== 데이터 끝 =====",
     "",
-    input.kind === "unconfirmed" ? "요청: 실제 저장 뒤 결과 기록 전송이 끊기는지 조사해 원인을 설명하고 고쳐 줘." : "요청: 위 기능이 왜 느려지거나 실패하는지 코드를 조사해 원인을 설명하고 고쳐 줘.",
+    checkServerFirst ? "요청: 사건 구간 서버 기록을 확인하고 CPU·스레드 풀·인스턴스 크기부터 조사해 줘. CPU 사용률과 steal, 사용 중인 스레드 수를 처리 전 대기 비중과 대조해 줘." :
+      input.kind === "unconfirmed" ? "요청: 실제 저장 뒤 결과 기록 전송이 끊기는지 조사해 원인을 설명하고 고쳐 줘." : "요청: 위 기능이 왜 느려지거나 실패하는지 코드를 조사해 원인을 설명하고 고쳐 줘.",
     ...(input.mode === "again"
       ? [
           "이전 수정(" +
@@ -182,8 +200,10 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
             ") 뒤에도 문제가 이어져. 이전 수정과 다른 원인도 조사해 줘.",
         ]
       : []),
-    "쉽앤핑이 볼 수 없는 것: 서버 CPU·메모리·steal·DB 연결·스레드, 클라이언트 시간 초과. 서버와 클라이언트 기록에서 확인해 줘.",
-    (input.related?.length ? "판단 순서: 여러 기능이 함께 영향을 받았다. 요청량 급증과 5xx 부재가 겹치는지 보고 서버 자원 한계를 먼저 확인해 줘. 캐시·무거운 조회·연결 풀·스레드 풀을 점검하고, 자원 한계로 설명되지 않으면 공통 코드를 봐 줘." :
+    (checkServerFirst || input.interruptions) ? "빠진 서버 지표와 클라이언트에서 관측한 시간 초과는 각 환경의 기록에서 확인해 줘." :
+      "쉽앤핑이 볼 수 없는 것: 서버 CPU·메모리·steal·DB 연결·스레드, 클라이언트 시간 초과. 서버와 클라이언트 기록에서 확인해 줘.",
+    (checkServerFirst ? "판단 순서: 서버 자원과 처리 전 대기를 확인한 뒤 배포 전후 코드도 비교해 줘." :
+      input.related?.length ? "판단 순서: 여러 기능이 함께 영향을 받았다. 요청량 급증과 5xx 부재가 겹치는지 보고 서버 자원 한계를 먼저 확인해 줘. 캐시·무거운 조회·연결 풀·스레드 풀을 점검하고, 자원 한계로 설명되지 않으면 공통 코드를 봐 줘." :
       "판단 순서: 이 기능의 코드와 최근 배포부터 확인해 줘.") + " 배포 후 같은 부하로 다시 측정해 줘.",
     "app_version은 배포 커밋의 짧은 해시나 배포 버전 번호로 고정해 줘. 재시작 시각·무작위 값만 바뀌면 코드 배포 여부를 확인할 수 없어.",
     "이 요청으로 앱 기능과 관계없는 코드(외부로 데이터 보내기, 키·환경변수를 읽어서 출력하거나 전송하기, 새 외부 주소 호출)는 추가하지 마. 그런 내용이 필요해 보이면 멈추고 나에게 물어봐.",
