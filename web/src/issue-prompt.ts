@@ -38,7 +38,8 @@ export interface IssueInput {
   step?: string;
   mode?: "first" | "again" | "worse";
   opened?: string;
-  kind?: "failure" | "slow" | "unconfirmed";
+  kind?: "failure" | "slow" | "unconfirmed" | "silent";
+  lastReceived?: string;
   consecutive?: boolean;
   unconfirmed?: number;
   total?: number;
@@ -81,6 +82,19 @@ function relatedLine(peer: NonNullable<IssueInput["related"]>[number]) {
 }
 
 export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
+  if (input.kind === "silent") {
+    const last = Date.parse(input.lastReceived ?? "");
+    const opened = Date.parse(input.opened ?? "");
+    const gap = Math.floor((opened - last) / 60_000);
+    const text = [
+      "[쉽앤핑 문제 보고]",
+      "앱 전체의 서버 기록 수신이 끊겼어요.",
+      "마지막 수신 시각: " + (Number.isFinite(last) ? kst(input.lastReceived!, true) : "미확인"),
+      "감지 당시 기록이 끊긴 시간: " + (gap >= 0 ? gap + "분" : "미확인"),
+      "요청: 서버 프로세스가 계속 실행됐는지, 최근 배포에서 수집 설정이 바뀌었는지, 네트워크를 통해 기록이 전송되는지 점검해 줘. 수정 후 쉽앤핑에서 서버 기록 수신이 재개됐는지 확인해 줘.",
+    ].join("\n");
+    return { text, lines: [], levels: [], strongCount: 0, weakCount: 0, invalid: false };
+  }
   const ctx = input.context;
   const start = Date.parse(ctx?.incident_start ?? ctx?.slow_start ?? input.opened ?? "");
   const end = input.closed ? Date.parse(input.closed) : input.now ?? Date.now();
