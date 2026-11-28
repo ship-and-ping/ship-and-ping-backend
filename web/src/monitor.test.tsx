@@ -8,14 +8,75 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { Profiler } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { MonitorRoute } from "./Monitor";
+import { Chart } from "./Chart";
 import { Hero } from "./Layout";
 import { gateway } from "./data";
 
 import vectors from "../../docs/specs/sanitize-vectors.json";
 
 afterEach(cleanup);
+it("요약 카드에서 시간 칸마다 값과 빈 기록을 읽고 모든 그래프의 위치를 맞춘다", () => {
+  const now = Date.parse("2026-11-28T06:00:00Z");
+  const row = {bucket:new Date(now - 60000).toISOString(), feature_id:"f", version:"1",
+    total:1234, failures:617, hist:[0,617], success_durations:{"100":617}};
+  const {container} = render(<Chart rows={[row]} days={1} now={now} baseline={100} thresholds={new Map([["f",200]])}/>);
+  for (const [name,value] of [["사용 건수","1,234건"],["실패율","50%"],["보통 속도","0.1초"],["만족도","100%"]]) {
+    const slider = screen.getByRole("slider", {name});
+    const card = slider.closest("article")!;
+    const grid = card.querySelectorAll('line[stroke-dasharray="2 4"]');
+    expect(grid.length).toBeGreaterThanOrEqual(2);
+    expect(grid.length).toBeLessThanOrEqual(3);
+    const zero = parseFloat(card.querySelector(".spark-zero")!.getAttribute("y1")!);
+    const levels = Array.from(grid, line => parseFloat(line.getAttribute("y1")!));
+    expect(levels.every((y,i) => y >= 0 && y < (i ? levels[i-1] : zero))).toBe(true);
+    vi.spyOn(slider, "getBoundingClientRect").mockReturnValue(new DOMRect(20, 0, 240, 60));
+    fireEvent(slider, new MouseEvent("pointermove", {bubbles:true, clientX:259}));
+    expect(screen.getByRole("tooltip").textContent).toBe("오후 2시 · "+value);
+    expect(container.querySelectorAll(".spark-active")).toHaveLength(4);
+    if (name === "실패율" || name === "만족도") {
+      const fraction = name === "실패율" ? 0.5 : 1;
+      const dot = parseFloat(card.querySelector(".spark-active")!.getAttribute("cy")!);
+      expect(dot).toBeCloseTo(zero - fraction * (zero - levels[levels.length - 1]));
+    }
+    fireEvent.focus(slider);
+    fireEvent.keyDown(slider, {key:"ArrowLeft"});
+    expect(screen.getByRole("tooltip").textContent).toBe("오후 1시 · 기록 없음");
+    expect(slider.getAttribute("aria-valuetext")).toBe(screen.getByRole("tooltip").textContent);
+    expect(container.querySelectorAll(".spark-active")).toHaveLength(0);
+    expect(screen.getAllByRole("slider").map(s => s.getAttribute("aria-valuenow"))).toEqual(Array(6).fill("23"));
+    const cursors = Array.from(container.querySelectorAll<HTMLElement>(".flow-selection"), el => el.style.left);
+    expect(cursors).toHaveLength(6);
+    expect(new Set(cursors).size).toBe(1);
+    fireEvent.keyDown(slider, {key:"ArrowRight"});
+    expect(screen.getByRole("tooltip").textContent).toBe("오후 2시 · "+value);
+    fireEvent.keyDown(slider, {key:"Escape"});
+  }
+});
+it("7일 카드와 큰 그래프의 날짜 구간이 같고 같은 칸 안에서 다시 그리지 않는다", () => {
+  const commits = vi.fn();
+  render(<Profiler id="chart" onRender={commits}><Chart rows={[]} days={7}
+    now={Date.parse("2026-11-28T06:35:00Z")} baseline={null}/></Profiler>);
+  const card = screen.getByRole("slider",{name:"사용 건수"});
+  vi.spyOn(card,"getBoundingClientRect").mockReturnValue(new DOMRect(0,0,210,60));
+  const move = (x:number) => fireEvent(card,new MouseEvent("pointermove",{bubbles:true,clientX:x}));
+  move(25);
+  const first = screen.getByRole("tooltip").textContent;
+  const count = commits.mock.calls.length;
+  move(20);
+  move(10);
+  expect(commits).toHaveBeenCalledTimes(count);
+  move(35);
+  expect(commits.mock.calls.length).toBeGreaterThan(count);
+  expect(screen.getByRole("tooltip").textContent).not.toBe(first);
+  const plot = screen.getByRole("slider",{name:"사용과 실패"});
+  fireEvent.focus(plot);
+  const interval = screen.getByRole("tooltip").querySelector("strong")!.textContent;
+  fireEvent.focus(card);
+  expect(screen.getByRole("tooltip").textContent).toBe(interval+" · 기록 없음");
+});
 it("열린 문제와 감지 당시 실패 건수를 독립된 단위로 표시한다", async () => {
   setup("/apps/a");
   const summary = await screen.findByRole("region", { name: "앱 상태 요약" });
@@ -175,7 +236,10 @@ it("그래프 밖에 초점이 있어도 Escape로 마우스 툴팁을 닫는다
   setup("/apps/a/features/f");
   const plot = await screen.findByRole("slider", { name: "사용과 실패" });
   const button = screen.getByRole("button", { name: "7일" });
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading",{level:1})));
+  await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
   button.focus();
+  expect(document.activeElement).toBe(button);
   vi.spyOn(plot, "getBoundingClientRect").mockReturnValue(new DOMRect(48, 0, 264, 112));
   fireEvent(plot, new MouseEvent("pointerover", { bubbles: true, clientX: 50 }));
   expect(screen.getByRole("tooltip")).toBeTruthy();

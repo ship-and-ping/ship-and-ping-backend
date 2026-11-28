@@ -151,8 +151,12 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
     timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit",
   }) + " KST";
   const omitted = "(내용 저장 안 함)";
-  const lines = records.map(r => typeof r === "string" ? errorName(r) ?? omitted :
-    clock(r.at) + " " + (errorKind(r.error_kind) ?? errorName(r.message) ?? omitted));
+  const lines = records.map(r => {
+    if (typeof r === "string") return errorName(r) ?? omitted;
+    const authStatus = r.http_status === 401 || r.http_status === 403 ? "HTTP_" + r.http_status + " 1건" : null;
+    const label = errorName(r.error_kind) ?? errorName(r.message) ?? errorKind(r.error_kind) ?? authStatus ?? omitted;
+    return clock(r.at) + " " + label;
+  });
   // Inspect normalized input even when a whole header is hidden in the copied text.
   const inspect = (s: string) => normalizePromptInput(s.slice(0, 4000)).slice(0, 4000);
   const messages = records.map(r => inspect(typeof r === "string"
