@@ -33,6 +33,10 @@ insert into error_samples(app_id,feature_id,version,at,http_status,error_kind)
  select app_id,id,'v1',t+interval '1 minute',503,'HTTP_503' from features,anchor where name='bookmark';
 insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version)
  select app_id,id,'slow','quiet',t+interval '1 minute',t+interval '3 minutes','v1' from features,anchor where name='bookmark';
+insert into features(app_id,kind,name,method,route) select id,'auto','other','GET','/other' from apps;
+insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,server_errors,duration_sum_ms,hist)
+ select app_id,id,'v1',t-interval '5 minutes',2,2,0,2,160,array[0,2]||array_fill(0,array[14])
+ from features,anchor where name='other';
 select ok(not has_function_privilege('anon','incident_prompt_context(uuid)','execute'),'anonymous access denied');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000053',true);
@@ -47,12 +51,12 @@ select is((ctx->>'server_errors')::int,0,'confirmed zero 5xx') from report;
 select is((ctx->>'related_server_errors')::int,1,'peer 503 counted exactly once') from report;
 select ok(not (ctx->>'client_partial')::boolean and not (ctx->>'server_partial')::boolean,'counts fully determined') from report;
 reset role;
--- Opening in the middle of a bucket, without earlier abnormal observations.
+-- Opening in the middle of a busy bucket with new failures and older successes.
 -- Only the next five complete minutes are measurable (5000 requests).
-update stats_5m set total=6000,hist=array[0,0,0,0,0,6000]||array_fill(0,array[10]),duration_sum_ms=3600000
+update stats_5m set total=6000,failures=3000,hist=array[0,0,0,0,0,6000]||array_fill(0,array[10]),duration_sum_ms=3600000
  where feature_id=(select id from features where name='place') and bucket=(select t from anchor);
-insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version)
- select app_id,id,'failure','quiet',t+interval '4 minutes',t+interval '10 minutes','v1'
+insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version,metric_at_open)
+ select app_id,id,'failure','quiet',t+interval '4 minutes',t+interval '10 minutes','v1','{"total":7720,"failures":3000}'
  from features,anchor where name='place';
 select is((incident_prompt_context(id)->>'incident_rpm')::numeric,1000::numeric,'23:24 to 23:30 excludes 23:20-24 traffic')
  from incidents where feature_id=(select id from features where name='place') and kind='failure';
@@ -97,5 +101,16 @@ insert into incidents(app_id,feature_id,kind,status,opened_at,opened_version,met
  from features,anchor where name='baseline';
 select is(first_slow_bucket,(select t-interval '5 minutes' from anchor),'10-minute fixed cap preserves the tie and the opening window')
  from incidents where feature_id=(select id from features where name='baseline') and status='open';
+-- When only the streak triggered, an older isolated failure is outside its evidence.
+insert into features(app_id,kind,name,feature_key) select id,'deep','save','save' from apps;
+insert into attempts(app_id,attempt_id,feature_id,version,status,ended_at)
+ select app_id,gen_random_uuid(),id,'v1',case when n>=27 or n=0 then 'failure' else 'success' end,
+  t+interval '10 minutes 10 seconds'+n*interval '1 minute'
+ from features,anchor,generate_series(0,29) n where name='save';
+insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version,metric_at_open)
+ select app_id,id,'failure','quiet',t+interval '40 minutes',t+interval '45 minutes','v1',
+  '{"total":30,"failures":4,"consecutive":true}' from features,anchor where name='save';
+select is(first_failure_at,(select t+interval '37 minutes 10 seconds' from anchor),'three consecutive deep failures start at the first of the last three')
+ from incidents where feature_id=(select id from features where name='save');
 select * from finish();
 rollback;

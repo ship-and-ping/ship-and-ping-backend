@@ -64,7 +64,10 @@ language sql stable set search_path='' as $$
    and a.ended_at between issue.opened_at-interval '30 minutes' and issue.opened_at
    and a.ended_at>previous_close and a.status in ('success','failure')
  ), failures as (
-  select s.bucket at from public.stats_5m s,cutoff where s.app_id=issue.app_id and s.feature_id=issue.feature_id
+  -- In the still-open detection bucket the aggregate mixes pre-failure requests
+  -- with failures. It cannot establish an onset earlier than detection.
+  select case when s.bucket=date_bin('5 minutes',issue.opened_at,'epoch') then issue.opened_at else s.bucket end at
+  from public.stats_5m s,cutoff where s.app_id=issue.app_id and s.feature_id=issue.feature_id
    and s.bucket between date_bin('5 minutes',issue.opened_at-interval '30 minutes','epoch') and issue.opened_at
    and s.bucket>previous_close and s.failures>0
   union all select ended_at from deep_results where status='failure' and
@@ -126,8 +129,8 @@ begin
   select h.bucket,sum(h.total) total from public.stats_1h h where h.app_id=issue.app_id
    and h.bucket between start_bucket-interval '7 days 1 hour' and start_bucket group by h.bucket
  ), usable as materialized (
-  select s.t from (select t,date_trunc('hour',t) hour,count(*) over(partition by date_trunc('hour',t)) n from slots) s
-  left join hours h on h.bucket=s.hour where h.bucket is null or s.n=12
+  select s.t from (select t,date_trunc('hour',t) hour_start,count(*) over(partition by date_trunc('hour',t)) n from slots) s
+  left join hours h on h.bucket=s.hour_start where h.bucket is null or s.n=12
  ), usual as (
   select ((select coalesce(sum(s.total),0) from public.stats_5m s join usable u on u.t=s.bucket
     where s.app_id=issue.app_id and s.bucket>=start_bucket-interval '7 days' and s.bucket<start_bucket)
