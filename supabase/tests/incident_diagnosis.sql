@@ -7,7 +7,7 @@ insert into auth.users(id) values ('00000000-0000-0000-0000-000000000055');
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000055',true);
 insert into apps(owner_id,name,first_record_at) select auth.uid(),'분류 시험',t-interval '1 day' from anchor;
 insert into features(app_id,kind,name,method,route)
-  select id,'auto',name,'GET','/'||name from apps cross join (values('places'),('trips')) f(name);
+  select apps.id,'auto',f.name,'GET','/'||f.name from apps cross join (values('places'),('trips')) f(name);
 insert into app_versions(app_id,version) select id,'v1' from apps;
 insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,server_errors,duration_sum_ms,hist)
   select app_id,id,'v1',t+mins*interval '1 minute',n,0,clients,0,n*10,array[n]||array_fill(0,array[15])
