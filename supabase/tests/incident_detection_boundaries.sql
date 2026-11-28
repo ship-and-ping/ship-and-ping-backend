@@ -65,14 +65,6 @@ update ingest_batches set received_at=t+interval '26 minutes' from anchor
 select is(first_failure_at,t+interval '15 minutes','live auto snapshot keeps the first failure bucket known at 23:22')
  from incidents i join features f on f.id=i.feature_id cross join anchor where f.kind='auto' and i.kind='failure';
 
--- Temporary CI mutation: let the backfill consult the current aggregate again.
-do $mutation$
-begin
- execute replace(pg_get_functiondef('private.first_failure_at(public.incidents,boolean)'::regprocedure),
-  'when not at_detection and exists','when false and exists');
-end
-$mutation$;
-
 update incidents i set first_failure_at=private.first_failure_at(i)
  from features f where i.feature_id=f.id and f.kind='auto' and i.kind='failure';
 select is((incident_prompt_context(i.id)->>'incident_start')::timestamptz,t+interval '22 minutes',
