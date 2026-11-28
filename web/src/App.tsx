@@ -14,16 +14,24 @@ import { displayText } from "./normalize";
 import { Hero, Landing, LoadingRows, Shell } from "./Layout";
 import { AuthPage } from "./AuthPage";
 import { LoginApproval } from "./LoginApproval";
+import { notificationIssuePath } from "./login-requests";
 import { MonitorRoute } from "./Monitor";
 import { DeepPage } from "./DeepPage";
 import { Notifications } from "./Notifications";
 import { Connect } from "./Connect";
 import { Account } from "./Account";
 import { AppSettings } from "./AppSettings";
-import { deviceLogoutNotice } from "./LogoutButton";
 import { InstallEntry, InstallGuide, PhoneHandoff } from "./InstallGuide";
 import { finishedSetup, PushSetup } from "./PushSetup";
 import { standalone } from "./push";
+import { ToastProvider, useToast } from "./Toast";
+
+const loginIssueKey = "ship-ping-login-issue";
+function readLoginIssue() {
+  try {
+    return notificationIssuePath(sessionStorage.getItem(loginIssueKey));
+  } catch { return null; }
+}
 
 function useApps(api: Gateway) {
   const [apps, setApps] = useState<AppSummary[]>();
@@ -282,10 +290,13 @@ function Connection({
   );
 }
 export function App({ api, ingest }: { api: Gateway; ingest: string }) {
+  return <ToastProvider><AppRoutes api={api} ingest={ingest}/></ToastProvider>;
+}
+function AppRoutes({ api, ingest }: { api: Gateway; ingest: string }) {
   const [user, setUser] = useState<string | null>();
   const [recoveryUser, setRecoveryUser] = useState<string | null>(null);
   const deleting = useRef(false);
-  const [notice,setNotice] = useState("");
+  const showToast = useToast();
   const [error, setError] = useState(false);
   const issued = useRef<{ id: string; owner: string; key?: string } | null>(
     null,
@@ -293,6 +304,17 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
   const { pathname } = useLocation();
   const prev = useRef(pathname);
   const navigate = useNavigate();
+  const [loginIssue, setLoginIssue] = useState(readLoginIssue);
+  useEffect(() => {
+    if (user === null && notificationIssuePath(pathname)) setLoginIssue(pathname);
+    if ((user && pathname === loginIssue) || pathname === "/") setLoginIssue(null);
+  }, [user, pathname, loginIssue]);
+  useEffect(() => {
+    try {
+      if (loginIssue) sessionStorage.setItem(loginIssueKey, loginIssue);
+      else sessionStorage.removeItem(loginIssueKey);
+    } catch { /* Same-tab navigation still has the path in React state. */ }
+  }, [loginIssue]);
   useEffect(() => {
     let active = true,
       notified = false;
@@ -301,7 +323,6 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
       notified = true;
       if (active) {
         if (id || !deleting.current) setUser(id);
-        if (id) setNotice("");
         setError(false);
       }
     });
@@ -321,23 +342,28 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
   const markPending = useCallback((active: boolean) => { deleting.current = active; }, []);
   async function logout(deviceOnly = false) {
     await api.logout({deviceOnly});
+    setLoginIssue(null);
     deleting.current = false;
     issued.current = null;
     setUser(null);
-    setNotice(deviceOnly ? "이 기기에서 로그아웃했어요. " + deviceLogoutNotice : "로그아웃했어요");
+    showToast(deviceOnly
+      ? { kind: "info", title: "이 기기에서 로그아웃했어요", detail: "알림 내용은 가려지지만 다시 로그인할 때까지 알림이 올 수 있어요." }
+      : { kind: "success", title: "로그아웃했어요", detail: "푸시 알림은 다시 로그인하면 알림 설정에서 켤 수 있어요." });
     navigate("/login",{replace:true});
   }
   const finishWithdrawal = useCallback(async (result: "done" | "unauthorized" | "login_required" = "done", deviceOnly = false) => {
     await api.logout({accountDeleted: result === "done", deviceOnly});
+    setLoginIssue(null);
     deleting.current=false; issued.current=null;
-    setNotice({
-      done: "탈퇴를 마쳤어요",
-      unauthorized: "탈퇴가 이미 끝났을 수 있어요. 다시 로그인해 확인해 주세요.",
-      login_required: "다시 로그인해 주세요.",
-    }[result]);
+    const notices = {
+      done: { kind: "success", title: "탈퇴를 마쳤어요" },
+      unauthorized: { kind: "problem", title: "탈퇴가 이미 끝났을 수 있어요", detail: "다시 로그인해 확인해 주세요." },
+      login_required: { kind: "info", title: "다시 로그인해 주세요." },
+    } as const;
+    showToast(notices[result]);
     setUser(null);
     navigate("/login",{replace:true});
-  },[api,navigate]);
+  },[api,navigate,showToast]);
   useEffect(() => {
     if (
       issued.current &&
@@ -346,7 +372,6 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
       issued.current = null;
     if (prev.current !== pathname) {
       if (prev.current === "/reset-password") setRecoveryUser(null);
-      if (prev.current === "/login") setNotice("");
       document.querySelector<HTMLElement>("main h1")?.focus();
       prev.current = pathname;
     }
@@ -361,14 +386,16 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     );
   if (user === undefined)
     return <main role="status">로그인 상태를 확인하는 중</main>;
+  const afterLogin = loginIssue ? <Navigate replace to={loginIssue}/> :
+    user && standalone() && !finishedSetup(user) ? <Navigate replace to="/phone-setup"/> : <AfterLogin api={api}/>;
   return (
     <Routes>
       <Route path="/phone-setup" element={!user ? <Navigate replace to="/login"/> :
         finishedSetup(user) ? <Navigate replace to="/apps"/> : <PushSetup key={user} api={api} member={user}/>}/>
       <Route path="/login/approve" element={<LoginApproval api={api} user={user ?? null}/>}/>
-      <Route path="/signup" element={user ? <AfterLogin api={api}/> : <AuthPage api={api} mode="signup"/>}/>
+      <Route path="/signup" element={user ? afterLogin : <AuthPage api={api} mode="signup" issuePath={loginIssue}/>}/>
       <Route path="/forgot-password" element={<AuthPage api={api} mode="forgot"/>}/>
-      <Route path="/reset-password" element={<AuthPage api={api} mode="reset" expired={() => setRecoveryUser(null)} recovery={!!user && recoveryUser === user}/>}/>
+      <Route path="/reset-password" element={<AuthPage api={api} mode="reset" issuePath={loginIssue} expired={() => setRecoveryUser(null)} recovery={!!user && recoveryUser === user}/>}/>
       <Route path="/account" element={user ? <Shell key={user} onLogout={logout}>
         <Account api={api} origin={ingest} pending={markPending} logout={logout} done={finishWithdrawal}/>
       </Shell> : <Navigate to="/login" replace/>}/>
@@ -378,12 +405,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
       />
       <Route
         path="/login"
-        element={user ? standalone() && !finishedSetup(user) ? <Navigate replace to="/phone-setup"/> : <AfterLogin api={api} /> : <>
-          {notice && <p className="panel" role="status">
-            <strong>{notice}</strong>{notice === "로그아웃했어요" && " 이 기기에서 푸시를 다시 받으려면 로그인한 뒤 알림 설정에서 켜 주세요."}
-          </p>}
-          <AuthPage api={api} mode="login" />
-        </>}
+        element={user ? afterLogin : <AuthPage api={api} mode="login" issuePath={loginIssue}/>}
       />
       <Route
         path="/apps/*"

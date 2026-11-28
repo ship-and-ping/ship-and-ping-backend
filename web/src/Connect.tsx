@@ -4,6 +4,7 @@ import type { Gateway, Label, Snapshot } from "./data";
 import { buildConnectPrompt, connectRestriction, keyWarning } from "./domain";
 import { displayText, sanitizeRoute } from "./normalize";
 import { Hero, CurrentAppName } from "./Layout";
+import { useToast } from "./Toast";
 import { cleanFeatureField } from "./deep";
 import { isStrong } from "./issue-prompt";
 
@@ -44,6 +45,7 @@ export function Copy({
   const [state, setState] = useState<"ready" | "busy" | "done" | "fail" | "revealed" | "unavailable">(
     "ready",
   );
+  const showToast = useToast();
   const area = useRef<HTMLTextAreaElement>(null);
   const copyButton = useRef<HTMLButtonElement>(null);
   const fallbackOpen = state === "fail" || state === "revealed";
@@ -92,6 +94,7 @@ export function Copy({
       }
     }
     setState("done");
+    showToast({ kind: "success", title: "복사했어요", detail: secret ? "배포 설정에 넣으세요." : "코딩 AI 대화창에 붙여 넣으세요." });
     onCopy?.();
   }
   return (
@@ -111,11 +114,7 @@ export function Copy({
             : state === "busy" ? "복사하는 중" : title}
       </button>
       <span role="status">
-        {state === "done"
-          ? secret
-            ? "복사했어요. 배포 설정에 넣으세요."
-            : "복사했어요. 코딩 AI 대화창에 붙여넣으세요."
-          : fallbackOpen
+        {fallbackOpen
             ? "자동 복사가 막혔어요. 주소창 옆 사이트 설정에서 클립보드 권한을 허용한 뒤 다시 복사해 주세요."
             : state === "unavailable" ? "문제 기록을 불러오지 못했어요. 다시 눌러 주세요."
             : ""}
@@ -181,7 +180,7 @@ export function Connect({
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [edits, setEdits] = useState<Record<string, Partial<Pick<Label, "name" | "hidden">>>>({});
-  const [saved, setSaved] = useState(false);
+  const showToast = useToast();
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
@@ -249,7 +248,6 @@ export function Connect({
     return [{ ...original, hidden, name: renamed ? name : undefined }];
   });
   function change(l: Label, patch: Partial<Pick<Label, "name" | "hidden">>) {
-    setSaved(false);
     setEdits((prev) => ({
       ...prev,
       [identity(l)]: { ...prev[identity(l)], ...patch },
@@ -283,7 +281,7 @@ export function Connect({
           },
       );
       setEdits({});
-      setSaved(skipped.size === 0);
+      if (!skipped.size) showToast({ kind: "success", title: "변경사항을 저장했어요." });
       if (skipped.size) setError(`기능 이름표 ${skipped.size}개는 200개를 넘어 저장하지 못했어요.`);
     } catch {
       setError(
@@ -376,11 +374,6 @@ export function Connect({
               >
                 {busy ? "처리하는 중" : "변경사항 저장"}
               </button>
-              {saved && (
-                <p role="status">
-                  변경사항을 저장했어요.
-                </p>
-              )}
               <Link to={`/apps/${id}`}>앱 홈 보기</Link>
             </section>
           )}

@@ -5,6 +5,7 @@ import type { AlertSettings, AppSummary, Gateway } from "./data";
 import { displayText } from "./normalize";
 import { PushChannel } from "./PushChannel";
 import { InstallEntry } from "./InstallGuide";
+import { useToast } from "./Toast";
 
 const ticketKey = "ship-ping-slack-state";
 type Props = { api: Gateway; origin: string };
@@ -107,6 +108,7 @@ export function Notifications({ api, origin }: Props) {
 }
 type NotificationAction = "connect" | "disconnect" | "test" | "email";
 function Settings({ app, api, origin }: Props & { app: string }) {
+  const showToast = useToast();
   const [settings, setSettings] = useState<AlertSettings>();
   const [pending, setPending] = useState<NotificationAction | null>(null);
   const busy = pending !== null;
@@ -151,11 +153,16 @@ function Settings({ app, api, origin }: Props & { app: string }) {
   async function saveEmail(enabled: boolean) {
     await api.emailSetting(app, enabled);
     setSettings(current => current && { ...current, email: enabled });
-    setMessage(enabled ? "이메일 알림이 켜졌어요." : "이메일 알림이 꺼졌어요.");
+    showToast({ kind: "success", title: enabled ? "이메일 알림이 켜졌어요." : "이메일 알림이 꺼졌어요." });
   }
   async function disconnect() {
     await api.disconnectSlack(app);
     setSettings(current => current && { ...current, connected: false, broken: false, channel: null });
+  }
+  async function testSlack() {
+    if (await api.testSlack(app)) {
+      showToast({ kind: "success", title: "시험 슬랙 알림을 예약했어요", detail: "잠시 뒤 슬랙에서 확인해 주세요." });
+    } else setMessage("잠시 뒤 다시 시도해 주세요. 시험 알림은 분당 한 번 보낼 수 있어요.");
   }
   async function connect() {
     const result = await api.slack("install", origin, { app });
@@ -211,15 +218,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                   <div className="actions">
                     <button
                       disabled={busy}
-                      onClick={() =>
-                        act("test", async () =>
-                          setMessage(
-                            (await api.testSlack(app))
-                              ? "시험 알림을 예약했어요. 잠시 뒤 슬랙에서 확인해 주세요."
-                              : "잠시 뒤 다시 시도해 주세요. 시험 알림은 분당 한 번 보낼 수 있어요.",
-                          ),
-                        )
-                      }
+                      onClick={() => act("test", testSlack)}
                     >
                       {pending === "test" ? "시험 알림 요청 중" : "시험 알림 보내기"}
                     </button>

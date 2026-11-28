@@ -5,7 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useMatch } from "react-router-dom";
 import { Sheep } from "./Sheep";
 import { LogoutButton } from "./LogoutButton";
 export { Landing } from "./Landing";
@@ -62,14 +62,14 @@ function Brand() {
   );
 }
 export function PublicBar() {
+  const login = useMatch("/login");
   return (
     <header className="bar">
       <Brand />
       <nav aria-label="시작 메뉴">
-        <Link to="/login">로그인</Link>
-        <Link className="button" to="/login">
-          시작하기
-        </Link>
+        {login
+          ? <Link to="/signup">회원 가입</Link>
+          : <Link to="/login">로그인</Link>}
       </nav>
     </header>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AuthForm } from "./AuthPage";
+import { useToast } from "./Toast";
 import { LogoutButton } from "./LogoutButton";
 import type { Gateway } from "./data";
 import { displayText } from "./normalize";
@@ -39,7 +40,7 @@ export function Account({
   const [stage, setStage] = useState<Stage>("account");
   const [input, setInput] = useState("");
   const [editingPassword, setEditingPassword] = useState(false);
-  const [passwordSaved, setPasswordSaved] = useState(false);
+  const showToast = useToast();
   const passwordButton = useRef<HTMLButtonElement>(null);
   const [error, setError] = useState(false);
   const exitResult = useRef<"unauthorized" | "login_required" | undefined>(undefined);
@@ -157,17 +158,15 @@ export function Account({
           <section className="panel">
             <h2>비밀번호</h2>
             <button ref={passwordButton} className="secondary" aria-expanded={editingPassword} onClick={() => {
-              setPasswordSaved(false);
               setEditingPassword(!editingPassword);
             }}>{editingPassword ? "닫기" : info.hasPassword ? "비밀번호 바꾸기" : "비밀번호 만들기"}</button>
             {editingPassword && <AuthForm api={api} mode="account" saved={() => {
               setEditingPassword(false);
               setInfo({ ...info, hasPassword: true });
-              setPasswordSaved(true);
+              showToast({ kind: "success", title: "비밀번호를 저장했어요." });
               passwordButton.current?.focus();
               retry(n => n + 1);
             }}/>}
-            {passwordSaved && <p role="status">비밀번호를 저장했어요.</p>}
             {loadError}
           </section>
           <section className="panel">
