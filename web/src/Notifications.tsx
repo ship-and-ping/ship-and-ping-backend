@@ -3,6 +3,7 @@ import { CurrentAppName, LoadingRows } from "./Layout";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import type { AlertSettings, AppSummary, Gateway } from "./data";
 import { displayText } from "./normalize";
+import { PushChannel } from "./PushChannel";
 
 const ticketKey = "ship-ping-slack-state";
 type Props = { api: Gateway; origin: string };
@@ -169,15 +170,13 @@ function Settings({ app, api, origin }: Props & { app: string }) {
     <>
       {settings ? (
         <>
-          {!settings.email && !settings.connected && !settings.broken && (
+          {!settings.email && !settings.connected && !settings.broken && !(settings.push && settings.subscribed) && (
             <p className="notification-warning" role="alert">
               <span aria-hidden="true">⚠</span><span><strong>알림을 받을 곳이 없어요.</strong> 문제가 생겨도 이 화면을 열기 전에는 알 수 없어요. 슬랙을 연결하거나 이메일 알림을 켜세요.</span>
             </p>
           )}
           <div className="dashboard-channels">
-            <section className="panel push-channel"><header><h2>앱 푸시</h2><small>곧 제공</small></header>
-              <p>휴대폰에서 문제 알림을 받는 기능을 준비하고 있어요.</p>
-            </section>
+            <PushChannel api={api} app={app} settings={settings} reload={reload} />
             <section className="panel">
               <header><h2>이메일</h2><small>로그인 메일</small></header>
               <button
