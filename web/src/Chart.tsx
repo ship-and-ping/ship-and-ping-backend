@@ -24,8 +24,9 @@ function buckets(rows: Stat[], start: number, now: number, count: number, thresh
     const from = start + i * width;
     const until = from + width;
     const endLabel = weekday.format(from) === weekday.format(until) ? clockMinute : dateTime;
-    const startLabel = width >= day ? weekday : from % hour === 0 ? clock : clockMinute;
-    return { label: dateTime.format(from) + " ~ " + endLabel.format(until), startLabel:startLabel.format(from),
+    const label = dateTime.format(from) + " ~ " + endLabel.format(until);
+    const startLabel = width >= day ? label : (from % hour === 0 ? clock : clockMinute).format(from);
+    return { label, startLabel,
       hasRecords:group.length > 0, ...summarize(group,thresholds) };
   });
 }
@@ -137,6 +138,7 @@ function description(p:Bucket,p95:number|null) {
   return p.label + values(p,p95).map(([name,value]) => " · "+name+" "+value).join("");
 }
 type Cursor = {index:number; owner:string};
+const sameCursor = (a:Cursor|null,b:Cursor|null) => a?.index === b?.index && a?.owner === b?.owner;
 type Selection = {
   active:Cursor|null; selected:number; focus:(cursor:Cursor|null) => void; hover:(cursor:Cursor|null) => void;
 };
@@ -181,7 +183,7 @@ function StatPanel({title,help,value,series,unit,selection,points,p95}:{title:st
           cx={percent(center(i,series.length))} cy={percent(pointY(n))} r={i === active ? 4 : 2.5} fill="currentColor"/>)}
     </svg><CursorTarget owner={title} points={points} selection={selection} p95={p95} reading={reading} crosshair/>
     </div>
-    {selection.active?.owner === title && <div className="spark-readout">
+    {selection.active?.owner === title && <div className="spark-readout" data-align={selection.active.index < series.length / 2 ? "end" : "start"}>
       <div role="tooltip" className="flow-tip"><strong>{reading(selection.active.index)}</strong></div>
     </div>}
   </article>;
@@ -302,21 +304,29 @@ export function Chart({ rows, days, now, baseline, p95 = null, samples, learnsRa
   const period = useMemo(() => summarize(rows.filter(r => Date.parse(r.bucket) >= start && Date.parse(r.bucket) <= now),thresholds),[rows,start,now,thresholds]);
   const [selected,setSelected] = useState(() => Math.max(0,points.findIndex(p => p.total > 0)));
   const [focused,setFocused] = useState<Cursor|null>(null);
-  const [hovered,hover] = useState<Cursor|null>(null);
+  const [hovered,setHovered] = useState<Cursor|null>(null);
   const active = hovered ?? focused;
-  const selection:Selection = {selected,active,hover,focus:cursor => {setFocused(cursor); if (cursor) setSelected(cursor.index);}};
+  const selection:Selection = {selected,active,
+    hover:cursor => { if (!sameCursor(hovered,cursor)) setHovered(cursor); },
+    focus:cursor => {
+      if (!sameCursor(focused,cursor)) setFocused(cursor);
+      if (cursor && selected !== cursor.index) setSelected(cursor.index);
+    },
+  };
   useEffect(() => {
-    function escape(e:KeyboardEvent) { if (e.key === "Escape") {setFocused(null); hover(null);} }
+    function escape(e:KeyboardEvent) { if (e.key === "Escape") {setFocused(null); setHovered(null);} }
     document.addEventListener("keydown",escape);
     return () => document.removeEventListener("keydown",escape);
   },[]);
   const worst = points.reduce((a, b) => a.failures >= b.failures ? a : b);
   const occupied = points.filter(p => p.total > 0).length;
   const shared = {selection,points,p95};
+  const longestTime = points.reduce((longest,p) => p.startLabel.length > longest.length ? p.startLabel : longest,"");
+  const totalLabel = period.total.toLocaleString("ko-KR")+"건";
   return <>
     <p className="flow-range">{dateTime.format(start)} ~ {dateTime.format(now)} · 한국 시간</p>
-    <div className="stat-grid">
-      <StatPanel {...shared} title="사용 건수" unit="건" help="선택한 기간의 전체 사용 횟수예요." value={period.total.toLocaleString("ko-KR")+"건"} series={points.map(p => p.hasRecords ? p.total : null)}/>
+    <div className="stat-grid" data-readout-size={longestTime+" · "+(totalLabel.length > 6 ? totalLabel : "기록 없음")}>
+      <StatPanel {...shared} title="사용 건수" unit="건" help="선택한 기간의 전체 사용 횟수예요." value={totalLabel} series={points.map(p => p.hasRecords ? p.total : null)}/>
       <StatPanel {...shared} title="실패율" unit="%" help="판정할 수 있는 요청 중 실패한 비율이에요." value={rate(period.eligible,period.failures)} series={points.map(p => p.eligible ? 100*p.failures/p.eligible : null)}/>
       <StatPanel {...shared} title="보통 속도" unit="초" help="성공 요청에 걸린 시간의 중앙값이에요." value={approximateDuration(period.median)} series={points.map(p => p.median)}/>
       {!!thresholds?.size && <StatPanel {...shared} title="만족도" unit="%" help="선택 기간 중 평소 상한 안에 끝난 성공 요청 비율이에요." value={period.satisfaction === null ? "기록 없음" : period.satisfaction+"%"} series={points.map(p => p.satisfaction)}/>}
