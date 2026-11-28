@@ -197,8 +197,10 @@
 .stat-panel header h3, .metrics-board figcaption { font-size:var(--sp-text-sm); font-weight:700; color:var(--sp-ink-2); margin:0; }
 .stat-value { display:block; font-size:clamp(1.35rem,2.4vw,2.2rem); letter-spacing:-.04em; line-height:1.2; color:var(--sp-ink); }
 .stat-value, .flow-tip, .flow-y, .flow-x { font-variant-numeric:tabular-nums; }
-.spark-plot { position:relative; margin-top:var(--sp-space-1); height:var(--sp-touch); }
-.spark-plot > svg { display:block; height:100%; width:100%; }
+.spark-plot { position:relative; margin-top:var(--sp-space-1); height:calc(var(--sp-touch) + var(--sp-space-4)); }
+.spark-plot > svg { position:relative; z-index:1; pointer-events:none; display:block; height:100%; width:100%; overflow:visible; }
+.spark-zero { opacity:.6; }
+.spark-active { stroke:var(--sp-surface); stroke-width:2px; }
 .panel-help { position:relative; display:inline-flex; }
 .panel-help button { width:var(--sp-touch); min-height:var(--sp-touch); padding:0; background:transparent; border:0; color:var(--sp-ink-2); }
 .panel-help > span { background:var(--sp-btn); color:var(--sp-on-btn); font-weight:400; position:absolute; z-index:4;
@@ -213,15 +215,17 @@
 .time-grid { stroke:var(--sp-line); stroke-width:1; }
 .flow-marks .muted-bar { opacity:.56; }
 .flow-marks g, .flow-marks circle { transition:opacity var(--sp-dur-press),r var(--sp-dur-press); }
-.flow-hit .flow-selection { outline:0; width:0; border-left:1px dashed var(--sp-ink); transition:left 85ms var(--sp-ease-out); }
-.spark-cursor { stroke:var(--sp-ink-2); stroke-dasharray:2 2; }
+.flow-hit .flow-selection { outline:0; width:0; border-left:1px dashed var(--sp-ink); }
 .metrics-board .flow-plot, .plot-readout { grid-area:1 / 2; }
 .plot-readout { position:relative; pointer-events:none; }
-.plot-readout .flow-tip, .spark-plot .flow-tip { --tip-width:min(17rem,100%); width:var(--tip-width); box-sizing:border-box;
+.plot-readout .flow-tip, .spark-readout .flow-tip { --tip-width:min(17rem,100%); width:var(--tip-width); box-sizing:border-box;
   display:grid; gap:2px; top:var(--sp-space-1); bottom:auto; inset-inline:auto;
   padding:var(--sp-space-2) var(--sp-space-3); border:1px solid var(--sp-line-strong); color:var(--sp-ink);
   background:var(--sp-surface); font-size:var(--sp-text-xs); box-shadow:var(--sp-hero-shadow); }
-.spark-plot .flow-tip { top:100%; }
+.stat-panel { position:relative; }
+.spark-readout { position:absolute; z-index:2; top:var(--tip-top); inset-inline:var(--sp-space-3); display:flex; pointer-events:none; }
+.spark-readout[data-align="end"] { justify-content:flex-end; }
+.spark-readout .flow-tip { position:static; width:fit-content; max-width:100%; margin:0; }
 .flow-tip > span { display:flex; justify-content:space-between; gap:var(--sp-space-2); }
 .flow-tip em { font-style:normal; font-weight:bold; text-align:end; }
 .tip-label { color:var(--sp-ink-2); flex-shrink:0; }
@@ -233,6 +237,16 @@
   .monitor-toolbar .refresh-button { width:var(--sp-touch); justify-content:center; }
   .refresh-button > span { display:none; }
   .metrics-board .stat-grid { grid-auto-flow:row; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .metrics-board .stat-grid { position:relative; }
+  .stat-grid .stat-panel { position:static; }
+  /* Size the shared row before interaction, including wrapped weekly ranges at large text sizes. */
+  .stat-grid::after {
+    content:attr(data-readout-size); visibility:hidden; grid-column:1 / -1;
+    padding:var(--sp-space-2) var(--sp-space-3); border:1px solid transparent;
+    font-size:.8125rem; font-weight:bold;
+  }
+  .spark-readout { inset:auto 0 0; }
+  .spark-readout .flow-tip { width:100%; font-size:.8125rem; }
   .metrics-board .flow-plots { gap:var(--sp-space-4); }
   .stat-panel header { position:relative; }
   .stat-panel .panel-help { position:static; }
@@ -242,6 +256,25 @@
     gap:var(--sp-space-1) var(--sp-space-3); }
   .plot-readout .flow-tip strong { flex-basis:100%; }
   .metrics-board .stat-panel, .metrics-board .flow-figure { padding-inline:var(--sp-space-3); }
+  .dashboard-shell .monitor { grid-template-columns:minmax(0,1fr); }
+  .monitor .dashboard-state:has(+ .usage-panel) { grid-template-columns:auto minmax(0,1fr); }
+  .monitor .dashboard-state:has(+ .usage-panel) p, .dashboard-state .incident-actions { grid-column:1 / -1; }
+  .dashboard-state .status-badge { margin-bottom:0; }
+  .monitor-toolbar, .range-control, .auto-control { min-width:0; max-width:100%; flex-wrap:wrap; }
+  .monitor .panel input { min-width:0; max-width:100%; }
+  .monitor .panel label { min-width:0; max-width:100%; }
+  .monitor table { overflow-wrap:anywhere; }
+  .flow-plots .flow-x {
+    --tick-width:22%; display:grid; grid-template-columns:minmax(0,1fr);
+    align-items:start; padding-top:var(--sp-space-2);
+  }
+  .flow-plots .flow-x span { position:relative; grid-area:1 / 1; top:auto; font-size:.8125rem; overflow-wrap:anywhere; }
+  .flow-plots .flow-x span:nth-child(even) { display:none; }
+  .flow-plots .flow-x:has(> :nth-child(7)) { --tick-width:25%; }
+  .flow-plots .flow-x:has(> :nth-child(7)) span { display:none; }
+  .flow-plots .flow-x:has(> :nth-child(7)) span:nth-child(3n + 1) { display:block; }
+  .plot-readout, .flow-tip strong, .plot-readout .flow-tip > span { min-width:0; max-width:100%; }
+  .plot-readout .flow-tip > span { flex-wrap:wrap; }
 }
 @media (prefers-reduced-motion:reduce) {
   .flow-hit .flow-selection, .flow-marks g, .flow-marks circle { transition:none; }

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>T57 요약 카드 십자선 비교</title>
+  <link rel="stylesheet" href="../../../../web/src/styles/tokens.css">
+  <style>
+    * { box-sizing:border-box; }
+    body { max-width:1600px; margin:auto; padding:clamp(16px,3vw,48px); font:16px/1.6 var(--sp-font); background:var(--sp-bg); color:var(--sp-ink); }
+    section { border-top:1px solid var(--sp-line); padding-block:1rem; }
+    .comparison { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+    figure { margin:0; }
+    img { display:block; max-width:100%; height:auto; border:1px solid var(--sp-line); border-radius:var(--sp-radius-sm); }
+    figcaption { font-weight:700; margin-bottom:6px; }
+    a { color:var(--sp-ink); }
+    @media (max-width:760px) { .comparison { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <main><h1>요약 카드 십자선 비교</h1>
+    <p>오전 3시의 모임 신청 28건을 가리킨 화면이다. 가운데는 PR #52의 첫 검수본, 오른쪽은 툴팁이 그래프를 밀지 않도록 고친 화면이다. 24시간에 사용 334건, 실패 2건이 있었고 열린 문제는 없다. 이미지를 누르면 원본 크기로 열린다.</p>
+    <p>7일 조회에서 두 그래프의 날짜 눈금과 마지막 칸의 실패율 1%를 확인할 수 있다. <a href="week-390-default.png">390px · 기본 글자</a> · <a href="week-390-text200.png">390px · 글자 200%</a> · <a href="week-end-800.png">800px · 실패율 끝 칸</a></p>
+    <p><a href="waiting-390.png">390px · 첫 기록 대기 안내</a> · <a href="https://github.com/ship-and-ping/ship-and-ping-backend/tree/1484198e3a24cfd035b1ad04ea5a7343ecb7c070/docs/design/qa/crosshair">최초 T57 구현 전후 캡처</a></p>
+    <section><h2>1440px · 밝게</h2>
+      <div class="comparison">
+        <figure><figcaption>Grafana Stat</figcaption><a href="../demo-insights/refs/stat-1440-light.png"><img src="../demo-insights/refs/stat-1440-light.png" alt="1440px 밝게 Grafana Stat 화면"></a></figure>
+        <figure><figcaption>수정 전</figcaption><a href="before-1440-light.png"><img src="before-1440-light.png" alt="1440px 밝게 수정 전 화면"></a></figure>
+        <figure><figcaption>수정 후</figcaption><a href="after-1440-light.png"><img src="after-1440-light.png" alt="1440px 밝게 수정 후 화면"></a></figure>
+      </div>
+      <p><a href="../demo-insights/refs/series-1440-light.png">Grafana 시계열 기준선 원본</a></p>
+    </section>
+    <section><h2>1440px · 어둡게</h2>
+      <div class="comparison">
+        <figure><figcaption>Grafana Stat</figcaption><a href="../demo-insights/refs/stat-1440-dark.png"><img src="../demo-insights/refs/stat-1440-dark.png" alt="1440px 어둡게 Grafana Stat 화면"></a></figure>
+        <figure><figcaption>수정 전</figcaption><a href="before-1440-dark.png"><img src="before-1440-dark.png" alt="1440px 어둡게 수정 전 화면"></a></figure>
+        <figure><figcaption>수정 후</figcaption><a href="after-1440-dark.png"><img src="after-1440-dark.png" alt="1440px 어둡게 수정 후 화면"></a></figure>
+      </div>
+      <p><a href="../demo-insights/refs/series-1440-dark.png">Grafana 시계열 기준선 원본</a></p>
+    </section>
+    <section><h2>390px · 밝게</h2>
+      <div class="comparison">
+        <figure><figcaption>Grafana Stat</figcaption><a href="../demo-insights/refs/stat-390-light.png"><img src="../demo-insights/refs/stat-390-light.png" alt="390px 밝게 Grafana Stat 화면"></a></figure>
+        <figure><figcaption>수정 전</figcaption><a href="before-390-light.png"><img src="before-390-light.png" alt="390px 밝게 수정 전 화면"></a></figure>
+        <figure><figcaption>수정 후</figcaption><a href="after-390-light.png"><img src="after-390-light.png" alt="390px 밝게 수정 후 화면"></a></figure>
+      </div>
+      <p><a href="../demo-insights/refs/series-390-light.png">Grafana 시계열 기준선 원본</a></p>
+    </section>
+    <section><h2>390px · 어둡게</h2>
+      <div class="comparison">
+        <figure><figcaption>Grafana Stat</figcaption><a href="../demo-insights/refs/stat-390-dark.png"><img src="../demo-insights/refs/stat-390-dark.png" alt="390px 어둡게 Grafana Stat 화면"></a></figure>
+        <figure><figcaption>수정 전</figcaption><a href="before-390-dark.png"><img src="before-390-dark.png" alt="390px 어둡게 수정 전 화면"></a></figure>
+        <figure><figcaption>수정 후</figcaption><a href="after-390-dark.png"><img src="after-390-dark.png" alt="390px 어둡게 수정 후 화면"></a></figure>
+      </div>
+      <p><a href="../demo-insights/refs/series-390-dark.png">Grafana 시계열 기준선 원본</a></p>
+    </section>
+  </main>
+</body>
+</html>

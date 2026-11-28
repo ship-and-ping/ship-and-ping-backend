@@ -137,7 +137,7 @@ try {
         await plot.scrollIntoViewIfNeeded();
         await plot.hover({position:{x:Math.floor((await plot.boundingBox()).width*.8),y:45}});
         await page.locator(".flow-tip").waitFor();
-        if (await page.locator(".flow-selection").count() !== 2) throw Error("Missing linked cursor");
+        if (await page.locator(".flow-plots .flow-selection").count() !== 2) throw Error("Missing linked cursor");
         // Pin the same bucket so positioning a full-board capture keeps the pointer result.
         await plot.click({position:{x:Math.floor((await plot.boundingBox()).width*.8),y:45}});
         await page.locator(".metrics-board").screenshot({style:".dashboard-dock { visibility:hidden }",
@@ -159,7 +159,7 @@ try {
           await session.detach();
           const peer = page.getByRole("slider",{name:"사용과 실패"});
           if (await peer.getAttribute("aria-valuenow") !== "21") throw Error("Touch drag did not synchronize");
-          const duration = await page.locator(".flow-selection").first().evaluate(el => getComputedStyle(el).transitionDuration);
+          const duration = await plot.locator(".flow-selection").evaluate(el => getComputedStyle(el).transitionDuration);
           if (duration !== "0s") throw Error("Crosshair should move immediately with reduced motion");
           await page.keyboard.press("Escape");
           if (await page.locator(".flow-tip").count()) throw Error("Escape did not dismiss touch selection");
