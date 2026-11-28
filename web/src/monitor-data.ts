@@ -102,13 +102,23 @@ function read<T>(r: Result<T>): T {
 }
 async function pages<T>(
   fetch: (from: number, to: number) => PromiseLike<Result<T[]>>,
+  enough?: (rows: T[]) => boolean,
 ) {
   const result: T[] = [];
   for (;;) {
     const page = read(await fetch(result.length, result.length + 499));
     result.push(...page);
-    if (page.length < 500) return result;
+    if (page.length < 500 || enough?.(result)) return result;
   }
+}
+
+export function slowErrorCandidate(sample: Monitor["samples"][number], context?: PromptContext) {
+  if (sample.http_status != null) return sample.http_status < 400 || sample.http_status >= 500;
+  const kind = sample.error_kind ?? "";
+  if (/^(?:HTTP[._-]?)?5\d\d(?:$|[._-])/i.test(kind)) return true;
+  if (/(?:^|[^0-9])4\d\d(?:$|[^0-9])|^(?:UNAUTHORIZED|FORBIDDEN|NOT[_-]?FOUND|BAD[_-]?REQUEST|TOO[_-]?MANY[_-]?REQUESTS)$/i.test(kind)) return false;
+  // Legacy names alone cannot identify a client error in a mixed window.
+  return !(context?.client_errors || context?.client_partial);
 }
 export async function loadMonitor(
   client: SupabaseClient,
@@ -219,6 +229,7 @@ export async function loadMonitor(
   if (incident) {
     const since = Date.parse(promptContext?.slow_start ?? incident.opened_at) - 600_000;
     sampleQuery?.gte("at", new Date(since).toISOString()).lte("at", incident.closed_at ?? new Date(now).toISOString());
+    if (incident.kind === "slow") sampleQuery?.or("http_status.is.null,http_status.lt.400,http_status.gte.500");
   }
   const kindRows = featureId
     ? pages<Monitor["samples"][number]>((a, b) =>
@@ -237,8 +248,9 @@ export async function loadMonitor(
     stats,
     attempts,
     kindRows,
-    sampleQuery ? (incident
-      ? pages<Monitor["samples"][number]>((a,b) => sampleQuery.range(a,b))
+    sampleQuery ? (incident?.kind === "slow"
+      ? pages<Monitor["samples"][number]>((a,b) => sampleQuery.range(a,b),
+          rows => rows.filter(s => slowErrorCandidate(s, promptContext)).length >= 5)
       : sampleQuery.limit(5).then(read<Monitor["samples"]>))
       : [],
     selected && deep.length

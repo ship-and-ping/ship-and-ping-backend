@@ -3,16 +3,23 @@ alter table public.incidents add column first_slow_bucket timestamptz;
 create function private.first_slow_bucket(issue public.incidents) returns timestamptz
 language sql stable set search_path='' as $$
   -- Use the opening window and thresholds, even if the owner has since changed them.
-  with points as (
+  with opening as (
+   select coalesce((issue.metric_at_open->>'window')::int,30) minutes,
+    coalesce(max(i.closed_at),'-infinity'::timestamptz) previous_close
+   from public.incidents i where i.feature_id=issue.feature_id and i.kind='slow' and i.status in ('resolved','quiet')
+    and i.closed_at between issue.opened_at-interval '1 hour' and issue.opened_at and i.id<>issue.id
+  ), points as (
    select s.bucket,p.ms,p.n from private.speed_buckets s
    cross join lateral private.duration_points(s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms) p
-   where s.app_id=issue.app_id and s.feature_id=issue.feature_id
-    and s.bucket between issue.opened_at-coalesce((issue.metric_at_open->>'window')::int,30)*interval '1 minute' and issue.opened_at
+   cross join opening o
+   where s.app_id=issue.app_id and s.feature_id=issue.feature_id and s.bucket>o.previous_close
+    and s.bucket between date_bin('5 minutes',issue.opened_at-o.minutes*interval '1 minute','epoch')
+     + case when o.minutes=10 then interval '5 minutes' else interval '0' end and issue.opened_at
    union all
    select date_bin('5 minutes',a.ended_at,'epoch'),a.duration_ms,1 from public.attempts a
-   where a.app_id=issue.app_id and a.feature_id=issue.feature_id and a.status='success'
-    and a.duration_ms is not null and a.ended_at between
-     issue.opened_at-coalesce((issue.metric_at_open->>'window')::int,30)*interval '1 minute' and issue.opened_at
+   cross join opening o
+   where a.app_id=issue.app_id and a.feature_id=issue.feature_id and a.status='success' and a.ended_at>o.previous_close
+    and a.duration_ms is not null and a.ended_at between issue.opened_at-o.minutes*interval '1 minute' and issue.opened_at
   ), buckets as (
    select bucket,(private.duration_quantiles(array_agg(ms order by ms),array_agg(n::bigint order by ms),array[0.5]))[1] p50,
     sum(n) filter(where ms>(issue.metric_at_open->>'threshold')::int)*2>=sum(n) over_cap
@@ -86,8 +93,7 @@ begin
   from traffic t left join public.stats_5m s on s.app_id=issue.app_id and s.bucket>=start_bucket and s.bucket<t.until_at
   group by t.until_at
  ), errors as (
-  select s.*,s.bucket>=sample_start and
-   (s.bucket+interval '5 minutes'<=stop_at or issue.closed_at is null) complete
+  select s.*,s.bucket>=sample_start and s.bucket+interval '5 minutes'<=stop_at complete
   from public.stats_5m s where s.app_id=issue.app_id and s.feature_id=issue.feature_id
    and s.bucket between date_bin('5 minutes',sample_start,'epoch') and stop_at
  ), error_counts as (

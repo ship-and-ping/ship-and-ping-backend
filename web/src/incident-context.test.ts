@@ -54,6 +54,17 @@ it("단일 기능과 희소한 평소 기록에서 배수를 단정하지 않는
   expect(text).toContain("이 기능의 코드와 최근 배포부터");
 });
 
+it("느림 원인 후보는 4xx를 먼저 거른 뒤 최대 다섯 건을 고른다", () => {
+  const at = opened;
+  const row = { at, message: null, error_kind: "CustomError" };
+  const clients = Array.from({length: 6}, () => ({...row, http_status: 422}));
+  const servers = [ {...row, error_kind: "HTTP_503"}, {...row, http_status: 502} ];
+  const errors = [...clients, ...servers];
+  const {lines} = buildIssuePrompt({ ...base, errors });
+  expect(lines).toEqual(["23:21 KST HTTP_503", "23:21 KST CustomError"]);
+  expect(buildIssuePrompt({ ...base, errors, kind: "failure" }).lines).toHaveLength(5);
+});
+
 it("같은 기능을 중복 집계하지 않고, 다른 기능 목록도 복사 직전에 가린다", () => {
   const key = "sp_srv_" + "x".repeat(20);
   const related = concurrentIssues(issue, started, [issue, ...peers, { ...peers[0], id: "repeat" }],

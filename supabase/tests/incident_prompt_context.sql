@@ -6,7 +6,7 @@ create temporary table anchor as select date_bin('5 minutes',now()-interval '1 h
 insert into auth.users(id) values ('00000000-0000-0000-0000-000000000052');
 insert into apps(owner_id,name,first_record_at) select id,'Trova',t-interval '30 minutes' from auth.users,anchor;
 insert into features(app_id,kind,name,method,route)
- select id,'auto',name,'GET','/'||name from apps cross join (values ('place'),('bookmark')) f(name);
+ select id,'auto',f.name,'GET','/'||f.name from apps cross join (values ('place'),('bookmark')) f(name);
 insert into app_versions(app_id,version) select id,'v1' from apps;
 insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,server_errors,duration_sum_ms,hist)
  select app_id,id,'v1',t+minutes*interval '1 minute',n,0,clients,0,(n-clients)*ms,

@@ -1,4 +1,4 @@
-import { approximateDuration, formatDuration, usualDuration, type concurrentIssues, type Monitor, type PromptContext } from "./monitor-data";
+import { approximateDuration, formatDuration, slowErrorCandidate, usualDuration, type concurrentIssues, type Monitor, type PromptContext } from "./monitor-data";
 import { errorName, errorKind, stepName, displayText, normalizePromptInput, sanitizeRoute } from "./normalize";
 
 import { maskedVersion, versionLabel } from "../../worker/src/version.js";
@@ -75,10 +75,6 @@ function relatedLine(peer: NonNullable<IssueInput["related"]>[number]) {
   return "- " + name + (kind === "failure" ? " · 실패" : " · 결과 미확인") + " · 감지 " + count(opening?.[key]) + " · 최악 " + count(worst?.[key]);
 }
 
-function legacyClientError(kind: string | null) {
-  return /(?:^|[^0-9])4\d\d(?:$|[^0-9])|^(?:UNAUTHORIZED|FORBIDDEN|NOT[_-]?FOUND|BAD[_-]?REQUEST|TOO[_-]?MANY[_-]?REQUESTS)$/i.test(kind ?? "");
-}
-
 export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
   const ctx = input.context;
   const start = Date.parse(ctx?.slow_start ?? input.opened ?? "");
@@ -87,11 +83,7 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
     if (typeof r === "string") return true;
     const at = Date.parse(r.at);
     if (Number.isFinite(start) && !(at >= start - 600_000 && at <= end)) return false;
-    if (input.kind !== "slow") return true;
-    if (r.http_status != null) return r.http_status < 400 || r.http_status >= 500;
-    // Older samples have no HTTP status. Avoid promoting an unclassified
-    // sample from a window with client errors to a slowdown cause.
-    return !legacyClientError(r.error_kind) && !(ctx?.client_errors || ctx?.client_partial);
+    return input.kind !== "slow" || slowErrorCandidate(r, ctx);
   }).slice(0, 5);
   const clock = (at: string) => new Date(at).toLocaleTimeString("en-GB", {
     timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit",
@@ -163,7 +155,7 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
     ...(input.related?.length ? ["동시 장애 (시작 ±10분, 다른 기능):", ...input.related.slice(0,5).map(relatedLine)] : []),
     ...(ctx ? [
       ctx.server_errors == null ? "5xx 집계 미확인" : "5xx " +
-        (ctx.server_partial ? "확인된 예시 " : "") + ctx.server_errors + "건" + (ctx.server_partial ? " (전체 건수 미확인)" : ""),
+        (ctx.server_partial ? "최소 " : "") + ctx.server_errors + "건" + (ctx.server_partial ? " (전체 건수 미확인)" : ""),
       (input.kind === "slow" ? "관련 없을 가능성 높은 4xx " : "4xx ") +
         (ctx.client_errors == null ? "집계 미확인" : (ctx.client_partial ? "최소 " : "") + ctx.client_errors + "건"),
     ] : []),

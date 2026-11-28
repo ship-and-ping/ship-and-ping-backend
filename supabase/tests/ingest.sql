@@ -13,9 +13,9 @@ select is((select expires_at from app_keys where key_hash=current_setting('test.
 create function pg_temp.batch(batch uuid) returns jsonb language sql as $$
  select jsonb_build_object('batch_id',batch,'app_version','v1','stats',jsonb_build_array(jsonb_build_object(
   'method','GET','route','/demo','bucket',date_trunc('hour',now()),'total',21,'failures',21,
-  'client_errors',0,'duration_sum_ms',42,'hist',array[21] || array_fill(0,array[15]))),
+  'client_errors',0,'server_errors',5,'duration_sum_ms',42,'hist',array[21] || array_fill(0,array[15]))),
   'error_samples',(select jsonb_agg(jsonb_build_object('method','GET','route','/demo','at',now()-i*interval '1 second',
-   'error_kind','Timeout','message','masked')) from generate_series(1,21) i))
+   'http_status',case when i<=5 then 503 else 0 end,'error_kind','Timeout','message','masked')) from generate_series(1,21) i))
 $$;
 set local role service_role;
 select is(ingest_batch(current_setting('test.hash'),pg_temp.batch('00000000-0000-0000-0000-000000000011')),
@@ -25,6 +25,8 @@ select is(ingest_batch(current_setting('test.hash'),pg_temp.batch('00000000-0000
 select ingest_batch(current_setting('test.hash'),pg_temp.batch(gen_random_uuid()));
 reset role;
 select results_eq('select total,failures,duration_sum_ms,hist[1] from stats_5m','select 42,42,84::bigint,42','additive upsert');
+select is((select server_errors from stats_5m),10,'only HTTP failures add up, retries ignored');
+select is((select count(*) from error_samples where http_status=503),10::bigint,'retained samples preserve HTTP status');
 select results_eq('select count(*),min(at) from error_samples',$q$select 20::bigint,now()-interval '10 seconds'$q$,'newest twenty samples');
 update app_keys set revoked_at=now() where key_hash=current_setting('test.hash');
 select throws_ok($q$select ingest_batch(current_setting('test.hash'),pg_temp.batch(gen_random_uuid()))$q$,'PT401',null,'revoked key denied');

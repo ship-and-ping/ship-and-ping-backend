@@ -19,7 +19,9 @@ begin
     insert into app_keys(app_id,kind,prefix,key_hash) values(app,'pub','sample',repeat(i::text,64));
     insert into app_versions(app_id,version) values(app,'v1');
     insert into stats_5m values(app,feature,'v1',date_trunc('hour',now()),1,0,0,1,array[1] || array_fill(0,array[15]));
-    insert into stats_1h select * from stats_5m where app_id=app;
+    insert into stats_1h(app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist)
+      select app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist
+      from stats_5m where app_id=app;
     insert into attempts(app_id,feature_id,attempt_id,version,started_at,status) values(app,feature,gen_random_uuid(),'v1',now(),'pending');
     insert into error_samples(app_id,feature_id,version,at,error_kind,message) values(app,feature,'v1',now(),'test','masked');
     insert into baselines(feature_id,sample_count) values(feature,0);
