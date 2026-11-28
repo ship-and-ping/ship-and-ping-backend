@@ -195,6 +195,7 @@ enum Data {
 struct Stats {
     total: u32,
     failures: u32,
+    server_errors: u32,
     client_errors: u32,
     duration_sum_ms: u64,
     #[serde(rename = "hist_30", skip_serializing_if = "no_refined_samples")]
@@ -717,7 +718,7 @@ impl Aggregate {
                 let client = (400..500).contains(&status);
                 let failed = !client && (status == 0 || status >= 500 || error_kind.is_some());
                 if (failed || client) && (error_message.is_some() || error_kind.is_some()) {
-                    self.samples.push(json!({"route":path,"method":method,"at":ts,"error_kind":error_kind.as_deref().and_then(self::error_kind),"message":error_message.as_deref().and_then(error_name)}));
+                    self.samples.push(json!({"route":path,"method":method,"at":ts,"http_status":status,"error_kind":error_kind.as_deref().and_then(self::error_kind),"message":error_message.as_deref().and_then(error_name)}));
                 }
                 let row = self
                     .groups
@@ -725,6 +726,7 @@ impl Aggregate {
                     .or_default();
                 row.total += 1;
                 row.failures += u32::from(failed);
+                row.server_errors += u32::from(status >= 500);
                 row.client_errors += u32::from(client);
                 row.duration_sum_ms += u64::from(duration_ms);
                 row.hist[BOUNDS.partition_point(|bound| *bound < duration_ms)] += 1;

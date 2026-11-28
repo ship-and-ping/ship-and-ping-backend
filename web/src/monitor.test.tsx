@@ -327,6 +327,7 @@ function setup(
     })),
     attempts: [],
     demo_insights: [],
+    incident_prompt_context: { slow_start: null, usual_rpm: 1, incident_rpm: 10, server_errors: null, client_errors: 0 },
     incident_verification: { version, consecutive_successes: 0, latest_duration_ms: 100, latest_success: false },
   };
   change?.(rows);
