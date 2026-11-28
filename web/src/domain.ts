@@ -65,6 +65,8 @@ ${versionRule}
 7. ${serverInstructions}
 8. 배포 후 앱을 한 번 써 보고 프로필과 기록 전송 응답이 202인지 확인하는 방법을 알려 줘.
 
+쉽앤핑 MCP를 연결하면 문제 조사 때 직접 조회할 수 있어요. 앱 설정의 ‘AI 연결’에서 AI 조회 키를 발급하고 사용자 환경 변수에 저장한 뒤, 사용하는 코딩 AI의 설정 예시대로 연결하세요.
+
 ${keyInstructions(key)}
 앞에서 지정한 쉽앤핑 수집 주소(INGEST_URL)는 예외야. ${connectRestriction}`;
 }

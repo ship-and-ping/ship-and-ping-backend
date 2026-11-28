@@ -65,15 +65,27 @@ export interface PromptContext {
   server_partial?: boolean;
   related_server_errors?: number | null;
   related_server_partial?: boolean;
+  feature_rpm?: number | null;
+  single_feature_spike?: boolean | null;
+  client_spike?: boolean | null;
+  auth_spike?: boolean;
+  key_changed?: boolean;
+  repeated_server_error?: boolean;
+  timeout_step?: boolean;
+  external_slow?: boolean;
+  cpu_high?: boolean;
+  db_slow?: boolean;
+  memory_rising?: boolean;
+  metrics_guide?: string | null;
 }
 
 export function concurrentIssues(issue: Incident, start: string, incidents: Incident[], features: Pick<Feature, "id" | "name">[]) {
   const distance = (i: Incident) => Math.abs(Date.parse(i.opened_at) - Date.parse(start));
-  const candidates = incidents.filter(i => i.feature_id !== issue.feature_id && distance(i) <= 600_000)
+  const candidates = incidents.filter(i => i.kind !== "silent" && i.feature_id !== issue.feature_id && distance(i) <= 600_000)
     .sort((a,b) => distance(a)-distance(b) || a.opened_at.localeCompare(b.opened_at) || a.id.localeCompare(b.id));
   const seen = new Set<string>();
   return candidates.flatMap(i => {
-    if (i.feature_id === null || i.kind === "silent" || seen.has(i.feature_id)) return [];
+    if (i.feature_id == null || seen.has(i.feature_id)) return [];
     seen.add(i.feature_id);
     return [{ name: features.find(f => f.id === i.feature_id)?.name ?? "기능", kind: i.kind,
       opening: i.metric_at_open, worst: i.metric_worst }];
@@ -134,7 +146,7 @@ export async function loadMonitor(
   days = 1,
 ): Promise<Monitor> {
   const now = Date.now();
-  const [header, features, incidents, versions, context] = await Promise.all([
+  const [header, features, incidents, versions, context, server] = await Promise.all([
     client.from("apps").select("name").eq("id", app).single(),
     client
       .from("features")
@@ -166,16 +178,19 @@ export async function loadMonitor(
         .range(a, b),
     ),
     issueId ? client.rpc("incident_prompt_context", { incident_id: issueId }) : undefined,
+    issueId ? client.rpc("incident_server_context",{incident_id:issueId}) : undefined,
   ]);
   const promptContext = context ? read<PromptContext>(context) : undefined;
-  const selected = issueId
-    ? incidents.find((i) => i.id === issueId)?.feature_id
-    : featureId;
-  const silent = incidents.some(i => i.id === issueId && i.kind === "silent");
-  if ((issueId || featureId) && !silent && !read(features).some((f) => f.id === selected))
-    throw Error("상세 기록을 찾지 못했어요");
+  const serverContext = server ? read<ServerContext>(server) : undefined;
   const incident = incidents.find((i) => i.id === issueId);
-  const verificationIssue = silent ? undefined : incident?.status === "open" ? incident : !selected
+  if (incident?.kind === "silent") {
+    return { name: read(header).name, features: read(features), incidents, versions, promptContext, now,
+      serverContext, stats: [], samples: [], errorKinds: [] };
+  }
+  const selected = issueId ? incident?.feature_id : featureId;
+  if ((issueId || featureId) && !read(features).some((f) => f.id === selected))
+    throw Error("상세 기록을 찾지 못했어요");
+  const verificationIssue = incident?.status === "open" ? incident : !selected
     ? incidents.find((i) => i.kind !== "silent" && i.status === "open" && versions.some((v) =>
         v.version !== i.opened_version && Date.parse(v.last_seen_at) > Date.parse(i.opened_at)))
     : undefined;
@@ -251,7 +266,7 @@ export async function loadMonitor(
           .range(a, b),
       )
     : [];
-  const [rows, deepRows, errorKinds, samples, steps, proof, insights, serverSeries, serverContext] = await Promise.all([
+  const [rows, deepRows, errorKinds, samples, steps, proof, insights, serverSeries] = await Promise.all([
     stats,
     attempts,
     kindRows,
@@ -284,7 +299,6 @@ export async function loadMonitor(
       });
       return [range,read<ServerSlot[]>(result)] as const;
     })),
-    issueId ? client.rpc("incident_server_context",{incident_id:issueId}) : undefined,
   ]);
   const deepIds = new Set(deep.map((f) => f.id));
   const visibleRows = rows.filter((row) => !deepIds.has(row.feature_id));
@@ -311,7 +325,7 @@ export async function loadMonitor(
     promptContext,
     name: read(header).name,
     serverSeries: serverSeries ? Object.fromEntries(serverSeries) : undefined,
-    serverContext: serverContext ? read<ServerContext>(serverContext) : undefined,
+    serverContext,
     insights: insights ? read<Insight[]>(insights) : [],
     verificationIncidentId: verificationIssue?.id,
     verification: proof ? read<NonNullable<Monitor["verification"]>>(proof) : undefined,
