@@ -34,7 +34,7 @@ commit;
 begin;
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
-select plan(7);
+select plan(10);
 select sum(total)::int expected_samples from stats_5m
  where feature_id=(select id from features where app_id=:'load_owner' and route='/f/1')
  and bucket>=now()-interval '7 days' and bucket<date_bin('5 minutes',now()-interval '10 minutes','epoch') \gset
@@ -43,11 +43,14 @@ select format('hostaddr=%s port=%s dbname=%L user=%L password=%L',inet_server_ad
 select dblink_connect('load_writer',:'db_test_connection');
 select dblink_exec('load_writer',$$set lock_timeout='1s'$$);
 select dblink_exec('load_writer','begin');
-select is((result->>'accepted')::int,1,'second session has an uncommitted ingest batch')
+create function pg_temp.write_batch() returns int language sql volatile as $body$
+ select (result->>'accepted')::int
  from dblink('load_writer',format('select public.ingest_batch(repeat(''a'',64),%L::jsonb)',jsonb_build_object(
  'batch_id',gen_random_uuid(),'app_version','concurrent','platform','server','stats',jsonb_build_array(jsonb_build_object(
  'method','GET','route','/f/1','bucket',date_bin('5 minutes',now(),'epoch'),'total',1,'failures',0,
  'client_errors',0,'duration_sum_ms',1,'hist',array[1]||array_fill(0,array[15])))))) as w(result jsonb);
+$body$;
+select is(pg_temp.write_batch(),1,'writer holds the first accepted batch during cold evaluation');
 create function pg_temp.measure() returns numeric language plpgsql as $$
 declare started timestamptz := clock_timestamp();
 begin
@@ -61,10 +64,17 @@ insert into times(cold) select pg_temp.measure();
 select ok(cold<8000,'cold evaluation completes within the RPC deadline during ingest') from times;
 select ok(exists(select from baselines b join features f on f.id=b.feature_id where f.app_id=:'load_owner' and f.route='/f/1' and b.sample_count=:expected_samples),
  'cold evaluation refreshed the app held by the writer');
-select dblink_exec('load_writer','rollback');
+select dblink_exec('load_writer','commit');
+select is((select sum(total)::int from stats_5m where app_id=:'load_owner' and version='concurrent'),1,
+ 'warm evaluation starts with the first committed batch visible');
 select is((select count(*) from baselines where p50_ms is not null and sample_count=:expected_samples),300::bigint,'seven-day baselines exclude three current buckets');
 update private.latency_baselines set computed_at=now()-interval '1 minute' where n=0;
+select dblink_exec('load_writer','begin');
+select is(pg_temp.write_batch(),1,'writer holds a second accepted batch during warm evaluation');
 update times set warm=pg_temp.measure();
+select dblink_exec('load_writer','commit');
+select is((select sum(total)::int from stats_5m where app_id=:'load_owner' and version='concurrent'),2,
+ 'both concurrent batches survived evaluation and committed');
 select is((select count(*) from private.latency_baselines where n=0 and computed_at=now()-interval '1 minute'),
  100::bigint,'absent handler-only cohorts skip the warm seven-day scan');
 select ok(warm<8000,'warm evaluation under the 8 s RPC deadline') from times;

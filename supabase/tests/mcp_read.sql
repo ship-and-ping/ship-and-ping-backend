@@ -74,7 +74,7 @@ do $$ begin
  end if;
 end $$;
 insert into incidents(id,app_id,kind,status,opened_at,opened_version,metric_at_open)
- values('00000000-0000-4000-a000-000000000099',current_setting('test.app')::uuid,'silent','open',now(),'v1.0.0','{"window":10,"last_received":"2026-11-28T12:00:45+00:00"}'),
+ values('00000000-0000-4000-a000-000000000099',current_setting('test.app')::uuid,'silent','open','2026-11-28T12:15:45+00:00','v1.0.0','{"window":10,"last_received":"2026-11-28T12:00:45+00:00"}'),
  ('00000000-0000-4000-b000-000000000099',current_setting('test.other')::uuid,'silent','open',now(),'v1.0.0','{"window":10}');
 select is(pg_temp.read_tool('get_status')#>>'{data,open_incidents}','2','status counts feature and app-wide incidents');
 select is(jsonb_array_length(pg_temp.read_tool('list_incidents')#>'{data,incidents}'),2,'both incidents are listed for the key');
@@ -82,7 +82,7 @@ select ok((pg_temp.read_tool('list_incidents')#>'{data,incidents}') @>
  '[{"id":"00000000-0000-4000-a000-000000000099","kind":"silent","feature":"앱 전체","feature_id":null}]',
  'list identifies the app-wide incident');
 select ok(pg_temp.read_tool('get_incident','{"id":"00000000-0000-4000-a000-000000000099"}') @>
- '{"status":200,"data":{"kind":"silent","feature":"앱 전체","feature_id":null,"route":null,"evidence":{"window":10,"last_received":"2026-11-28T12:00:45+00:00"}}}',
+ '{"status":200,"data":{"kind":"silent","feature":"앱 전체","feature_id":null,"route":null,"evidence":{"window":10,"silent_minutes":15,"detected_at":"2026-11-28T12:15:45+00:00","last_received":"2026-11-28T12:00:45+00:00"}}}',
  'app-wide detail has its own evidence and no feature route');
 select is(pg_temp.read_tool('get_incident','{"id":"00000000-0000-4000-b000-000000000099"}')->>'status','404',
  'foreign app-wide detail is hidden');

@@ -22,7 +22,8 @@ create temporary table saved_profile as select profile,history from app_profiles
 select throws_ok(format('select write_app_profile(repeat(''1'',64),%L::jsonb)',payload),
   '22023','invalid profile','reject profile text: '||label)
 from unnest(array['Bearer abc','Use Be arer abc','sk live example','sk-demo','s k - demo','c2VjcmV0','Use QUJD',
-  'YW Jj ZG Vm','Use YW Jj ZG Vm now','%42earer','Ｂｅａｒｅｒ abc','abcdefghijklmnop','abcd efgh ijkl mnop','ab12cd34ef56gh78']) label
+  'YW Jj ZG Vm','Use YW Jj ZG Vm now','%42earer','Ｂｅａｒｅｒ abc','abcdefghijklmnop','abcd efgh ijkl mnop','ab12cd34ef56gh78',
+  'a8Kd 9fQ2 xL7p','a8Kd f9Q2 xL7p','a8KdR xL7pQ t4ZmN j6VaH','a8KdR-xL7pQ-t4ZmN-j6VaH']) label
 cross join lateral (values (jsonb_build_object('rollback',label)),
   (jsonb_build_object('services',jsonb_build_array(jsonb_build_object('kind','map','feature','지도','name',label))))) cases(payload);
 select results_eq('select profile,history from app_profiles','select profile,history from saved_profile',
