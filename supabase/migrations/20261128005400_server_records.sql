@@ -65,6 +65,21 @@ create table public.server_minutes (
   primary key(app_id,bucket)
 );
 create index server_minutes_expiry on public.server_minutes(bucket);
+
+-- Existing request buckets establish usual hours. Version timestamps are
+-- receiver-side times and take precedence for the most recent activity.
+with history as (
+  select distinct app_id,bucket stamp,version from public.stats_5m
+    where bucket between now()-interval '7 days' and now()
+  union all select app_id,started_at,version from public.attempts where started_at between now()-interval '7 days' and now()
+  union all select app_id,ended_at,version from public.attempts where ended_at between now()-interval '7 days' and now()
+  union all select app_id,last_seen_at,version from public.app_versions where last_seen_at between now()-interval '7 days' and now()
+), minutes as (
+  select distinct on (app_id,date_trunc('minute',stamp)) app_id,date_trunc('minute',stamp) bucket,stamp,version
+    from history order by app_id,date_trunc('minute',stamp),stamp desc,version
+)
+insert into public.server_minutes(app_id,bucket,last_received,version)
+  select app_id,bucket,stamp,version from minutes;
 create table public.server_hours (
   app_id uuid references public.apps on delete cascade, bucket timestamptz,
   peaks jsonb not null, primary key(app_id,bucket)
@@ -159,11 +174,11 @@ create function public.rollup_server_hours() returns void
 language sql security definer set search_path='' as $$
   with moved as (delete from public.server_minutes where bucket<date_trunc('hour',now()-interval '7 days')
     returning app_id,bucket,resources), metrics as (
-    select app_id,date_trunc('hour',bucket) hour,key,max(value::numeric) peak
+    select app_id,date_trunc('hour',bucket) as hour_bucket,key,max(value::numeric) peak
     from moved cross join lateral jsonb_each_text(resources) group by 1,2,3
   )
   insert into public.server_hours(app_id,bucket,peaks)
-    select app_id,hour,jsonb_object_agg(key,peak) from metrics group by 1,2;
+    select app_id,hour_bucket,jsonb_object_agg(key,peak) from metrics group by 1,2;
   delete from public.server_hours where bucket<now()-interval '30 days';
 $$;
 revoke all on function public.rollup_server_hours() from public,anon,authenticated;

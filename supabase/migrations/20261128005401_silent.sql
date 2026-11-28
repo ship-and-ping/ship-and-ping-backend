@@ -7,11 +7,15 @@ create unique index one_open_silent on public.incidents(app_id) where kind='sile
 
 create function private.queue_silence(app uuid, issue uuid, change text) returns void
 language sql set search_path='' as $$
-  insert into public.notifications(incident_id,channel,event,sent_at,ok)
-  select issue,ch.name,change,null,null from public.alert_channels c
+  insert into public.notifications(incident_id,channel,event,sent_at,ok,push_device)
+  select issue,ch.name,change,null::timestamptz,null::boolean,null::uuid from public.alert_channels c
   cross join lateral (values ('slack',c.slack_webhook_secret_id is not null and not c.broken),
     ('email',c.email_enabled or c.broken)) ch(name,enabled)
-  where c.app_id=app and ch.enabled;
+  where c.app_id=app and ch.enabled
+  union all
+  select issue,'push',change,null,null,p.id from public.push_subscriptions p
+    join public.alert_channels c on c.app_id=app and c.owner_id=p.user_id and c.push_enabled
+    where private.push_session_active(p.user_id,p.session_id);
 $$;
 create function private.record_resumed() returns trigger language plpgsql set search_path='' as $$
 declare issue uuid;

@@ -164,9 +164,15 @@ struct Batch {
     app_version: String,
     platform: String,
     sent_at: DateTime<Utc>,
+    #[serde(default, deserialize_with = "present_resources")]
     resources: Option<Value>,
-    #[serde(default)]
-    records: Vec<Box<serde_json::value::RawValue>>,
+    records: Option<Vec<Box<serde_json::value::RawValue>>>,
+}
+
+fn present_resources<'de, D: serde::Deserializer<'de>>(
+    input: D,
+) -> Result<Option<Value>, D::Error> {
+    Value::deserialize(input).map(Some)
 }
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -843,7 +849,12 @@ pub fn prepare_ingest(
         return Err(ApiError::TooLarge);
     }
     let batch: Batch = serde_json::from_slice(body).map_err(|_| ApiError::Invalid)?;
-    if batch.records.len() > 100 {
+    let records = match batch.records {
+        Some(records) => records,
+        None if batch.resources.is_some() => Vec::new(),
+        None => return Err(ApiError::Invalid),
+    };
+    if records.len() > 100 {
         return Err(ApiError::TooLarge);
     }
     require(
@@ -859,7 +870,7 @@ pub fn prepare_ingest(
         counters.accepted += 1;
     }
     let mut aggregate = Aggregate::default();
-    for (position, value) in batch.records.into_iter().enumerate() {
+    for (position, value) in records.into_iter().enumerate() {
         if aggregate.add(&value, now_ms, key, position).is_ok() {
             counters.accepted += 1;
         } else {
