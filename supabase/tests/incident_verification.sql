@@ -7,8 +7,10 @@ insert into apps(owner_id,name) select id,'verification' from auth.users;
 insert into app_versions(app_id,version) select id,'old' from apps;
 insert into features(app_id,kind,method,route,name) select id,'auto','GET','/f','f' from apps;
 insert into baselines(feature_id,sample_count,p50_ms,p95_ms) select id,30,100,100 from features;
-insert into incidents(app_id,feature_id,kind,status,opened_at,opened_version)
- select app_id,id,'slow','open',now()-interval '10 minutes','old' from features;
+insert into incidents(app_id,feature_id,kind,status,opened_at,opened_version,metric_at_open)
+ select f.app_id,f.id,'slow','open',now()-interval '10 minutes','old',
+  jsonb_build_object('baseline_p50',b.p50_ms,'baseline_p95',b.p95_ms,'threshold',f.slow_threshold_ms)
+ from features f join baselines b on b.feature_id=f.id;
 select set_config('test.issue',(select id::text from incidents),true);
 select ok(not has_function_privilege('anon','incident_verification(uuid)','execute'),'anonymous verification denied');
 set local role authenticated;

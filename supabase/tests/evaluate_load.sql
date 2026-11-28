@@ -1,26 +1,13 @@
--- Commit one workload feature so the second connection can ingest into it.
-select gen_random_uuid() load_owner \gset
 begin;
 create extension if not exists dblink with schema extensions;
-insert into auth.users(id) values (:'load_owner');
-insert into public.apps(id,owner_id,name) values (:'load_owner',:'load_owner','load');
-insert into public.features(app_id,kind,method,route,name,last_record_at)
- values (:'load_owner','auto','GET','/f/1','feature-1',now());
+create temp table load_owners as select gen_random_uuid() id from generate_series(1,20);
+select id load_owner from load_owners order by id limit 1 \gset
+insert into auth.users(id) select id from load_owners;
+insert into public.apps(id,owner_id,name) select id,id,'load' from load_owners;
 insert into public.app_keys(app_id,kind,prefix,key_hash) values (:'load_owner','srv','load',repeat('a',64));
-commit;
--- Keep the cleanup after ROLLBACK reachable even when a timed statement fails.
-\set ON_ERROR_STOP off
-begin;
-create extension if not exists pgtap with schema extensions;
-set search_path=public,extensions;
-select plan(7);
-insert into auth.users(id) select gen_random_uuid() from generate_series(1,19);
-insert into apps(owner_id,name)
- select id,'load' from auth.users where id<>:'load_owner';
-insert into features(app_id,kind,method,route,name)
- select id,'auto','GET','/f/'||n,'feature-'||n from apps cross join generate_series(1,15) n
- where id<>:'load_owner' or n<>1;
-insert into app_versions(app_id,version) select id,'v1' from apps;
+insert into public.features(app_id,kind,method,route,name,last_record_at)
+ select id,'auto','GET','/f/'||n,'feature-'||n,now() from load_owners cross join generate_series(1,15) n;
+insert into public.app_versions(app_id,version) select id,'v1' from load_owners;
 insert into stats_5m
  select app_id,id,'v1',date_bin('5 minutes',now(),'epoch')-n*interval '5 minutes',5,0,0,5*(60+n%40),
  array[0,5]||array_fill(0,array[14]) from features cross join generate_series(0,2015) n;
@@ -41,6 +28,16 @@ analyze private.request_flow_seconds;
 analyze private.evaluation_buckets;
 analyze features;
 analyze stats_5m;
+-- Release setup's foreign-key locks before opening the two RPC transactions.
+commit;
+\set ON_ERROR_STOP off
+begin;
+create extension if not exists pgtap with schema extensions;
+set search_path=public,extensions;
+select plan(7);
+select sum(total)::int expected_samples from stats_5m
+ where feature_id=(select id from features where app_id=:'load_owner' and route='/f/1')
+ and bucket>=now()-interval '7 days' and bucket<date_bin('5 minutes',now()-interval '10 minutes','epoch') \gset
 \getenv db_test_password PGPASSWORD
 select format('hostaddr=%s port=%s dbname=%L user=%L password=%L',inet_server_addr(),inet_server_port(),current_database(),current_user,:'db_test_password') as db_test_connection \gset
 select dblink_connect('load_writer',:'db_test_connection');
@@ -62,10 +59,10 @@ set local statement_timeout='8s';
 set local lock_timeout='1s';
 insert into times(cold) select pg_temp.measure();
 select ok(cold<8000,'cold evaluation completes within the RPC deadline during ingest') from times;
-select ok(exists(select from baselines b join features f on f.id=b.feature_id where f.app_id=:'load_owner' and f.route='/f/1' and b.sample_count=10065),
+select ok(exists(select from baselines b join features f on f.id=b.feature_id where f.app_id=:'load_owner' and f.route='/f/1' and b.sample_count=:expected_samples),
  'cold evaluation refreshed the app held by the writer');
 select dblink_exec('load_writer','rollback');
-select is((select count(*) from baselines where p50_ms is not null and sample_count=10065),300::bigint,'seven-day baselines exclude three current buckets');
+select is((select count(*) from baselines where p50_ms is not null and sample_count=:expected_samples),300::bigint,'seven-day baselines exclude three current buckets');
 update private.latency_baselines set computed_at=now()-interval '1 minute' where n=0;
 update times set warm=pg_temp.measure();
 select is((select count(*) from private.latency_baselines where n=0 and computed_at=now()-interval '1 minute'),
@@ -79,4 +76,4 @@ rollback;
 \set ON_ERROR_STOP on
 select extensions.dblink_disconnect('load_writer')
  where 'load_writer'=any(extensions.dblink_get_connections());
-delete from auth.users where id=:'load_owner';
+delete from auth.users where id in (select id from load_owners);
