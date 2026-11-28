@@ -39,7 +39,7 @@ it("트루바의 두 시각·분당 부하·동시 장애·HTTP 근거가 복사
     "- 북마크 · 느림 · 평소 0.07초 → 감지 0.6초 · 최악 1.2초",
     "- 여행 · 느림 · 평소 0.07초 → 감지 0.6초 · 최악 1.2초",
     "이 기능 5xx 0건 · 같이 느려진 기능 포함 5xx 3건",
-    "관련 없을 가능성 높은 4xx 1건",
+    "이 기능 관련 없을 가능성 높은 4xx 1건",
     "판단 순서: 여러 기능이 함께 영향을 받았다. 요청량 급증과 5xx 부재가 겹치는지 보고 서버 자원 한계를 먼저 확인해 줘. 캐시·무거운 조회·연결 풀·스레드 풀을 점검하고, 자원 한계로 설명되지 않으면 공통 코드를 봐 줘. 배포 후 같은 부하로 다시 측정해 줘.",
   ]);
   expect(text).toContain("CPU·메모리·steal·DB 연결·스레드");
@@ -52,6 +52,13 @@ it("단일 기능과 희소한 평소 기록에서 배수를 단정하지 않는
   expect(text).toContain("평소 거의 없음");
   expect(text).not.toContain("배)");
   expect(text).toContain("이 기능의 코드와 최근 배포부터");
+  expect(text).not.toContain("같이 느려진 기능 포함");
+});
+
+it("동시 장애 기능 중 HTTP 상태를 모르는 기능이 있으면 합계를 최소 건수로 표시한다", () => {
+  const related = concurrentIssues(issue, started, peers, names);
+  const {text} = buildIssuePrompt({ ...base, related, context: { ...context, related_server_partial: true } });
+  expect(text).toContain("이 기능 5xx 0건 · 같이 느려진 기능 포함 5xx 최소 3건 (전체 건수 미확인)");
 });
 
 it("느림 원인 후보는 4xx를 먼저 거른 뒤 최대 다섯 건을 고른다", () => {

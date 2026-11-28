@@ -55,12 +55,15 @@ export interface Incident {
 }
 export interface PromptContext {
   slow_start: string | null;
+  incident_start?: string;
   usual_rpm: number | null;
   incident_rpm: number | null;
   client_errors: number | null;
   server_errors: number | null;
   client_partial?: boolean;
   server_partial?: boolean;
+  related_server_errors?: number | null;
+  related_server_partial?: boolean;
 }
 
 export function concurrentIssues(issue: Incident, start: string, incidents: Incident[], features: Pick<Feature, "id" | "name">[]) {
@@ -227,7 +230,7 @@ export async function loadMonitor(
         .order("at", { ascending: false }).order("id")
     : null;
   if (incident) {
-    const since = Date.parse(promptContext?.slow_start ?? incident.opened_at) - 600_000;
+    const since = Date.parse(promptContext?.incident_start ?? promptContext?.slow_start ?? incident.opened_at) - 600_000;
     sampleQuery?.gte("at", new Date(since).toISOString()).lte("at", incident.closed_at ?? new Date(now).toISOString());
     if (incident.kind === "slow") sampleQuery?.or("http_status.is.null,http_status.lt.400,http_status.gte.500");
   }

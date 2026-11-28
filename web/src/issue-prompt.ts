@@ -64,6 +64,11 @@ function traffic(context: PromptContext) {
   return "앱 분당 요청(평소는 직전 7일의 장애 구간 제외): " + typical + " → 사건 중 " + (current == null ? "기록 부족" : rate(current) + "건") + multiple;
 }
 
+function serverCount(count: number | null | undefined, partial?: boolean) {
+  if (count == null) return "5xx 집계 미확인";
+  return partial ? "5xx 최소 " + count + "건 (전체 건수 미확인)" : "5xx " + count + "건";
+}
+
 function relatedLine(peer: NonNullable<IssueInput["related"]>[number]) {
   const {kind, opening, worst} = peer;
   const label = line(peer.name);
@@ -77,7 +82,7 @@ function relatedLine(peer: NonNullable<IssueInput["related"]>[number]) {
 
 export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
   const ctx = input.context;
-  const start = Date.parse(ctx?.slow_start ?? input.opened ?? "");
+  const start = Date.parse(ctx?.incident_start ?? ctx?.slow_start ?? input.opened ?? "");
   const end = input.closed ? Date.parse(input.closed) : input.now ?? Date.now();
   const records = input.errors.filter(r => {
     if (typeof r === "string") return true;
@@ -154,9 +159,9 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
     ...(ctx ? [traffic(ctx)] : []),
     ...(input.related?.length ? ["동시 장애 (시작 ±10분, 다른 기능):", ...input.related.slice(0,5).map(relatedLine)] : []),
     ...(ctx ? [
-      ctx.server_errors == null ? "5xx 집계 미확인" : "5xx " +
-        (ctx.server_partial ? "최소 " : "") + ctx.server_errors + "건" + (ctx.server_partial ? " (전체 건수 미확인)" : ""),
-      (input.kind === "slow" ? "관련 없을 가능성 높은 4xx " : "4xx ") +
+      "이 기능 " + serverCount(ctx.server_errors, ctx.server_partial) + (input.related?.length
+        ? " · 같이 느려진 기능 포함 " + serverCount(ctx.related_server_errors, ctx.related_server_partial) : ""),
+      "이 기능 " + (input.kind === "slow" ? "관련 없을 가능성 높은 4xx " : "4xx ") +
         (ctx.client_errors == null ? "집계 미확인" : (ctx.client_partial ? "최소 " : "") + ctx.client_errors + "건"),
     ] : []),
     "오류 종류 (사건 시작 10분 전부터, 최근 5개):",

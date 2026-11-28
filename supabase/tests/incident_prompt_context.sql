@@ -86,5 +86,16 @@ insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_v
  from features,anchor where name='baseline';
 select is(first_slow_bucket,(select t-interval '10 minutes' from anchor),'30-minute baseline excludes an isolated fixed-cap breach')
  from incidents where feature_id=(select id from features where name='baseline');
+-- The ten-minute cap won with exactly half the samples over 500 ms.
+-- The -10 minute bucket is outside the automatic feature's short window.
+insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist)
+ select app_id,id,'v1',t-interval '5 minutes',6,0,0,2400,array[0,3,0,0,0,3]||array_fill(0,array[10])
+ from features,anchor where name='baseline';
+insert into incidents(app_id,feature_id,kind,status,opened_at,opened_version,metric_at_open)
+ select app_id,id,'slow','open',t,'v1',
+ '{"baseline_p50":300,"baseline_p95":900,"window":10,"threshold":500,"p50":400,"total":6,"slow":3}'
+ from features,anchor where name='baseline';
+select is(first_slow_bucket,(select t-interval '5 minutes' from anchor),'10-minute fixed cap preserves the tie and the opening window')
+ from incidents where feature_id=(select id from features where name='baseline') and status='open';
 select * from finish();
 rollback;

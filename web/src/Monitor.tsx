@@ -542,7 +542,7 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
     versionFirstSeen: data.versions.find(v => v.version === i.opened_version)?.first_seen_at,
     now: data.now,
     context: data.promptContext,
-    related: concurrentIssues(i, data.promptContext?.slow_start ?? i.opened_at, data.incidents, data.features),
+    related: concurrentIssues(i, data.promptContext?.incident_start ?? data.promptContext?.slow_start ?? i.opened_at, data.incidents, data.features),
     mode: again
       ? ("again" as const)
       : i.notifications.some((n) => n.event === "worse")
