@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
 set local timezone='UTC';
-select plan(4);
+select plan(6);
 
 -- Use yesterday's 23:00 UTC so that the recorded incident is always in retention.
 create temp table anchor as select date_trunc('day',now())-interval '1 hour' t;
@@ -44,5 +44,39 @@ insert into attempts(app_id,attempt_id,feature_id,version,status,ended_at)
 update attempts set result_received_at=t+interval '26 minutes' from anchor where ended_at=t+interval '12 minutes';
 select is(private.first_failure_at(i),t+interval '18 minutes','backfill ignores the 23:12 failure received at 23:26')
  from incidents i,anchor where kind='failure';
+
+-- The live detector knows the 23:15 and 23:20 buckets already have failures.
+update stats_5m set failures=10,server_errors=10 from anchor
+ where bucket in (t+interval '15 minutes',t+interval '20 minutes');
+insert into incidents(app_id,feature_id,kind,status,opened_at,opened_version,metric_at_open)
+ select app_id,id,'failure','open',t+interval '22 minutes','v1','{"total":80,"failures":20}'
+ from features,anchor where kind='auto';
+
+-- Deliver the 23:12 HTTP 500 after opening, into the existing 23:10 bucket.
+insert into app_keys(app_id,kind,prefix,key_hash) select id,'pub','test',repeat('a',64) from apps;
+select private.ingest_batch(repeat('a',64),jsonb_build_object(
+ 'batch_id','00000000-0000-0000-0000-000000005203','app_version','v1',
+ 'stats',jsonb_build_array(jsonb_build_object('method','GET','route','/requests','bucket',t+interval '10 minutes',
+  'total',1,'failures',1,'server_errors',1,'client_errors',0,'duration_sum_ms',80,'hist',array[0,1]||array_fill(0,array[14]))),
+ 'error_samples',jsonb_build_array(jsonb_build_object('method','GET','route','/requests','at',t+interval '12 minutes',
+  'http_status',500,'error_kind','HTTP_500')))) from anchor;
+update ingest_batches set received_at=t+interval '26 minutes' from anchor
+ where batch_id='00000000-0000-0000-0000-000000005203';
+select is(first_failure_at,t+interval '15 minutes','live auto snapshot keeps the first failure bucket known at 23:22')
+ from incidents i join features f on f.id=i.feature_id cross join anchor where f.kind='auto' and i.kind='failure';
+
+-- Temporary CI mutation: let the backfill consult the current aggregate again.
+do $mutation$
+begin
+ execute replace(pg_get_functiondef('private.first_failure_at(public.incidents,boolean)'::regprocedure),
+  'when not at_detection and exists','when false and exists');
+end
+$mutation$;
+
+update incidents i set first_failure_at=private.first_failure_at(i)
+ from features f where i.feature_id=f.id and f.kind='auto' and i.kind='failure';
+select is((incident_prompt_context(i.id)->>'incident_start')::timestamptz,t+interval '22 minutes',
+ 'auto backfill keeps 23:22 despite the 23:12 HTTP 500 received at 23:26')
+ from incidents i join features f on f.id=i.feature_id cross join anchor where f.kind='auto' and i.kind='failure';
 select * from finish();
 rollback;
