@@ -16,3 +16,8 @@
 .install-entry { display:inline-flex; min-height:44px; align-items:center; }
 .install-banner { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.5rem; padding:.5rem 1rem; background:var(--sp-surface-2); border-radius:var(--sp-radius-md); }
 .otp-login { border-bottom:1px solid var(--sp-line); margin-bottom:1rem; padding-bottom:1rem; }
+.install-steps { container-type:inline-size; }
+@container (max-width:17rem) {
+  .install-steps li { grid-template-columns:minmax(0,1fr); padding:.75rem; gap:.5rem; }
+  .step-drawing { width:72px; }
+}
