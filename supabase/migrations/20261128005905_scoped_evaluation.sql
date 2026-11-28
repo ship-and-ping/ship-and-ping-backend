@@ -218,10 +218,11 @@ revoke all on function private.base_signals_for(uuid),private.method_signals_for
  private.signals_for(uuid) from public,anon,authenticated,service_role;
 
 create or replace function public.evaluate_all() returns jsonb
-language plpgsql security definer set search_path='' set jit=off as $$
+language plpgsql security definer set search_path='' set jit=off set plan_cache_mode=force_custom_plan as $$
 declare
  target_app uuid;
  app_events jsonb;
+ refresh_separately boolean := false;
  signal record;
  issue public.incidents;
  recovered text;
@@ -232,12 +233,19 @@ declare
  events jsonb := '[]';
 begin
  if not pg_try_advisory_xact_lock(62911006) then return events; end if;
+ -- Read the seven-day input in one pass. On malformed data the subtransaction
+ -- rolls back, and the per-app path below isolates the affected app.
+ begin
+  perform private.refresh_app_baselines(null);
+ exception when integrity_constraint_violation or data_exception then
+  refresh_separately := true;
+ end;
  for target_app in select id from public.apps order by id loop
  begin
  app_events := '[]';
  update public.attempts set status='unconfirmed' where app_id=target_app and status='pending' and ended_at is null
   and started_at<=now()-interval '10 minutes';
- perform private.refresh_app_baselines(target_app);
+ if refresh_separately then perform private.refresh_app_baselines(target_app); end if;
  for signal in select s.*,i.id open_id from private.signals_for(target_app) s
   left join public.incidents i on i.feature_id=s.feature_id and i.kind=s.kind and i.status='open'
   where s.breached or i.id is not null order by s.feature_id,s.kind loop

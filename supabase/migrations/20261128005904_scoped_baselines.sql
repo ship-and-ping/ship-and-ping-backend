@@ -47,7 +47,7 @@ create function private.refresh_app_legacy(target_app uuid) returns void
 language sql set search_path='' as $$
  with due as materialized (
   select f.id,f.kind,b.first_sample_at from public.features f left join public.baselines b on b.feature_id=f.id
-  where f.app_id=target_app and f.method is distinct from '*'
+  where (target_app is null or f.app_id=target_app) and f.method is distinct from '*'
     and not exists(select from private.queue_success_5m q where q.feature_id=f.id)
     and (b.p95_ms is null or b.computed_at<=now()-interval '6 hours')
  ), outages as (
@@ -65,7 +65,7 @@ language sql set search_path='' as $$
   select s.feature_id,s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms,
    count(*) copies,min(s.bucket) stamp,min(s.min_ms) lo,max(s.max_ms) hi
   from private.speed_buckets s join due d on d.id=s.feature_id and d.kind='auto'
-  where s.app_id=target_app and s.bucket>=now()-interval '7 days'
+  where (target_app is null or s.app_id=target_app) and s.bucket>=now()-interval '7 days'
    and s.bucket<date_bin('5 minutes',now()-interval '10 minutes',timestamptz 'epoch') and s.success_hist is not null
    and not exists(select from outages i where i.feature_id=s.feature_id and s.bucket+interval '5 minutes'>i.opened_at
     and (i.closed_at is null or s.bucket<i.closed_at))
@@ -98,13 +98,13 @@ begin
  with due as materialized (
    select f.id feature_id,mode.inclusive from public.features f cross join (values(true),(false)) mode(inclusive)
    left join private.latency_baselines b on b.feature_id=f.id and b.inclusive=mode.inclusive
-   where f.app_id=target_app and f.method<>'*' and exists(select from private.queue_success_5m q where q.feature_id=f.id)
+   where (target_app is null or f.app_id=target_app) and f.method<>'*' and exists(select from private.queue_success_5m q where q.feature_id=f.id)
      and (b.feature_id is null or b.next_check_at<=now())
  ), profiles as materialized (
    -- Collapse repeated five-minute distributions before expanding their points.
    select p.feature_id,p.inclusive,p.hist,p.counts,p.lo,p.hi,p.mean_ms,count(*) copies,min(p.bucket) first_at
    from due join private.latency_profiles p using(feature_id,inclusive)
-   where p.app_id=target_app and p.bucket>=now()-interval '7 days'
+   where (target_app is null or p.app_id=target_app) and p.bucket>=now()-interval '7 days'
      and p.bucket<date_bin('5 minutes',now()-interval '10 minutes',timestamptz 'epoch')
      and not exists(select from public.incidents i where i.feature_id=p.feature_id and i.kind in ('failure','slow')
        and p.bucket+interval '5 minutes'>i.opened_at and (i.closed_at is null or p.bucket<i.closed_at))
@@ -119,7 +119,7 @@ begin
  ), pending as (
    select p.feature_id,p.inclusive,min(p.bucket)+interval '15 minutes' eligible_at
    from due join private.latency_profiles p using(feature_id,inclusive)
-   where p.app_id=target_app and p.bucket between date_bin('5 minutes',now()-interval '10 minutes',timestamptz 'epoch') and now()
+   where (target_app is null or p.app_id=target_app) and p.bucket between date_bin('5 minutes',now()-interval '10 minutes',timestamptz 'epoch') and now()
    group by 1,2
  ), refreshed as (
    insert into private.latency_baselines as b(feature_id,inclusive,n,lo,hi,p50,p90,p95,first_at,computed_at,next_check_at)
