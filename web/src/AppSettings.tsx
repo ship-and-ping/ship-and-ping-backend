@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CurrentAppName } from "./Layout";
 import { Copy } from "./Connect";
+import { AiConnection } from "./AiConnection";
 import { displayText, sanitizeRoute } from "./normalize";
 import { cleanFeatureField } from "./deep";
 import { isStrong } from "./issue-prompt";
@@ -272,6 +273,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
               </section>
             );
           })}
+          {api.aiKeys && <AiConnection app={id} api={api.aiKeys} />}
           <section className="panel">
             <h2>앱 삭제</h2>
             <p>모든 기록이 바로 지워지고 되돌릴 수 없어요.</p>

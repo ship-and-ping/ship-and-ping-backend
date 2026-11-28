@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { aiKeys } from "./ai-keys";
 import { loginRequests, type LoginRequest } from "./login-requests";
 
 import { loadMonitor, type Monitor } from "./monitor-data";
@@ -28,6 +29,7 @@ export interface Snapshot {
   labels: Label[];
 }
 export interface Gateway {
+  aiKeys?: ReturnType<typeof aiKeys>;
   account(): Promise<{ email: string; joined: string; method: string; hasPassword?: boolean }>;
   withdraw(origin: string): Promise<"done" | "failed" | "limited" | "unknown" | "unauthorized" | "login_required">;
   checkAccount(): Promise<"exists" | "deleted" | "unknown">;
@@ -100,6 +102,7 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       }).data.subscription : undefined;
   return {
     requests,
+    aiKeys: origin ? aiKeys(client, origin) : undefined,
     async account() {
       const { data: { user } } = await client.auth.getUser();
       if (!user?.email) throw Error("로그인이 필요해요");

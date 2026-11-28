@@ -33,6 +33,7 @@ export function Copy({
   previewKey,
   onCopy,
   compact = false,
+  successMessage,
 }: {
   text: string | (() => Promise<string>);
   title: string;
@@ -40,6 +41,7 @@ export function Copy({
   previewKey?: string;
   onCopy?: () => void;
   compact?: boolean;
+  successMessage?: string;
 }) {
   const [state, setState] = useState<"ready" | "busy" | "done" | "fail" | "revealed" | "unavailable">(
     "ready",
@@ -112,9 +114,9 @@ export function Copy({
       </button>
       <span role="status">
         {state === "done"
-          ? secret
+          ? successMessage ?? (secret
             ? "복사했어요. 배포 설정에 넣으세요."
-            : "복사했어요. 코딩 AI 대화창에 붙여넣으세요."
+            : "복사했어요. 코딩 AI 대화창에 붙여넣으세요.")
           : fallbackOpen
             ? "자동 복사가 막혔어요. 주소창 옆 사이트 설정에서 클립보드 권한을 허용한 뒤 다시 복사해 주세요."
             : state === "unavailable" ? "문제 기록을 불러오지 못했어요. 다시 눌러 주세요."
