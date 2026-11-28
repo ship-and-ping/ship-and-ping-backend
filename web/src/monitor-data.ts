@@ -103,6 +103,11 @@ export interface Monitor {
   insights?: Insight[];
   verificationIncidentId?: string;
   verification?: {
+    opening_rpm?: number;
+    current_rpm?: number;
+    volume_quiet?: boolean;
+    volume_recovering?: boolean;
+    volume_unverified?: boolean;
     version: string | null;
     consecutive_successes: number;
     latest_duration_ms: number | null;
@@ -195,7 +200,7 @@ export async function loadMonitor(
   const selected = issueId ? incident?.feature_id : featureId;
   if ((issueId || featureId) && !read(features).some((f) => f.id === selected))
     throw Error("상세 기록을 찾지 못했어요");
-  const verificationIssue = incident?.status === "open" ? incident : !selected
+  const verificationIssue = incident && incident.status !== "dismissed" ? incident : !selected
     ? incidents.find((i) => i.kind !== "silent" && i.status === "open" && versions.some((v) =>
         v.version !== i.opened_version && Date.parse(v.last_seen_at) > Date.parse(i.opened_at)))
     : undefined;

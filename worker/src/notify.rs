@@ -41,6 +41,9 @@ fn feature_name(n: &Notice) -> String {
 }
 
 fn sentence(n: &Notice) -> String {
+    if matches!(n.event.as_str(), "volume_quiet" | "volume_unverified") {
+        return metric_summary(n);
+    }
     let name = feature_name(n);
     let count = |key: &str| n.metric[key].as_u64().unwrap_or(0);
     let mut line = match (n.event.as_str(), n.kind.as_deref()) {
@@ -106,6 +109,8 @@ fn event_title(n: &Notice) -> &'static str {
     match (n.event.as_str(), n.kind.as_deref()) {
         ("resolved", _) => "문제가 해결됐어요",
         ("worse", _) => "문제가 더 커졌어요",
+        ("volume_quiet", _) => "조용해짐 — 같은 부하에서 확인 필요",
+        ("volume_unverified", _) => "해결 여부 확인 못 함",
         ("test", _) => "시험 알림이에요",
         (_, Some("failure")) => "실패가 늘었어요",
         (_, Some("silent")) => "기록이 끊겼어요",
@@ -120,6 +125,12 @@ fn metric_summary(n: &Notice) -> String {
         ("resolved", Some("silent")) => "앱 기록이 다시 도착했어요".into(),
         (_, Some("silent")) => "10분 이상 기록이 도착하지 않았어요".into(),
         ("resolved", _) => "새 버전에서 5번 연속 성공했어요".into(),
+        ("volume_quiet", _) => {
+            "요청이 줄어 정상처럼 보여요. 같은 부하에서 다시 확인해 주세요".into()
+        }
+        ("volume_unverified", _) => {
+            "24시간 동안 요청량이 돌아오지 않아 해결 여부를 확인하지 못했어요.".into()
+        }
         ("test", _) => "쉽앤핑 시험 알림이에요.".into(),
         (_, Some("failure")) => format!(
             "최근 30분 동안 {}건 중 {}건 실패",

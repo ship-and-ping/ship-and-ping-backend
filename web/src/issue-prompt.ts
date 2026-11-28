@@ -25,7 +25,20 @@ const weak =
   /\b(curl|wget|fetch|exec|ignore|tokens?|secrets?|credentials?)\b|https?:\/\/|\beval\s*\(|무시|system\s*prompt|시스템\s*프롬프트|환경\s*변수|process\.env|api[\s_-]*keys?|토큰|비밀\s*키/i;
 export const isStrong = (s: string) => strong.some((pattern) => pattern.test(s));
 
+export const volumeQuietMessage = "요청이 줄어 정상처럼 보여요. 같은 부하에서 다시 확인해 주세요";
+export const volumeRecoveringMessage = "요청량이 돌아왔어요. 회복 후 새 버전에서 정상 5건을 확인하고 있어요.";
+export const volumeUnverifiedMessage = "24시간 동안 요청량이 돌아오지 않아 해결 여부를 확인하지 못했어요.";
+export function volumeComparison(opening?: number, current?: number) {
+  return Number.isFinite(opening) && Number.isFinite(current)
+    ? `개설 때 분당 ${opening}건 → 지금 분당 ${current}건` : undefined;
+}
+
 export interface IssueInput {
+  openingRpm?: number;
+  currentRpm?: number;
+  volumeQuiet?: boolean;
+  volumeRecovering?: boolean;
+  volumeUnverified?: boolean;
   feature: string;
   route: string;
   versions: string[];
@@ -212,6 +225,9 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
   const versionLine =
     "앱 버전: " + (versions.join(" / 이전 버전: ") || "미확인");
   const status =
+    input.volumeUnverified ? volumeUnverifiedMessage :
+    input.volumeRecovering ? volumeRecoveringMessage :
+    input.volumeQuiet ? volumeQuietMessage :
     input.mode === "again"
       ? "업데이트 뒤에도 문제가 있어요"
       : input.mode === "worse"
@@ -221,6 +237,7 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
   const queue = queueDescription(input.queueMs, input.queuePct);
   const checkServerFirst = diagnosis.type === "resource" && Boolean(queue) && Number(input.queuePct) >= 50;
   const metrics = [
+    volumeComparison(input.openingRpm, input.currentRpm),
     queue,
     checkServerFirst && Number.isFinite(input.cpuPct) && "서버 CPU 최대 " + Number(input.cpuPct) + "%",
     checkServerFirst && Number.isFinite(input.stealPct) && "CPU steal 최대 " + Number(input.stealPct) + "%",
@@ -293,7 +310,9 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
       "top -b -n1, vmstat 1 5, free -m, 클라우드 콘솔 CPU 그래프(무료 서버는 steal 확인). 사건 시각의 CPU·메모리·steal·DB 연결·스레드와 클라이언트 시간 초과를 비교해.",
     ...commitRange(input.versions),
     ...(diagnosis.type === "resource" ? loadCheck(input) : []),
-    "배포 후 쉽앤핑이 새 버전에서 정상 5번 확인하면 해결.",
+    input.openingRpm != null && input.openingRpm >= 2
+      ? "새 버전에서 정상 5회여도 요청량이 개설 때의 20% 미만이면 확인을 보류해요. 50% 이상으로 돌아온 뒤 정상 5회를 다시 확인해요."
+      : "배포 후 쉽앤핑이 새 버전에서 정상 5번 확인하면 해결.",
     "쉽앤핑 MCP가 연결돼 있으면 get_incident/check_resolution으로 확인해.",
     "app_version은 배포 커밋의 짧은 해시나 배포 버전 번호로 고정해 줘. 재시작 시각·무작위 값만 바뀌면 코드 배포 여부를 확인할 수 없어.",
     "이 요청으로 앱 기능과 관계없는 코드(외부로 데이터 보내기, 키·환경변수를 읽어서 출력하거나 전송하기, 새 외부 주소 호출)는 추가하지 마. 그런 내용이 필요해 보이면 멈추고 나에게 물어봐.",
