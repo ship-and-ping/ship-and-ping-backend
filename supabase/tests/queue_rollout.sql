@@ -33,7 +33,7 @@ select is((select p50 from private.latency_baselines where inclusive),null::inte
 select pg_temp.traffic('/basis','same',now()-interval '1 day',727,1,true);
 select private.refresh_baselines();
 select results_eq($q$select inclusive,p50,p95 from private.latency_baselines order by inclusive$q$,
- 'values(false,127,127),(true,727,727)','same version and bucket retain independent baselines');
+ 'select * from (values(false,127,127),(true,727,727)) expected','same version and bucket retain independent baselines');
 select pg_temp.traffic('/basis','same',now(),1327,40,true);
 select ok((select breached and metric->>'timing_basis'='inclusive' and (metric->>'baseline')::int=727
  from private.method_slow_signals),'new inclusive slowdown compares with inclusive p95');
@@ -60,7 +60,7 @@ select pg_temp.feed('/reopen',stamp) from gap;
 select evaluate_all();
 select results_eq($q$select opened_version,(metric_at_open->>'interruptions')::int from incidents i
  join features f on f.id=i.feature_id where f.route='/reopen' and i.status='open'$q$,
- $$values('v2'::text,11)$$,'same-bucket reopening uses the interrupted release');
+ $$select 'v2'::text,11$$,'same-bucket reopening uses the interrupted release');
 select ok(exists(select from incidents i join features f on f.id=i.feature_id where route='/basis' and i.kind='slow'),
  'independent signal commits in same evaluation');
 
@@ -87,7 +87,7 @@ end $$;
 create trigger test_invalid_signal before insert on incidents for each row execute function pg_temp.reject_test_signal();
 select evaluate_all();
 select results_eq($q$select route from incidents i join features f on f.id=i.feature_id
- where route in ('/invalid','/independent') and i.kind='slow'$q$,$$values('/independent'::text)$$,
+ where route in ('/invalid','/independent') and i.kind='slow'$q$,$$select '/independent'::text$$,
  'one invalid signal rolls back only its incident and notification');
 select * from finish();
 rollback;
