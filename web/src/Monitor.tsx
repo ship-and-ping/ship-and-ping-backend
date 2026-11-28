@@ -513,7 +513,8 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
   const streak = proof?.consecutive_successes ?? 0;
   const duration = proof?.latest_duration_ms;
   const normal = f.method === "*" ? null : f.baselines;
-  const opening = i.metric_at_open;
+  const metric = i.metric_worst ?? i.metric_at_open;
+  const opening = i.metric_at_open ?? metric;
   const p95 = (opening?.timing_basis ? opening.baseline_p95 : normal?.p95_ms) ?? Infinity;
   const p50 = (opening?.timing_basis ? opening.baseline_p50 : normal?.p50_ms) ?? Infinity;
   const threshold = opening?.slow_rule === "absolute" ? Math.min(f.slow_threshold_ms, opening.threshold ?? Infinity)
@@ -533,8 +534,6 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
           .slice(0, 1)
           .map((v) => v.version),
       ];
-  const metric = i.metric_worst ?? i.metric_at_open;
-  const opening = i.metric_at_open ?? metric;
   const input = {
     feature: f.name,
     route: f.route ?? "",
