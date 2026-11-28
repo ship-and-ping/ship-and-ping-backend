@@ -47,6 +47,29 @@ export async function currentSubscription() {
   const registration = await navigator.serviceWorker?.getRegistration("/");
   return await registration?.pushManager?.getSubscription() ?? null;
 }
+export async function changePushPrivacy(command: "lock-push" | "recover-push") {
+  const registration = await navigator.serviceWorker?.getRegistration("/");
+  if (!registration) return; // No worker registration can receive push here.
+  const worker = registration.active;
+  if (!worker) throw new PushCleanupError();
+  const channel = new MessageChannel();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      // A worker from an older release may not recognize the command.
+      timeout = setTimeout(() => reject(new PushCleanupError()), 5000);
+      channel.port1.onmessage = event => {
+        if (event.data === true) resolve();
+        else reject(new PushCleanupError());
+      };
+      worker.postMessage(command, [channel.port2]);
+    });
+  } finally {
+    clearTimeout(timeout);
+    channel.port1.close();
+    channel.port2.close();
+  }
+}
 export function configuredKey() {
   const key = import.meta.env.VITE_VAPID_PUBLIC_KEY;
   return key ? Uint8Array.from(atob(key.replace(/-/g,"+").replace(/_/g,"/")), c => c.charCodeAt(0)) : null;

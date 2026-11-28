@@ -233,7 +233,7 @@ it.each([false,true])("로그아웃 실패 시 계정 화면을 유지하고 선
   const account = within(await screen.findByRole("main"));
   fireEvent.click(await account.findByRole("button",{name:"로그아웃"}));
   await account.findByText("로그아웃을 끝내지 못했어요. 인터넷 연결 후 다시 시도해 주세요.");
-  expect(account.getByText("다시 연결되기 전까지 이 기기로 알림이 올 수 있어요.")).toBeTruthy();
+  expect(account.getByText("이 기기에서 알림 내용은 가려지지만, 다시 로그인하기 전까지 '쉽앤핑 알림이 있어요' 표시가 올 수 있어요.")).toBeTruthy();
   expect(account.getByRole("heading",{name:"내 계정"})).toBeTruthy();
   fireEvent.click(account.getByRole("button",{name:deviceOnly ? "그래도 이 기기에서 로그아웃" : "다시 시도"}));
   await screen.findByRole("heading",{name:"로그인"});

@@ -250,7 +250,8 @@ function pushFixture() {
   const unsubscribe = vi.fn(async () => true);
   const keys = {p256dh:"fixture-key",auth:"fixture-auth"};
   const sub = {endpoint,toJSON:() => ({keys}),unsubscribe};
-  const registration = {getNotifications:async () => [{close}],pushManager:{getSubscription:vi.fn(async ():Promise<typeof sub | null> => sub)}};
+  const postMessage = vi.fn((_command: string, [reply]: MessagePort[]) => reply.postMessage(true));
+  const registration = {active:{postMessage},getNotifications:async () => [{close}],pushManager:{getSubscription:vi.fn(async ():Promise<typeof sub | null> => sub)}};
   // A restarted fixture receives a new lock manager, as after the previous
   // browser context was destroyed while a cleanup promise was outstanding.
   let queue = Promise.resolve();
@@ -352,6 +353,27 @@ it("explicit device logout succeeds offline after the SDK clears local storage",
   } finally { vi.unstubAllGlobals(); }
 });
 
+it.each(["former","next"])("locks before forced sign-out and requests cleanup on next login as %s", async member => {
+  const {api,reload,registration,abortSignal,signOut,getSession,onAuthStateChange,rpc} = pushFixture();
+  const post = registration.active.postMessage;
+  abortSignal.mockRejectedValue(Error("offline"));
+  try {
+    post.mockImplementationOnce((_command, [port]) => port.postMessage(false));
+    await expect(api.logout({deviceOnly:true})).rejects.toThrow();
+    expect(signOut).not.toHaveBeenCalled();
+    await api.logout({deviceOnly:true});
+    expect(post.mock.calls.map(([command]) => command)).toEqual(["lock-push","lock-push"]);
+    expect(signOut.mock.invocationCallOrder[0]).toBeGreaterThan(post.mock.invocationCallOrder[1]);
+    getSession.mockResolvedValue({data:{session:{user:{id:member}}}});
+    const stop = reload().listen(vi.fn());
+    try {
+      onAuthStateChange.mock.calls[0][0]("INITIAL_SESSION",{user:{id:member}});
+      await vi.waitFor(() => expect(post.mock.calls.map(([command]) => command)).toContain("recover-push"));
+      expect(rpc.mock.calls.map(([name]) => name)).not.toContain("register_push");
+    } finally { stop(); }
+  } finally { vi.unstubAllGlobals(); }
+});
+
 it("closes displayed notifications even without a subscription", async () => {
   const {api,registration,close,signOut} = pushFixture();
   registration.pushManager.getSubscription.mockResolvedValue(null);
@@ -360,6 +382,28 @@ it("closes displayed notifications even without a subscription", async () => {
     expect(close).toHaveBeenCalledOnce();
     expect(signOut).toHaveBeenCalledOnce();
   } finally { vi.unstubAllGlobals(); }
+});
+
+it("ignores a delayed sign-in after device logout and retries recovery before opt-in", async () => {
+  const {api,registration,getSession,onAuthStateChange} = pushFixture();
+  const post = registration.active.postMessage;
+  const stop = api.listen(vi.fn());
+  const emit = onAuthStateChange.mock.calls[0][0];
+  try {
+    await api.logout({deviceOnly:true});
+    getSession.mockResolvedValue({data:{session:null}});
+    emit("SIGNED_IN",{user:{id:"former"}});
+    await vi.waitFor(() => expect(getSession.mock.calls.length).toBeGreaterThan(1));
+    expect(post.mock.calls.map(([command]) => command)).toEqual(["lock-push"]);
+    getSession.mockResolvedValue({data:{session:{user:{id:"next"}}}});
+    const enable = vi.fn();
+    post.mockImplementationOnce((_command, [port]) => port.postMessage(false));
+    await expect(api.withPushRegistration(enable)).rejects.toThrow();
+    expect(enable).not.toHaveBeenCalled();
+    await api.withPushRegistration(enable);
+    expect(post.mock.calls.map(([command]) => command)).toEqual(["lock-push","recover-push","recover-push"]);
+    expect(enable).toHaveBeenCalledOnce();
+  } finally { stop(); vi.unstubAllGlobals(); }
 });
 
 it.each(["SIGNED_IN","INITIAL_SESSION"])("discards the previous member's subscription on a live switch or redirect (%s)", async event => {

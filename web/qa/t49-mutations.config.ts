@@ -10,7 +10,11 @@ export default defineConfig(({mode}) => ({
     apply: "serve",
     transform(source, id) {
       if (mode === "skip-server-logout") {
-        if (id.endsWith("/src/data.ts")) return source.replace("if (!deviceOnly) {", "if (false) {");
+        if (id.endsWith("/src/data.ts")) return source.replace("if (token) {", "if (false) {");
+        return;
+      }
+      if (mode === "skip-login-push-cleanup") {
+        if (id.endsWith("/src/data.ts")) return source.replace('await changePushPrivacy("recover-push");', "return;");
         return;
       }
       if (mode === "skip-push-lock") {

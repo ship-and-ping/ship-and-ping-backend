@@ -4,7 +4,7 @@ import { loginRequests, type LoginRequest } from "./login-requests";
 import { loadMonitor, type Monitor } from "./monitor-data";
 import type { DeepFeature, Definitions, FirstResult } from "./deep";
 import { resultKinds } from "./deep";
-import { closePushNotifications, configuredKey, currentSubscription, fingerprint, notifyPushChange, PushCleanupError } from "./push";
+import { changePushPrivacy, closePushNotifications, configuredKey, currentSubscription, fingerprint, notifyPushChange, PushCleanupError } from "./push";
 import { withPushLock } from "./push-lock";
 
 interface CleanupTarget {
@@ -232,16 +232,39 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
     }
     const marker = read(cleanupKey,pending);
     return withPushLock(async () => {
+      // The pending server cleanup remains useful even if the worker is
+      // unavailable. An unsuccessful device recovery leaves its lock intact.
+      if (user) await recoverLockedPush(user).catch(() => {});
       if (marker !== read(cleanupKey,pending)) return;
       await finishCleanup(() => user === null ? null : observedMember ?? user,captured);
     })
       .catch(() => { /* Keep the durable marker for startup or explicit opt-in. */ });
   }
+  // Re-read auth under the cross-tab lock. A queued SIGNED_IN callback may
+  // belong to the session that just completed a device-only logout.
+  async function recoverLockedPush(user?: string) {
+    const {data, error} = await client.auth.getSession();
+    if (error) throw error;
+    if (data.session && (!user || data.session.user.id === user)) {
+      await changePushPrivacy("recover-push");
+    }
+  }
+  async function signOutLocally() {
+    const { error } = await client.auth.signOut({ scope: "local" });
+    if (error) {
+      const remaining = await client.auth.getSession();
+      if (remaining.error || remaining.data.session) throw error;
+    }
+    withdrawalToken = undefined;
+  }
   return {
     requests,
     withPushRegistration(action) {
       return withPushLock(async () => {
-        try { await finishCleanup(() => observedMember ?? read(lastMemberKey,null)); }
+        try {
+          await recoverLockedPush();
+          await finishCleanup(() => observedMember ?? read(lastMemberKey,null));
+        }
         catch { throw new PushCleanupError(); }
         return action({registerPush,removeEndpoint});
       });
@@ -410,6 +433,8 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
         observedMember = user;
         if (read(cleanupKey,pending) || (previous === recorded && (previous !== user || initialSignOut))) {
           void cleanFor(recorded,user);
+        } else if (user && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+          void withPushLock(() => recoverLockedPush(user)).catch(() => {});
         }
         fn(user, event === "PASSWORD_RECOVERY");
       });
@@ -467,7 +492,12 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       const {data, error: sessionError} = await client.auth.getSession();
       const previous = observedMember ?? read(lastMemberKey,null) ?? data.session?.user.id ?? null;
       await cleanFor(previous,null,accountDeleted);
-      if (!deviceOnly) {
+      if (deviceOnly) {
+        await withPushLock(async () => {
+          await changePushPrivacy("lock-push");
+          await signOutLocally();
+        });
+      } else {
         if (sessionError) throw sessionError;
         const token = data.session?.access_token ?? withdrawalToken;
         if (token) {
@@ -476,14 +506,8 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
           const {error} = await client.auth.admin.signOut(token,"local");
           if (error && error.code !== "session_not_found" && error.code !== "user_not_found") throw error;
         }
+        await signOutLocally();
       }
-      // auth-js clears local storage before its own (possibly redundant) POST.
-      const { error } = await client.auth.signOut({ scope: "local" });
-      if (error) {
-        const remaining = await client.auth.getSession();
-        if (remaining.error || remaining.data.session) throw error;
-      }
-      withdrawalToken = undefined;
     },
     async firstVisit() {
       const { data, error } = await client.auth.getUser();

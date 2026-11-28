@@ -20,6 +20,7 @@ import { Notifications } from "./Notifications";
 import { Connect } from "./Connect";
 import { Account } from "./Account";
 import { AppSettings } from "./AppSettings";
+import { deviceLogoutNotice } from "./LogoutButton";
 
 function useApps(api: Gateway) {
   const [apps, setApps] = useState<AppSummary[]>();
@@ -319,7 +320,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     deleting.current = false;
     issued.current = null;
     setUser(null);
-    setNotice(deviceOnly ? "이 기기에서 로그아웃했어요. 다시 연결되기 전까지 이 기기로 알림이 올 수 있어요." : "로그아웃했어요");
+    setNotice(deviceOnly ? "이 기기에서 로그아웃했어요. " + deviceLogoutNotice : "로그아웃했어요");
     navigate("/login",{replace:true});
   }
   const finishWithdrawal = useCallback(async (result: "done" | "unauthorized" | "login_required" = "done", deviceOnly = false) => {

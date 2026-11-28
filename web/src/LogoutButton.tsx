@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+export const deviceLogoutNotice = "이 기기에서 알림 내용은 가려지지만, 다시 로그인하기 전까지 '쉽앤핑 알림이 있어요' 표시가 올 수 있어요.";
+
 export function LogoutButton({ logout, failed = false }: {
   logout: (deviceOnly?: boolean) => Promise<void>;
   failed?: boolean;
@@ -26,7 +28,7 @@ export function LogoutButton({ logout, failed = false }: {
       {busy ? "로그아웃하는 중" : error ? "다시 시도" : "로그아웃"}
     </button>
     {error && <>
-      <p>다시 연결되기 전까지 이 기기로 알림이 올 수 있어요.</p>
+      <p>{deviceLogoutNotice}</p>
       <button className="secondary" disabled={busy} onClick={() => attempt(true)}>
         그래도 이 기기에서 로그아웃
       </button>
