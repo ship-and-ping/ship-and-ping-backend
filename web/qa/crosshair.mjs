@@ -25,6 +25,48 @@ async function checkWidth(page, state) {
     } : null);
   assert.equal(overflow,null,state+" "+JSON.stringify(overflow));
 }
+async function checkWeeklyTooltip(page, board, width) {
+  await page.setViewportSize({width,height:900});
+  await page.mouse.move(0,0);
+  const failure = board.getByRole("slider",{name:"실패율"});
+  await failure.focus();
+  await failure.press("Home");
+  for (let i = 0; i < 7; i++) {
+    if (i > 0) await failure.press(i === 6 ? "End" : "ArrowRight");
+    const tip = await board.getByRole("tooltip").boundingBox();
+    const line = await failure.locator(".flow-selection").boundingBox();
+    assert.ok(tip.x + tip.width + 5 <= line.x || line.x + line.width + 5 <= tip.x ||
+      tip.y + tip.height + 3 <= line.y || line.y + line.height + 3 <= tip.y,
+      width+"px weekly tooltip covers cursor in slot "+(i+1));
+    if (i === 6) {
+      assert.match(await board.getByRole("tooltip").textContent(),/ · 1%$/);
+      const dot = await board.locator(".stat-panel").nth(1).locator(".spark-active").boundingBox();
+      assert.ok(tip.x + tip.width <= dot.x || dot.x + dot.width <= tip.x ||
+        tip.y + tip.height <= dot.y || dot.y + dot.height <= tip.y);
+    }
+  }
+  if (width === 800) {
+    const panel = board.locator(".stat-panel").nth(1);
+    await panel.evaluate(el => window.scrollBy(0,el.getBoundingClientRect().top - 4));
+    await page.waitForFunction(() => {
+      const tip = document.querySelector(".spark-readout .flow-tip");
+      return tip && tip.getBoundingClientRect().top >= tip.closest("article").getBoundingClientRect().bottom;
+    });
+  }
+}
+async function checkWeeklyAxes(board) {
+  for (const axis of await board.locator(".flow-x").all()) {
+    const labels = await axis.locator("span:visible").evaluateAll(spans => spans.map(span => {
+      const range = document.createRange();
+      range.selectNodeContents(span);
+      return [...range.getClientRects()].map(r => ({left:r.left,right:r.right,top:r.top,bottom:r.bottom}));
+    }));
+    assert.ok(labels.length >= 3);
+    for (let i = 1; i < labels.length; i++) for (const left of labels[i-1]) for (const right of labels[i])
+      assert.ok(left.right + 1 <= right.left || left.bottom <= right.top || right.bottom <= left.top,
+        "Weekly date labels overlap: "+JSON.stringify([left,right]));
+  }
+}
 try {
   await mkdir(output, {recursive:true});
   await server.listen();
@@ -77,7 +119,7 @@ try {
         assert.ok(tip.y + tip.height <= beforeHover.y);
       } else {
         assert.ok(tip.x >= card.x && tip.x + tip.width <= card.x + card.width);
-        assert.ok(tip.y + tip.height <= card.y + card.height);
+        assert.ok(tip.y >= 0 && tip.y + tip.height <= page.viewportSize().height);
       }
       for (const line of await board.locator(".flow-selection").all())
         assert.equal(await line.evaluate(el => getComputedStyle(el).transitionDuration),"0s");
@@ -92,17 +134,39 @@ try {
         await touch.detach();
       }
       assert.deepEqual(reads,[]);
+      if (width === 1440) {
+        await page.goto(origin+"/apps/demo/features/apply");
+        await page.getByRole("button",{name:"7일"}).click();
+        await checkWeeklyTooltip(page,board,1440);
+        await checkWeeklyTooltip(page,board,800);
+        if (colorScheme === "light") {
+          await board.locator(".stat-grid").evaluate(el => el.scrollIntoView({block:"center"}));
+          await page.screenshot({path:fileURLToPath(new URL("week-end-800.png",output))});
+        }
+      }
       if (width === 390) {
         await page.goto(origin+"/apps/demo/features/apply");
         await slider.waitFor();
+        await page.getByRole("button",{name:"7일"}).click();
+        await page.mouse.move(0,0);
+        await checkWeeklyAxes(board);
+        const tickFont = () => board.locator(".flow-x span:visible").first()
+          .evaluate(el => parseFloat(getComputedStyle(el).fontSize));
+        const normalSize = await tickFont();
+        if (colorScheme === "dark") {
+          await slider.focus();
+          await slider.press("End");
+          await board.screenshot({style:".dashboard-dock {visibility:hidden}",
+            path:fileURLToPath(new URL("week-390-default.png",output))});
+        }
         await page.addStyleTag({content:"html {font-size:200%}"});
+        assert.equal(await tickFont(),2*normalSize,"Weekly axis text must visibly scale with the root font");
+        await checkWeeklyAxes(board);
         await checkWidth(page,"feature detail 200%");
         for (const name of ["사용 건수","사용과 실패","걸린 시간"]) {
           await board.getByRole("slider",{name}).focus();
           await checkWidth(page,name+" 200%");
         }
-        await page.getByRole("button",{name:"7일"}).click();
-        await slider.waitFor();
         const top = () => plots.evaluate(el => el.getBoundingClientRect().top + scrollY);
         const weekTop = await top();
         await slider.focus();
@@ -112,9 +176,12 @@ try {
         assert.ok(weekTip.y >= lastCard.y + lastCard.height,"Weekly tooltip covers another card");
         assert.equal(await top(),weekTop,"Weekly selection moved the charts");
         await checkWidth(page,"weekly selection 200%");
-        if (colorScheme === "dark") await board.locator(".stat-grid").screenshot({
-          path:fileURLToPath(new URL("week-390-text200.png",output)),
-        });
+        if (colorScheme === "dark") {
+          await page.mouse.move(0,0);
+          await board.screenshot({style:".dashboard-dock {visibility:hidden}",
+            path:fileURLToPath(new URL("week-390-text200.png",output))});
+          assert.equal(await board.locator(".panel-help [role=tooltip]").count(),0);
+        }
       }
     }
     await page.close();

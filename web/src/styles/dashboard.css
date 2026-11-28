@@ -223,7 +223,7 @@
   padding:var(--sp-space-2) var(--sp-space-3); border:1px solid var(--sp-line-strong); color:var(--sp-ink);
   background:var(--sp-surface); font-size:var(--sp-text-xs); box-shadow:var(--sp-hero-shadow); }
 .stat-panel { position:relative; }
-.spark-readout { position:absolute; z-index:2; bottom:var(--sp-space-2); inset-inline:var(--sp-space-3); display:flex; pointer-events:none; }
+.spark-readout { position:absolute; z-index:2; top:var(--tip-top); inset-inline:var(--sp-space-3); display:flex; pointer-events:none; }
 .spark-readout[data-align="end"] { justify-content:flex-end; }
 .spark-readout .flow-tip { position:static; width:fit-content; max-width:100%; margin:0; }
 .flow-tip > span { display:flex; justify-content:space-between; gap:var(--sp-space-2); }
@@ -243,10 +243,10 @@
   .stat-grid::after {
     content:attr(data-readout-size); visibility:hidden; grid-column:1 / -1;
     padding:var(--sp-space-2) var(--sp-space-3); border:1px solid transparent;
-    font-size:var(--sp-text-xs); font-weight:bold;
+    font-size:.8125rem; font-weight:bold;
   }
   .spark-readout { inset:auto 0 0; }
-  .spark-readout .flow-tip { width:100%; }
+  .spark-readout .flow-tip { width:100%; font-size:.8125rem; }
   .metrics-board .flow-plots { gap:var(--sp-space-4); }
   .stat-panel header { position:relative; }
   .stat-panel .panel-help { position:static; }
@@ -264,9 +264,15 @@
   .monitor .panel input { min-width:0; max-width:100%; }
   .monitor .panel label { min-width:0; max-width:100%; }
   .monitor table { overflow-wrap:anywhere; }
-  .flow-plots .flow-x { --tick-width:33%; min-height:3.8em; }
+  .flow-plots .flow-x {
+    --tick-width:22%; display:grid; grid-template-columns:minmax(0,1fr);
+    align-items:start; padding-top:var(--sp-space-2);
+  }
+  .flow-plots .flow-x span { position:relative; grid-area:1 / 1; top:auto; font-size:.8125rem; overflow-wrap:anywhere; }
   .flow-plots .flow-x span:nth-child(even) { display:none; }
-  .flow-plots .flow-x span { overflow-wrap:anywhere; }
+  .flow-plots .flow-x:has(> :nth-child(7)) { --tick-width:25%; }
+  .flow-plots .flow-x:has(> :nth-child(7)) span { display:none; }
+  .flow-plots .flow-x:has(> :nth-child(7)) span:nth-child(3n + 1) { display:block; }
   .plot-readout, .flow-tip strong, .plot-readout .flow-tip > span { min-width:0; max-width:100%; }
   .plot-readout .flow-tip > span { flex-wrap:wrap; }
 }

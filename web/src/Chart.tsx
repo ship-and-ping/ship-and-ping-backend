@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, type PointerEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type RefObject } from "react";
 import { approximateDuration, formatDuration, summarize, type Stat } from "./monitor-data";
 import { periodName } from "./MonitorToolbar";
 import "./styles/chart.css";
@@ -152,9 +152,48 @@ function PanelHelp({title,text}:{title:string; text:string}) {
     {open && <span id={id} role="tooltip">{text}</span>}</span>;
 }
 
+function SparkReadout({plot,x,text}:{plot:RefObject<HTMLDivElement|null>; x:number; text:string}) {
+  const wrapper = useRef<HTMLDivElement>(null);
+  const bubble = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const graph = plot.current, row = wrapper.current, tip = bubble.current;
+    if (!graph || !row || !tip) return;
+    const card = graph.parentElement!;
+    const place = () => {
+      if (row.offsetParent !== card) return; // Mobile uses the shared row below the cards.
+      const bounds = graph.getBoundingClientRect();
+      const panel = card.getBoundingClientRect();
+      const space = row.getBoundingClientRect();
+      const popup = tip.getBoundingClientRect();
+      const cursor = bounds.left + x * bounds.width / 100;
+      const clearance = 8;
+      const sideRoom = x < 50 ? space.right - cursor : cursor - space.left;
+      let top = bounds.bottom - popup.height;
+      if (sideRoom < popup.width + clearance) {
+        const above = panel.top - popup.height - clearance;
+        top = above >= 0 ? above : panel.bottom + clearance;
+      }
+      row.style.setProperty("--tip-top",(top - panel.top - card.clientTop)+"px");
+    };
+    place();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(place) : null;
+    observer?.observe(graph);
+    observer?.observe(tip);
+    window.addEventListener("scroll",place,{capture:true,passive:true});
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("scroll",place,true);
+    };
+  },[plot,x,text]);
+  return <div ref={wrapper} className="spark-readout" data-align={x < 50 ? "end" : "start"}>
+    <div ref={bubble} role="tooltip" className="flow-tip"><strong>{text}</strong></div>
+  </div>;
+}
+
 function StatPanel({title,help,value,series,unit,selection,points,p95}:{title:string; help:string; value:string; series:(number|null)[];
   unit:"건"|"초"|"%"; selection:Selection; points:Bucket[]; p95:number|null}) {
   const active = selection.active?.index;
+  const plot = useRef<HTMLDivElement>(null);
   const peak = Math.max(0,...series.map(n => plotTime(n ?? 0)));
   const levels = unit === "%" ? [0,50,100] : verticalTicks(peak,unit === "초",3);
   const max = levels[levels.length-1];
@@ -170,7 +209,7 @@ function StatPanel({title,help,value,series,unit,selection,points,p95}:{title:st
   return <article className="stat-panel">
     <header><h3>{title}</h3><PanelHelp title={title} text={help}/></header>
     <strong className="stat-value">{value}</strong>
-    <div className="spark-plot"><svg aria-hidden="true">
+    <div ref={plot} className="spark-plot"><svg aria-hidden="true">
       {levels.map(level => <line key={level} className={level === 0 ? "spark-zero" : undefined}
         x1="0" x2="100%" y1={percent(pointY(level))} y2={percent(pointY(level))}
         stroke="var(--sp-line-strong)" strokeDasharray={level === 0 ? undefined : "2 4"}/>)}
@@ -183,9 +222,8 @@ function StatPanel({title,help,value,series,unit,selection,points,p95}:{title:st
           cx={percent(center(i,series.length))} cy={percent(pointY(n))} r={i === active ? 4 : 2.5} fill="currentColor"/>)}
     </svg><CursorTarget owner={title} points={points} selection={selection} p95={p95} reading={reading} crosshair/>
     </div>
-    {selection.active?.owner === title && <div className="spark-readout" data-align={selection.active.index < series.length / 2 ? "end" : "start"}>
-      <div role="tooltip" className="flow-tip"><strong>{reading(selection.active.index)}</strong></div>
-    </div>}
+    {selection.active?.owner === title && <SparkReadout plot={plot}
+      x={center(selection.active.index,series.length)} text={reading(selection.active.index)}/>}
   </article>;
 }
 
