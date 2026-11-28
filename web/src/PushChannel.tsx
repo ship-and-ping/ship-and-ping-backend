@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AlertSettings, Gateway, PushDevice } from "./data";
-import { canInstall, configuredKey, deniedHelp, deviceType, fingerprint, install, notifyPushChange, PushCleanupError, requestPushPermission, standalone, subscribe } from "./push";
+import { canInstall, configuredKey, deniedHelp, deviceType, fingerprint, install, notifyPushChange, PushCleanupError, requestPushPermission, standalone } from "./push";
+import { registerBrowserPush } from "./enable-push";
 
 type Props = { api: Gateway; app: string; settings: AlertSettings; reload(): void };
 export function PushChannel({api, app, settings, reload}: Props) {
@@ -68,16 +69,7 @@ export function PushChannel({api, app, settings, reload}: Props) {
   }
   async function enable() {
     const bytes = await requestPushPermission();
-    await api.withPushRegistration(async ({removeEndpoint,registerPush}) => {
-      const sub = await subscribe(bytes,removeEndpoint,current?.endpoint);
-      try {
-        await registerPush(app,sub.toJSON(),type);
-      } catch (error) {
-        if (sub.endpoint !== current?.endpoint) await sub.unsubscribe().catch(() => {});
-        throw error;
-      }
-      setEndpoint(sub.endpoint);
-    });
+    setEndpoint(await registerBrowserPush(api,app,bytes,current?.endpoint));
     setMessage("이 기기에서 푸시를 받을 수 있어요.");
     refresh();
   }

@@ -60,6 +60,7 @@ function fake(user: string | null = "member"): Gateway {
     listen: () => () => {},
     login: vi.fn(),
     passwordLogin: vi.fn(),
+    sendInstallMail: vi.fn(), requestLoginCode: vi.fn(), verifyLoginCode: vi.fn(), pushReady: vi.fn(),
     signup: vi.fn(),
     requestReset: vi.fn(),
     updatePassword: vi.fn(),

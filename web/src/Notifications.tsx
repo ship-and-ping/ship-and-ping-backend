@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import type { AlertSettings, AppSummary, Gateway } from "./data";
 import { displayText } from "./normalize";
 import { PushChannel } from "./PushChannel";
+import { InstallEntry } from "./InstallGuide";
 
 const ticketKey = "ship-ping-slack-state";
 type Props = { api: Gateway; origin: string };
@@ -66,6 +67,7 @@ export function Notifications({ api, origin }: Props) {
   return (
     <>
       <h1 tabIndex={-1}>알림 설정</h1>
+      <InstallEntry/>
       {message && <p role="alert">{message}</p>}
       {!apps ? (
         listFailed ? <div className="load-state" role="alert">

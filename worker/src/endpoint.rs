@@ -282,6 +282,27 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
 }
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    if req.path() == "/v1/install-mail" {
+        return install_mail::route(req, &env).await;
+    }
+    if req.path() == "/v1/push-config" && req.method() == Method::Get {
+        let origin = crate::notify::setting(&env, "WEB_ORIGIN");
+        if origin.is_none() || req.headers().get("Origin")? != origin {
+            return error(403, "origin denied");
+        }
+        let public = env
+            .secret("VAPID_PRIVATE_KEY")
+            .ok()
+            .filter(|value| !value.to_string().is_empty())
+            .and_then(|_| crate::notify::setting(&env, "VAPID_PUBLIC_KEY"));
+        let mut response = Response::from_json(&json!({"public_key":public}))?;
+        response
+            .headers_mut()
+            .set("Access-Control-Allow-Origin", &origin.unwrap())?;
+        response.headers_mut().set("Cache-Control", "no-store")?;
+        response.headers_mut().set("Vary", "Origin")?;
+        return Ok(response);
+    }
     if req.path() == "/v1/login-requests" || req.path().starts_with("/v1/login-requests/") {
         return login_api::route(req, &env).await;
     }
@@ -307,6 +328,8 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     Ok(response)
 }
 
+#[path = "install_mail.rs"]
+mod install_mail;
 #[path = "login_api.rs"]
 mod login_api;
 

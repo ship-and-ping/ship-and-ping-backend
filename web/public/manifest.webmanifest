@@ -3,7 +3,7 @@
   "name": "쉽앤핑",
   "short_name": "쉽앤핑",
   "lang": "ko",
-  "start_url": "/apps",
+  "start_url": "/install",
   "scope": "/",
   "display": "standalone",
   "theme_color": "#261b40",

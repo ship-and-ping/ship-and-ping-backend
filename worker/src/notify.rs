@@ -6,6 +6,8 @@ mod push;
 #[cfg(target_arch = "wasm32")]
 mod delivery;
 #[cfg(target_arch = "wasm32")]
+pub(crate) use delivery::send_resend;
+#[cfg(target_arch = "wasm32")]
 pub use delivery::{deliver, post, setting, valid_hook};
 
 #[derive(Deserialize)]
@@ -203,7 +205,7 @@ fn notice_link(n: &Notice, origin: &str) -> String {
     }
 }
 
-struct Mail {
+pub(crate) struct Mail {
     subject: String,
     text: String,
     html: String,
@@ -213,6 +215,17 @@ impl Mail {
     fn payload(&self, from: &str, to: &str) -> Value {
         json!({"from":from,"to":[to],"subject":self.subject,"text":self.text,"html":self.html})
     }
+}
+
+pub(crate) fn install_mail(origin: &str) -> Option<Mail> {
+    let link = format!("{}/install", web_origin(Some(origin))?);
+    Some(Mail {
+        subject: "휴대폰으로 쉽앤핑 알림 받기".into(),
+        text: format!(
+            "아이폰에서는 Safari로 여세요. 홈 화면에 쉽앤핑을 추가하고 알림을 켜 주세요.\n{link}"
+        ),
+        html: include_str!("notify/install.html").replace("{{install_url}}", &link),
+    })
 }
 
 struct MailContent {
@@ -428,6 +441,16 @@ mod tests {
                 assert!(body.contains(expected), "{expected} missing from {body}");
             }
         }
+    }
+
+    #[test]
+    fn install_mail_contains_only_a_public_install_link() {
+        let mail = install_mail("https://web.example.invalid").unwrap();
+        let url = "https://web.example.invalid/install";
+        assert_eq!(mail.html.matches("href=").count(), 1);
+        assert!(mail.html.contains(&format!("href=\"{url}\"")));
+        assert!(mail.text.ends_with(url));
+        assert!(install_mail("https://web.example.invalid/?key=private").is_none());
     }
 
     #[test]

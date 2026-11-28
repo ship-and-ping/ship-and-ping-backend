@@ -21,6 +21,9 @@ import { Connect } from "./Connect";
 import { Account } from "./Account";
 import { AppSettings } from "./AppSettings";
 import { deviceLogoutNotice } from "./LogoutButton";
+import { InstallEntry, InstallGuide, PhoneHandoff } from "./InstallGuide";
+import { finishedSetup, PushSetup } from "./PushSetup";
+import { standalone } from "./push";
 
 function useApps(api: Gateway) {
   const [apps, setApps] = useState<AppSummary[]>();
@@ -212,6 +215,7 @@ function Register({
   return (
     <div className="narrow">
       <h1 tabIndex={-1}>앱 등록</h1>
+      <InstallEntry/>
       <p>등록하면 코딩 AI에 붙여넣을 연결 요청문을 드려요.</p>
       {loadError ? (
         <LoadError retry={retry} />
@@ -347,6 +351,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
       prev.current = pathname;
     }
   }, [pathname]);
+  if (pathname === "/install") return <InstallGuide/>;
   if (error)
     return (
       <main>
@@ -358,6 +363,8 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     return <main role="status">로그인 상태를 확인하는 중</main>;
   return (
     <Routes>
+      <Route path="/phone-setup" element={!user ? <Navigate replace to="/login"/> :
+        finishedSetup(user) ? <Navigate replace to="/apps"/> : <PushSetup key={user} api={api} member={user}/>}/>
       <Route path="/login/approve" element={<LoginApproval api={api} user={user ?? null}/>}/>
       <Route path="/signup" element={user ? <AfterLogin api={api}/> : <AuthPage api={api} mode="signup"/>}/>
       <Route path="/forgot-password" element={<AuthPage api={api} mode="forgot"/>}/>
@@ -371,7 +378,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
       />
       <Route
         path="/login"
-        element={user ? <AfterLogin api={api} /> : <>
+        element={user ? standalone() && !finishedSetup(user) ? <Navigate replace to="/phone-setup"/> : <AfterLogin api={api} /> : <>
           {notice && <p className="panel" role="status">
             <strong>{notice}</strong>{notice === "로그아웃했어요" && " 이 기기에서 푸시를 다시 받으려면 로그인한 뒤 알림 설정에서 켜 주세요."}
           </p>}
@@ -388,6 +395,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
             >
               <Routes>
                 <Route index element={<Apps api={api} />} />
+                <Route path="phone" element={<PhoneHandoff api={api}/>}/>
                 <Route path=":id/settings" element={<AppSettings api={api}/>}/>
                 <Route path="notifications" element={<Notifications api={api} origin={ingest} />} />
                 <Route path=":id/notifications" element={<Notifications api={api} origin={ingest} />} />

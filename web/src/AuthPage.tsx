@@ -5,6 +5,8 @@ import { Hero, PublicBar } from "./Layout";
 import { displayText } from "./normalize";
 import { LoginWaiting } from "./LoginApproval";
 import { remember, remembered } from "./login-requests";
+import { OtpLogin } from "./OtpLogin";
+import { standalone } from "./push";
 
 type Mode = "login" | "signup" | "forgot" | "reset" | "account";
 const titles = {
@@ -207,6 +209,7 @@ export function AuthPage({ api, mode, recovery = false, expired }: { api: Gatewa
       <div className="even">
         <Hero title="내 앱, 지금도 괜찮을까요?" detail="앱이 어디서 막혔는지 쉽앤핑이 지켜보고 알려 드려요."/>
         <section className="panel">
+          {mode === "login" && standalone() && <OtpLogin api={api}/>}
           {mode === "login" && <h2>로그인</h2>}
           {mode === "reset" && !recovery ? <p role="alert">링크가 만료됐거나 이미 사용됐어요. 새 링크를 받아 주세요.</p>
             : <AuthForm key={mode} api={api} mode={mode} expired={expired}/>}

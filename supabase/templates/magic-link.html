@@ -1,3 +1,10 @@
+{{ if eq .RedirectTo (printf "%s/install" .SiteURL) }}
+<!doctype html><html lang="ko"><meta charset="utf-8"><title>쉽앤핑 로그인 코드</title>
+<body style="font-family:system-ui,sans-serif;color:#261b40;padding:24px"><h1>홈 화면 앱 로그인</h1>
+<p>홈 화면의 쉽앤핑으로 돌아가 아래 6자리 코드를 입력해 주세요.</p>
+<p style="font-size:32px;font-weight:bold;letter-spacing:4px">{{ .Token }}</p>
+<p>이 코드는 한 번만 사용할 수 있어요. 다른 사람에게 알려 주지 마세요.</p></body></html>
+{{ else }}
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>쉽앤핑 로그인 링크예요</title></head>
 <body style="margin:0;background:#FAF9FC;color:#1E1535;font-family:Arial,sans-serif;word-break:keep-all">
@@ -22,3 +29,4 @@
 </td></tr><tr><td style="padding:0 24px 20px;color:#5D5673;font-size:13px">쉽앤핑 · 내 앱을 대신 지켜보는 모니터링</td></tr>
 </table></td></tr></table>
 </body></html>
+{{ end }}

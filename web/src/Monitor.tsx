@@ -2,6 +2,7 @@ import { errorKind, errorName, stepName } from "./normalize";
 import { useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { Copy } from "./Connect";
+import { InstallBanner } from "./InstallGuide";
 import { status, StatusBadge, Timeline, IssueListItem } from "./IncidentSummary";
 import type { Gateway } from "./data";
 import { Hero, CurrentAppName } from "./Layout";
@@ -195,6 +196,7 @@ function MonitorPage({
     }} />;
   return (
     <div className="monitor">
+      {!feature && !issue && <InstallBanner key={id} api={api} app={id}/>}
       {error && <p className="refresh-error" role="alert">새 기록을 불러오지 못했어요. 마지막으로 확인한 내용이에요. {issue && <button onClick={retry}>다시 불러오기</button>}</p>}
       {(feature || issue) && (
         <Link to={base}>{displayText(data.name)} 홈으로</Link>
