@@ -1,13 +1,25 @@
+-- Commit one workload feature so the second connection can ingest into it.
+select gen_random_uuid() load_owner \gset
+begin;
+create extension if not exists dblink with schema extensions;
+insert into auth.users(id) values (:'load_owner');
+insert into public.apps(id,owner_id,name) values (:'load_owner',:'load_owner','load');
+insert into public.features(app_id,kind,method,route,name,last_record_at)
+ values (:'load_owner','auto','GET','/f/1','feature-1',now());
+insert into public.app_keys(app_id,kind,prefix,key_hash) values (:'load_owner','srv','load',repeat('a',64));
+commit;
+-- Keep the cleanup after ROLLBACK reachable even when a timed statement fails.
+\set ON_ERROR_STOP off
 begin;
 create extension if not exists pgtap with schema extensions;
-create extension if not exists dblink with schema extensions;
 set search_path=public,extensions;
 select plan(7);
-insert into auth.users(id) select gen_random_uuid() from generate_series(1,20);
+insert into auth.users(id) select gen_random_uuid() from generate_series(1,19);
 insert into apps(owner_id,name)
- select id,'load' from auth.users;
+ select id,'load' from auth.users where id<>:'load_owner';
 insert into features(app_id,kind,method,route,name)
- select id,'auto','GET','/f/'||n,'feature-'||n from apps cross join generate_series(1,15) n;
+ select id,'auto','GET','/f/'||n,'feature-'||n from apps cross join generate_series(1,15) n
+ where id<>:'load_owner' or n<>1;
 insert into app_versions(app_id,version) select id,'v1' from apps;
 insert into stats_5m
  select app_id,id,'v1',date_bin('5 minutes',now(),'epoch')-n*interval '5 minutes',5,0,0,5*(60+n%40),
@@ -29,22 +41,15 @@ analyze private.request_flow_seconds;
 analyze private.evaluation_buckets;
 analyze features;
 analyze stats_5m;
--- A committed feature lets a separate connection ingest into the same app
--- that the cold evaluator will refresh. Keep its write locks until after evaluation.
 \getenv db_test_password PGPASSWORD
 select format('hostaddr=%s port=%s dbname=%L user=%L password=%L',inet_server_addr(),inet_server_port(),current_database(),current_user,:'db_test_password') as db_test_connection \gset
 select dblink_connect('load_writer',:'db_test_connection');
 select dblink_exec('load_writer',$$set lock_timeout='1s'$$);
-select gen_random_uuid() load_owner \gset
-select dblink_exec('load_writer',format('insert into auth.users(id) values (%L)',:'load_owner'));
-select dblink_exec('load_writer',format('insert into public.apps(id,owner_id,name) values (%1$L,%1$L,''overlap'')',:'load_owner'));
-select dblink_exec('load_writer',format('insert into public.features(app_id,kind,method,route,name) values (%L,''auto'',''GET'',''/overlap'',''overlap'')',:'load_owner'));
-select dblink_exec('load_writer',format('insert into public.app_keys(app_id,kind,prefix,key_hash) values (%L,''srv'',''load'',repeat(''a'',64))',:'load_owner'));
 select dblink_exec('load_writer','begin');
 select is((result->>'accepted')::int,1,'second session has an uncommitted ingest batch')
  from dblink('load_writer',format('select public.ingest_batch(repeat(''a'',64),%L::jsonb)',jsonb_build_object(
- 'batch_id',gen_random_uuid(),'app_version','v1','platform','server','stats',jsonb_build_array(jsonb_build_object(
- 'method','GET','route','/overlap','bucket',date_bin('5 minutes',now(),'epoch'),'total',1,'failures',0,
+ 'batch_id',gen_random_uuid(),'app_version','concurrent','platform','server','stats',jsonb_build_array(jsonb_build_object(
+ 'method','GET','route','/f/1','bucket',date_bin('5 minutes',now(),'epoch'),'total',1,'failures',0,
  'client_errors',0,'duration_sum_ms',1,'hist',array[1]||array_fill(0,array[15])))))) as w(result jsonb);
 create function pg_temp.measure() returns numeric language plpgsql as $$
 declare started timestamptz := clock_timestamp();
@@ -57,10 +62,9 @@ set local statement_timeout='8s';
 set local lock_timeout='1s';
 insert into times(cold) select pg_temp.measure();
 select ok(cold<8000,'cold evaluation completes within the RPC deadline during ingest') from times;
-select ok(exists(select from baselines b join features f on f.id=b.feature_id where f.app_id=:'load_owner'),
+select ok(exists(select from baselines b join features f on f.id=b.feature_id where f.app_id=:'load_owner' and f.route='/f/1' and b.sample_count=10065),
  'cold evaluation refreshed the app held by the writer');
 select dblink_exec('load_writer','rollback');
-select dblink_disconnect('load_writer');
 select is((select count(*) from baselines where p50_ms is not null and sample_count=10065),300::bigint,'seven-day baselines exclude three current buckets');
 update private.latency_baselines set computed_at=now()-interval '1 minute' where n=0;
 update times set warm=pg_temp.measure();
@@ -72,5 +76,7 @@ do $$ begin raise warning 'evaluate_all 300 features x 2016 buckets: cold % ms, 
 select is((select count(*) from incidents),0::bigint,'healthy traffic stays quiet');
 select * from finish();
 rollback;
--- The extension was installed inside the rolled-back test transaction.
+\set ON_ERROR_STOP on
+select extensions.dblink_disconnect('load_writer')
+ where 'load_writer'=any(extensions.dblink_get_connections());
 delete from auth.users where id=:'load_owner';
