@@ -2,8 +2,8 @@ import { registerHooks } from "node:module";
 import { writeFile } from "node:fs/promises";
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "./normalize" && context.parentURL.endsWith("/domain.ts"))
-      return next("./normalize.ts", context);
+    if (["./normalize", "./server-prompt"].includes(specifier) && context.parentURL.endsWith("/domain.ts"))
+      return next(specifier + ".ts", context);
     return next(specifier, context);
   },
 });
