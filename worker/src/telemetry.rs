@@ -33,6 +33,7 @@ fn label(value: &Value, max: usize) -> bool {
     }
     let mut offset = 0;
     let mut short_run = 0;
+    let mut digit_groups = 0;
     for word in s.split([' ', '-']) {
         let suffix = &s[offset..];
         if !WORD.is_match(word)
@@ -42,13 +43,16 @@ fn label(value: &Value, max: usize) -> bool {
             return false;
         }
         // Consecutive small groups can be a single opaque token split for display.
-        if word.len() <= 4 && word.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        let has_digit = word.bytes().any(|b| b.is_ascii_digit());
+        if word.bytes().all(|b| b.is_ascii_alphanumeric()) && (word.len() <= 4 || has_digit) {
             short_run += word.len();
-            if short_run >= 16 {
+            digit_groups += usize::from(has_digit);
+            if short_run >= 16 || (short_run >= 12 && digit_groups >= 3) {
                 return false;
             }
         } else {
             short_run = 0;
+            digit_groups = 0;
         }
         let mut candidate = String::new();
         for fragment in suffix.split(' ') {
@@ -186,6 +190,10 @@ mod tests {
             "Ｂｅａｒｅｒ abc",
             "abcdefghijklmnop",
             "abcd efgh ijkl mnop",
+            "a8Kd 9fQ2 xL7p",
+            "a8Kd f9Q2 xL7p",
+            "a8KdR xL7pQ t4ZmN j6VaH",
+            "a8KdR-xL7pQ-t4ZmN-j6VaH",
             "ab12cd34ef56gh78",
         ] {
             for payload in [
