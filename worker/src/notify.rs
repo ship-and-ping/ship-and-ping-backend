@@ -176,7 +176,9 @@ fn metric_summary(n: &Notice) -> String {
 
 fn context(n: &Notice) -> String {
     let feature = feature_name(n);
-    let label = if n.is_overflow {
+    let label = if n.kind.as_deref() == Some("silent") {
+        "앱 전체"
+    } else if n.is_overflow {
         "기타 (따로 지켜보지 않는 기능 묶음)"
     } else {
         &feature
@@ -255,6 +257,9 @@ fn single_notice(n: &Notice, origin: Option<&str>) -> MailContent {
         Some(app) => format!("[쉽앤핑] {app} · {title}"),
     };
     let advice = match n.event.as_str() {
+        "open" if n.kind.as_deref() == Some("silent") => {
+            "앱의 서버와 기록 전송 상태를 확인해 주세요."
+        }
         "open" | "worse" => "자세히 보기에서 AI에게 고쳐 달라고 할 요청문을 복사할 수 있어요.",
         "resolved" => "따로 하실 일은 없어요.",
         _ => "",

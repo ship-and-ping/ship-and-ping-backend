@@ -350,6 +350,29 @@ fn ingest_http_statuses() {
         batch["app_version"] = json!(version);
         assert_eq!(send(key, &batch.to_string()).0, status, "{version}");
     }
+    for (auth, body, expected) in [
+        (key, json!({"framework":"Spring"}), "202"),
+        ("", json!({"framework":"Spring"}), "401"),
+        (key, json!({"metrics":"https://example.test"}), "400"),
+        (key, json!({"unknown":1}), "400"),
+    ] {
+        let response = Command::new("curl")
+            .args([
+                "--silent",
+                "--output",
+                if cfg!(windows) { "NUL" } else { "/dev/null" },
+                "--write-out",
+                "%{http_code}",
+                "--header",
+                &format!("Authorization: {auth}"),
+                "--json",
+                &body.to_string(),
+                &format!("http://{dry_addr}/v1/profile"),
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8(response.stdout).unwrap(), expected);
+    }
     let feature = |data: &str| {
         let result = Command::new("curl")
             .args([

@@ -133,6 +133,7 @@ declare
   duplicate boolean := exists(select from public.ingest_batches b where b.app_id=k.app_id and b.batch_id=(payload->>'batch_id')::uuid);
   result jsonb := private.ingest_before_resources(app_key_hash,payload);
   received timestamptz := clock_timestamp();
+  sampled boolean;
   item jsonb;
   feature uuid;
   version_name text := trim(payload->>'app_version');
@@ -143,6 +144,8 @@ begin
       or private.valid_resources(payload->'resources') is not true then
       raise exception 'invalid resources' using errcode='22023';
     end if;
+    select exists(select from public.server_minutes m where m.app_id=k.app_id
+      and m.bucket=date_trunc('minute',received) and m.resources is not null) into sampled;
   end if;
   if (result->>'accepted')::int>0 or payload ? 'resources' then
     insert into public.server_minutes as m(app_id,bucket,last_received,version,resources)
@@ -151,7 +154,11 @@ begin
       resources=coalesce(m.resources,excluded.resources);
   end if;
   if payload ? 'resources' then
-    result := jsonb_set(result,'{accepted}',to_jsonb((result->>'accepted')::int+1));
+    if sampled then
+      result := jsonb_set(result,'{dropped}',to_jsonb((result->>'dropped')::int+1));
+    else
+      result := jsonb_set(result,'{accepted}',to_jsonb((result->>'accepted')::int+1));
+    end if;
     update public.apps set first_record_at=received where id=k.app_id and first_record_at is null;
   end if;
   for item in select value from jsonb_array_elements(payload->'stats')

@@ -24,7 +24,11 @@ select ok(not private.valid_resources('{"gc_pause_ms":-1}') and not private.vali
 insert into server_minutes select id,date_trunc('hour',now())-interval '1 day'
  -case right(id::text,1) when '2' then interval '6 hours' else interval '0' end,
  now()-interval '1 day','v1','{"mem_used_pct":81}' from apps;
-insert into server_minutes select id,date_trunc('minute',now()-interval '10 minutes'),now()-interval '10 minutes','v1',null from apps;
+insert into server_minutes select id,date_trunc('minute',now()-interval '9 minutes 59 seconds'),now()-interval '9 minutes 59 seconds','v1',null from apps;
+select evaluate_silence();
+select is((select count(*) from incidents where kind='silent'),0::bigint,'nine minutes and 59 seconds cannot open an incident');
+update server_minutes set bucket=date_trunc('minute',now()-interval '10 minutes'),last_received=now()-interval '10 minutes'
+  where last_received=now()-interval '9 minutes 59 seconds';
 select evaluate_silence();
 select evaluate_silence();
 select is((select count(*) from incidents where kind='silent'),1::bigint,'opens once at ten minutes only during a historically active hour');
@@ -37,7 +41,8 @@ select is((select ingest_batch(repeat('1',64),payload)->>'accepted' from batch),
 select is((select ingest_batch(repeat('1',64),payload)->>'accepted' from batch),'0','retry ignored');
 select is((select status from incidents),'resolved','heartbeat resolves without release change');
 select is((select count(*) from notifications where event='resolved'),1::bigint,'one recovery notification');
-select ingest_batch(repeat('1',64),payload||jsonb_build_object('batch_id',gen_random_uuid(),'resources','{"process_cpu_pct":99}'::jsonb)) from batch;
+select is((select ingest_batch(repeat('1',64),payload||jsonb_build_object('batch_id',gen_random_uuid(),
+ 'resources','{"process_cpu_pct":99}'::jsonb))->>'dropped' from batch),'1','excess minute sample reported as dropped');
 select is((select resources->>'process_cpu_pct' from server_minutes where resources ? 'process_cpu_pct'),'0','second resource sample cannot overwrite first');
 create temporary table timed_batch as select payload || jsonb_build_object('batch_id',gen_random_uuid(),
  'stats',jsonb_build_array(jsonb_build_object('method','GET','route','/status','total',2,'failures',0,'client_errors',0,
@@ -62,6 +67,9 @@ set local request.jwt.claim.sub='00000000-0000-0000-0000-000000005402';
 select is((select count(*) from app_profiles),0::bigint,'other profile hidden');
 delete from app_profiles;
 select is((select count(*) from server_hours),1::bigint,'only own hourly row visible');
+select is((select count(*) from feature_timing_5m),0::bigint,'other feature timing is hidden');
+select is((select peaks->>'steal_pct' from server_series('00000000-0000-0000-0000-000000005402',
+ now()-interval '9 days',now()-interval '7 days',1)),'3','owner reads an hourly peak');
 select is((select count(*) from server_series('00000000-0000-0000-0000-000000005401',now()-interval '9 days',now(),1)),0::bigint,'cross-app series hidden');
 select is((select count(*) from server_minutes where right(app_id::text,1)='1'),0::bigint,'cross-app minutes hidden');
 set local request.jwt.claim.sub='00000000-0000-0000-0000-000000005401';

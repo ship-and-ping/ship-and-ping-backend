@@ -3,7 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const serverMetrics = [
   ["process_cpu_pct","프로세스 CPU","%"], ["system_cpu_pct","서버 CPU","%"],
   ["steal_pct","CPU 대기 (steal)","%"], ["mem_used_pct","메모리 사용률","%"],
-  ["gc_pause_ms","GC 정지 시간","ms"],
+  ["gc_pause_ms","GC 정지 시간","ms"], ["event_loop_lag_ms","이벤트 루프 지연","ms"],
+  ["busy_threads","사용 중인 스레드","개"], ["db_pool_in_use","사용 중인 DB 연결","개"],
+  ["db_pool_max","DB 연결 상한","개"],
 ] as const;
 export type Peaks = Partial<Record<string, number>>;
 export type ServerSlot = {slot: number; peaks: Peaks};
