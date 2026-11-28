@@ -7,6 +7,7 @@ import {
 } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Sheep } from "./Sheep";
+import { LogoutButton } from "./LogoutButton";
 export { Landing } from "./Landing";
 import { displayText } from "./normalize";
 import mark from "./assets/wordmark.png";
@@ -78,11 +79,9 @@ export function Shell({
   onLogout,
 }: {
   children: ReactNode;
-  onLogout: () => Promise<void>;
+  onLogout: (deviceOnly?: boolean) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState(false);
-  const [busy, setBusy] = useState(false);
   const { pathname, hash: currentHash } = useLocation();
   const appPath = pathname.match(/^\/apps\/([^/]+)(?:\/(?:features\/[^/]+|issues\/[^/]+|notifications))?\/?$/);
   const dashboard = appPath && !["new","notifications"].includes(appPath[1]) && !pathname.endsWith("/features/deep");
@@ -155,25 +154,7 @@ export function Shell({
           <Link onClick={() => setOpen(false)} to={currentName && heading ? "/apps/"+heading.id+"/notifications" : "/apps/notifications"} aria-current={pathname.endsWith("/notifications") ? "page" : undefined}>알림 설정</Link>
           {currentName && heading && <Link to={"/apps/"+heading.id+"/settings"} aria-current={pathname.endsWith("/settings")?"page":undefined} onClick={()=>setOpen(false)}>앱 설정</Link>}
           <Link to="/account" aria-current={pathname==="/account"?"page":undefined} onClick={()=>setOpen(false)}>내 계정</Link>
-          <button
-            className="secondary"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await onLogout();
-              } catch {
-                setError(true);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {busy ? "로그아웃하는 중" : "로그아웃"}
-          </button>
-          {error && (
-            <p role="alert">로그아웃하지 못했어요. 다시 시도해 주세요.</p>
-          )}
+          <LogoutButton logout={onLogout} />
         </nav>
       </aside>
       {dashboard && <nav className="dashboard-tabs" aria-label="대시보드 메뉴">

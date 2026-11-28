@@ -14,7 +14,7 @@ select connect_slack(current_setting('test.app')::uuid,'fixture','#fixture','T/C
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000061',true);
 select is(notification_settings(current_setting('test.app')::uuid),
- '{"connected":true,"channel":"#fixture","email":false,"broken":false}'::jsonb,'safe settings only');
+ '{"connected":true,"channel":"#fixture","email":false,"broken":false,"push":true,"subscribed":false}'::jsonb,'safe settings only');
 select ok(queue_test_notification(current_setting('test.app')::uuid),'first test queued');
 select ok(not queue_test_notification(current_setting('test.app')::uuid),'second test in the same minute denied');
 select set_config('test.ticket',start_slack_state(current_setting('test.app')::uuid)::text,true);

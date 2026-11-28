@@ -1,6 +1,10 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { gateway } from "./data";
+
+const {webcrypto,hash} = await vi.importActual<{
+  webcrypto: Crypto; hash(algorithm: string, input: string): string;
+}>("node:crypto");
 
 it.each([429, 503])("승인 요청 생성이 %s여도 일반 메일 로그인과 가입을 계속한다", async status => {
   const auth = {
@@ -231,4 +235,346 @@ it("화면 구독 전 도착한 복구 이벤트를 한 번만 다시 전달한�
   } finally {
     history.replaceState(null, "", original);
   }
+});
+
+afterEach(() => {
+  localStorage.removeItem("ship-ping-push-cleanup");
+  localStorage.removeItem("ship-ping-browser-push");
+  localStorage.removeItem("ship-ping-last-member");
+});
+
+function pushFixture() {
+  vi.stubGlobal("crypto",webcrypto);
+  const endpoint = "https://web.push.apple.com/shared";
+  const close = vi.fn();
+  const unsubscribe = vi.fn(async () => true);
+  const keys = {p256dh:"fixture-key",auth:"fixture-auth"};
+  const sub = {endpoint,toJSON:() => ({keys}),unsubscribe};
+  const postMessage = vi.fn((_command: string, [reply]: MessagePort[]) => reply.postMessage(true));
+  const registration = {active:{postMessage},getNotifications:async () => [{close}],pushManager:{getSubscription:vi.fn(async ():Promise<typeof sub | null> => sub)}};
+  // A restarted fixture receives a new lock manager, as after the previous
+  // browser context was destroyed while a cleanup promise was outstanding.
+  let queue = Promise.resolve();
+  const request = vi.fn((_name: string, action: () => Promise<void>) => {
+    const result = queue.then(action);
+    queue = result.catch(() => {});
+    return result;
+  });
+  vi.stubGlobal("navigator",{locks:{request},serviceWorker:{getRegistration:async () => registration}});
+  const abortSignal = vi.fn().mockResolvedValue({data:"owned",error:null});
+  const rpc = vi.fn<(name:string,params:Record<string,unknown>) => {abortSignal:typeof abortSignal,data:string}>()
+    .mockReturnValue({abortSignal,data:"device"});
+  const signOut = vi.fn().mockResolvedValue({error:null});
+  const revoke = vi.fn().mockResolvedValue({error:null});
+  type Listener = (event:string,session:{user:{id:string}} | null)=>void;
+  const onAuthStateChange = vi.fn<(fn:Listener) => {data:{subscription:{unsubscribe:()=>void}}}>()
+    .mockReturnValue({data:{subscription:{unsubscribe:vi.fn()}}});
+  const getSession = vi.fn().mockResolvedValue({data:{session:{user:{id:"former"},access_token:"fixture"}}});
+  const reload = () => gateway({rpc,auth:{onAuthStateChange,signOut,getSession,admin:{signOut:revoke}}} as unknown as SupabaseClient);
+  const restartLocks = () => { queue = Promise.resolve(); };
+  const proof = hash("sha256",[endpoint,keys.p256dh,keys.auth].join("\n"));
+  return {api:reload(),reload,restartLocks,request,sub,registration,abortSignal,rpc,close,signOut,revoke,getSession,onAuthStateChange,proof};
+}
+
+it.each(["success","server offline","browser failure","both offline","deleted account"])("ends the local session after push cleanup (%s)", async reason => {
+  const {api,sub,proof,rpc,abortSignal,close,signOut,revoke} = pushFixture();
+  if (reason === "server offline" || reason === "both offline") abortSignal.mockResolvedValueOnce({data:"owned"}).mockRejectedValue(Error("offline"));
+  if (reason === "browser failure" || reason === "both offline") sub.unsubscribe.mockRejectedValue(Error("browser unavailable"));
+  if (reason === "deleted account") abortSignal.mockResolvedValue({data:"missing"});
+  try {
+    await api.logout({accountDeleted:reason === "deleted account"});
+    expect(rpc).toHaveBeenCalledWith("cleanup_push_target",{p_member:"former",p_endpoint:sub.endpoint,proof,p_remove:false});
+    expect(sub.unsubscribe).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    expect(signOut).toHaveBeenCalledExactlyOnceWith({scope:"local"});
+    expect(revoke).toHaveBeenCalledExactlyOnceWith("fixture","local");
+    expect(revoke.mock.invocationCallOrder[0]).toBeGreaterThan(sub.unsubscribe.mock.invocationCallOrder[0]);
+    expect(signOut.mock.invocationCallOrder[0]).toBeGreaterThan(revoke.mock.invocationCallOrder[0]);
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it.each([false,true])("server revocation failure preserves the local session (withdrawal %s)", async accountDeleted => {
+  const {api,abortSignal,revoke,signOut} = pushFixture();
+  abortSignal.mockRejectedValue(Error("offline"));
+  revoke.mockResolvedValueOnce({error:{code:"bad_jwt"}});
+  try {
+    await expect(api.logout({accountDeleted})).rejects.toMatchObject({code:"bad_jwt"});
+    expect(signOut).not.toHaveBeenCalled();
+    await api.logout({accountDeleted});
+    expect(revoke).toHaveBeenCalledTimes(2);
+    expect(signOut).toHaveBeenCalledOnce();
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it("auth-js emits SIGNED_OUT only after a successful logout response on retry", async () => {
+  const storageKey = "test-logout-session";
+  localStorage.setItem(storageKey,JSON.stringify({
+    access_token:"fixture", refresh_token:"fixture-refresh", expires_at:Math.floor(Date.now()/1000)+3600,
+    user:{id:"former"},
+  }));
+  let available = false;
+  const events: string[] = [];
+  const client = createClient("https://auth.example.invalid","publishable-fixture",{
+    auth:{storageKey,storage:localStorage,autoRefreshToken:false,detectSessionInUrl:false},
+    global:{fetch:async (input,init) => {
+      expect(String(input)).toBe("https://auth.example.invalid/auth/v1/logout?scope=local");
+      expect(init?.method).toBe("POST");
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer fixture");
+      events.push(available ? "revoked" : "failed");
+      return available ? new Response(null,{status:204}) : new Response("{}",{status:503});
+    }},
+  });
+  const api = gateway(client);
+  const {data} = client.auth.onAuthStateChange(event => { if (event === "SIGNED_OUT") events.push(event); });
+  try {
+    await expect(api.logout()).rejects.toBeTruthy();
+    expect(events).toEqual(["failed"]);
+    expect(await api.session()).toBe("former");
+    available = true;
+    await api.logout();
+    expect(events.indexOf("SIGNED_OUT")).toBeGreaterThan(events.indexOf("revoked"));
+    expect(await api.session()).toBeNull();
+  } finally {
+    data.subscription.unsubscribe();
+    localStorage.removeItem(storageKey);
+  }
+});
+
+it("explicit device logout succeeds offline after the SDK clears local storage", async () => {
+  const {api,revoke,signOut,getSession} = pushFixture();
+  signOut.mockImplementationOnce(async () => {
+    getSession.mockResolvedValue({data:{session:null}});
+    return {error:Error("offline")};
+  });
+  try {
+    await api.logout({deviceOnly:true});
+    expect(revoke).not.toHaveBeenCalled();
+    expect(signOut).toHaveBeenCalledExactlyOnceWith({scope:"local"});
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it.each(["former","next"])("locks before forced sign-out and requests cleanup on next login as %s", async member => {
+  const {api,reload,registration,abortSignal,signOut,getSession,onAuthStateChange,rpc} = pushFixture();
+  const post = registration.active.postMessage;
+  abortSignal.mockRejectedValue(Error("offline"));
+  try {
+    post.mockImplementationOnce((_command, [port]) => port.postMessage(false));
+    await expect(api.logout({deviceOnly:true})).rejects.toThrow();
+    expect(signOut).not.toHaveBeenCalled();
+    await api.logout({deviceOnly:true});
+    expect(post.mock.calls.map(([command]) => command)).toEqual(["lock-push","lock-push"]);
+    expect(signOut.mock.invocationCallOrder[0]).toBeGreaterThan(post.mock.invocationCallOrder[1]);
+    getSession.mockResolvedValue({data:{session:{user:{id:member}}}});
+    const stop = reload().listen(vi.fn());
+    try {
+      onAuthStateChange.mock.calls[0][0]("INITIAL_SESSION",{user:{id:member}});
+      await vi.waitFor(() => expect(post.mock.calls.map(([command]) => command)).toContain("recover-push"));
+      expect(rpc.mock.calls.map(([name]) => name)).not.toContain("register_push");
+    } finally { stop(); }
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it("closes displayed notifications even without a subscription", async () => {
+  const {api,registration,close,signOut} = pushFixture();
+  registration.pushManager.getSubscription.mockResolvedValue(null);
+  try {
+    await api.logout();
+    expect(close).toHaveBeenCalledOnce();
+    expect(signOut).toHaveBeenCalledOnce();
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it("ignores a delayed sign-in after device logout and retries recovery before opt-in", async () => {
+  const {api,registration,getSession,onAuthStateChange} = pushFixture();
+  const post = registration.active.postMessage;
+  const stop = api.listen(vi.fn());
+  const emit = onAuthStateChange.mock.calls[0][0];
+  try {
+    await api.logout({deviceOnly:true});
+    getSession.mockResolvedValue({data:{session:null}});
+    emit("SIGNED_IN",{user:{id:"former"}});
+    await vi.waitFor(() => expect(getSession.mock.calls.length).toBeGreaterThan(1));
+    expect(post.mock.calls.map(([command]) => command)).toEqual(["lock-push"]);
+    getSession.mockResolvedValue({data:{session:{user:{id:"next"}}}});
+    const enable = vi.fn();
+    post.mockImplementationOnce((_command, [port]) => port.postMessage(false));
+    await expect(api.withPushRegistration(enable)).rejects.toThrow();
+    expect(enable).not.toHaveBeenCalled();
+    await api.withPushRegistration(enable);
+    expect(post.mock.calls.map(([command]) => command)).toEqual(["lock-push","recover-push","recover-push"]);
+    expect(enable).toHaveBeenCalledOnce();
+  } finally { stop(); vi.unstubAllGlobals(); }
+});
+
+it.each(["SIGNED_IN","INITIAL_SESSION"])("discards the previous member's subscription on a live switch or redirect (%s)", async event => {
+  const {api,sub,rpc,proof,close,onAuthStateChange} = pushFixture();
+  localStorage.setItem("ship-ping-last-member","former");
+  const stop = api.listen(vi.fn());
+  const emit = onAuthStateChange.mock.calls[0][0];
+  try {
+    emit(event,{user:{id:"next"}});
+    await vi.waitFor(() => expect(sub.unsubscribe).toHaveBeenCalledOnce());
+    expect(rpc).toHaveBeenLastCalledWith("cleanup_push_target",{p_member:"former",p_endpoint:sub.endpoint,proof,p_remove:true});
+    expect(close).toHaveBeenCalledOnce();
+    emit("SIGNED_IN",{user:{id:"next"}});
+    expect(sub.unsubscribe).toHaveBeenCalledOnce();
+    expect(localStorage.getItem("ship-ping-last-member")).toBe("next");
+  } finally { stop(); localStorage.removeItem("ship-ping-last-member"); vi.unstubAllGlobals(); }
+});
+
+it.each(["pending RPC","RPC error","pending unsubscribe","unsubscribe false"])("resumes interrupted account cleanup on startup (%s)", async phase => {
+  const {api,reload,restartLocks,sub,registration,rpc,proof,abortSignal,onAuthStateChange} = pushFixture();
+  const key = "ship-ping-last-member";
+  const marker = "ship-ping-push-cleanup";
+  localStorage.setItem(key,"former");
+  if (phase === "pending RPC" || phase === "RPC error") abortSignal.mockResolvedValueOnce({data:"owned"});
+  if (phase === "pending RPC") abortSignal.mockImplementationOnce(() => new Promise(() => {}));
+  if (phase === "RPC error") abortSignal.mockResolvedValueOnce({error:Error("offline")});
+  if (phase === "pending unsubscribe") sub.unsubscribe.mockImplementationOnce(() => new Promise(() => {}));
+  if (phase === "unsubscribe false") sub.unsubscribe.mockResolvedValueOnce(false);
+  const session = {user:{id:"next"}};
+  const stop = api.listen(vi.fn());
+  try {
+    onAuthStateChange.mock.calls[0][0]("SIGNED_IN",session);
+    expect(localStorage.getItem(marker)).toBeTruthy();
+    await vi.waitFor(() => expect(sub.unsubscribe).toHaveBeenCalledOnce());
+    expect(localStorage.getItem(key)).toBe("former");
+    expect(JSON.parse(localStorage.getItem(marker)!)).toMatchObject({member:"former",endpoint:sub.endpoint,proof});
+    stop();
+    restartLocks();
+    if (phase === "pending RPC" || phase === "RPC error") registration.pushManager.getSubscription.mockResolvedValue(null);
+    // Returning to the recorded account must also honor an outstanding marker.
+    const restart = reload().listen(vi.fn());
+    try {
+      const restored = phase === "RPC error" ? "former" : "next";
+      onAuthStateChange.mock.calls[1][0]("INITIAL_SESSION",{user:{id:restored}});
+      await vi.waitFor(() => expect(localStorage.getItem(marker)).toBeNull());
+      expect(localStorage.getItem(key)).toBe(restored);
+      expect(rpc).toHaveBeenLastCalledWith("cleanup_push_target",{p_member:"former",p_endpoint:sub.endpoint,proof,p_remove:true});
+      expect(sub.unsubscribe).toHaveBeenCalledTimes(phase === "pending RPC" || phase === "RPC error" ? 1 : 2);
+    } finally { restart(); }
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it("keeps an existing subscription on a page reload in the same session", () => {
+  const {api,registration,onAuthStateChange,rpc} = pushFixture();
+  localStorage.setItem("ship-ping-last-member","same");
+  const stop = api.listen(vi.fn());
+  try {
+    onAuthStateChange.mock.calls[0][0]("INITIAL_SESSION",{user:{id:"same"}});
+    expect(registration.pushManager.getSubscription).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  } finally { stop(); localStorage.removeItem("ship-ping-last-member"); vi.unstubAllGlobals(); }
+});
+
+it("serializes a second tab's delayed cleanup with opt-in and preserves the new owner's identical endpoint", async () => {
+  const {api,reload,request,sub,proof,abortSignal,rpc,onAuthStateChange} = pushFixture();
+  let release!: () => void;
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  const second = reload();
+  const stop = second.listen(vi.fn());
+  let owner = "former";
+  abortSignal.mockImplementation(async () => ({data:owner === "former" ? "owned" : "other"}));
+  const started = vi.fn();
+  try {
+    const registering = api.withPushRegistration(async () => {
+      started();
+      await hold;
+      owner = "next";
+    });
+    await vi.waitFor(() => expect(started).toHaveBeenCalledOnce());
+    localStorage.setItem("ship-ping-last-member","former");
+    localStorage.setItem("ship-ping-push-cleanup",JSON.stringify({member:"former",endpoint:sub.endpoint,proof}));
+    onAuthStateChange.mock.calls[0][0]("SIGNED_IN",{user:{id:"next"}});
+    expect(request.mock.calls.map(call => call[0])).toEqual(["ship-and-ping-push","ship-and-ping-push"]);
+    expect(rpc).not.toHaveBeenCalled();
+    release();
+    await registering;
+    await vi.waitFor(() => expect(localStorage.getItem("ship-ping-push-cleanup")).toBeNull());
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("cleanup_push_target",{p_member:"former",p_endpoint:sub.endpoint,proof,p_remove:false});
+    expect(sub.unsubscribe).not.toHaveBeenCalled();
+    expect(localStorage.getItem("ship-ping-last-member")).toBe("next");
+  } finally { release(); stop(); vi.unstubAllGlobals(); }
+});
+
+it("retries an outstanding deletion on same-tab opt-in before starting registration", async () => {
+  const {api,registration,sub,abortSignal,onAuthStateChange,request} = pushFixture();
+  const action = vi.fn();
+  localStorage.setItem("ship-ping-last-member","former");
+  sub.unsubscribe.mockImplementation(async () => {
+    registration.pushManager.getSubscription.mockResolvedValue(null);
+    return true;
+  });
+  abortSignal.mockResolvedValueOnce({data:"owned"}).mockResolvedValueOnce({error:"offline"})
+    .mockResolvedValueOnce({error:"offline"});
+  const stop = api.listen(vi.fn());
+  try {
+    onAuthStateChange.mock.calls[0][0]("SIGNED_IN",{user:{id:"next"}});
+    await expect(api.withPushRegistration(action)).rejects.toThrow(/이전 회원의 푸시 구독/);
+    expect(action).not.toHaveBeenCalled();
+    expect(localStorage.getItem("ship-ping-push-cleanup")).toContain(sub.endpoint);
+    await api.withPushRegistration(action);
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(abortSignal).toHaveBeenCalledTimes(5);
+    expect(sub.unsubscribe).toHaveBeenCalledOnce();
+    expect(action).toHaveBeenCalledOnce();
+    expect(localStorage.getItem("ship-ping-push-cleanup")).toBeNull();
+    expect(localStorage.getItem("ship-ping-last-member")).toBe("next");
+  } finally { stop(); vi.unstubAllGlobals(); }
+});
+
+it("keeps a new opt-in when the other tab receives its old account transition late", async () => {
+  const {api,reload,sub,proof,rpc,onAuthStateChange} = pushFixture();
+  localStorage.setItem("ship-ping-last-member","former");
+  const stopFirst = api.listen(vi.fn());
+  const stopSecond = reload().listen(vi.fn());
+  const [first,second] = onAuthStateChange.mock.calls.map(([emit]) => emit);
+  try {
+    second("INITIAL_SESSION",{user:{id:"former"}});
+    first("SIGNED_IN",{user:{id:"next"}});
+    await api.withPushRegistration(({registerPush}) => registerPush("app",{...sub.toJSON(),endpoint:sub.endpoint},"PC"));
+    const registered = localStorage.getItem("ship-ping-browser-push");
+    expect(JSON.parse(registered!)).toEqual({member:"next",endpoint:sub.endpoint,proof});
+    second("SIGNED_OUT",null);
+    second("SIGNED_IN",{user:{id:"next"}});
+    await api.withPushRegistration(async () => {});
+    expect(sub.unsubscribe).toHaveBeenCalledOnce();
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(["cleanup_push_target","cleanup_push_target","register_push"]);
+    expect(localStorage.getItem("ship-ping-browser-push")).toBe(registered);
+    expect(localStorage.getItem("ship-ping-last-member")).toBe("next");
+  } finally { stopFirst(); stopSecond(); vi.unstubAllGlobals(); }
+});
+
+it("finishes a proof-only marker left by an older client after the browser subscription is gone", async () => {
+  const {api,registration,proof,rpc,onAuthStateChange} = pushFixture();
+  localStorage.setItem("ship-ping-last-member","former");
+  localStorage.setItem("ship-ping-push-cleanup",proof);
+  registration.pushManager.getSubscription.mockResolvedValue(null);
+  const stop = api.listen(vi.fn());
+  try {
+    onAuthStateChange.mock.calls[0][0]("INITIAL_SESSION",{user:{id:"next"}});
+    await vi.waitFor(() => expect(localStorage.getItem("ship-ping-push-cleanup")).toBeNull());
+    expect(rpc).toHaveBeenLastCalledWith("cleanup_push_target",{p_member:"former",p_endpoint:null,proof,p_remove:true});
+  } finally { stop(); vi.unstubAllGlobals(); }
+});
+
+it("does not register a device again when the same member logs back in", async () => {
+  const {api,registration,sub,rpc,onAuthStateChange} = pushFixture();
+  localStorage.setItem("ship-ping-last-member","same");
+  sub.unsubscribe.mockImplementation(async () => {
+    registration.pushManager.getSubscription.mockResolvedValue(null);
+    return true;
+  });
+  const stop = api.listen(vi.fn());
+  const emit = onAuthStateChange.mock.calls[0][0];
+  try {
+    emit("INITIAL_SESSION",{user:{id:"same"}});
+    await api.logout();
+    emit("SIGNED_OUT",null);
+    emit("SIGNED_IN",{user:{id:"same"}});
+    expect(await registration.pushManager.getSubscription()).toBeNull();
+    expect(sub.unsubscribe).toHaveBeenCalledOnce();
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc.mock.calls[0]).toContain("cleanup_push_target");
+  } finally { stop(); localStorage.removeItem("ship-ping-last-member"); vi.unstubAllGlobals(); }
 });

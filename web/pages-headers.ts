@@ -10,5 +10,5 @@ export function renderPagesHeaders(template: string, env: Record<string, string>
   const headers = template.replaceAll("https://supabase.invalid", supabase)
     .replaceAll("https://worker.invalid", worker);
   if (/\.invalid\b/i.test(headers)) throw new Error("Unresolved .invalid address in Pages _headers");
-  return headers;
+  return headers.trimEnd() + "\n\n/sw.js\n  Cache-Control: no-cache\n  Content-Type: application/javascript; charset=utf-8\n\n/manifest.webmanifest\n  Content-Type: application/manifest+json\n";
 }

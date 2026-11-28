@@ -4,7 +4,20 @@ import { loginRequests, type LoginRequest } from "./login-requests";
 import { loadMonitor, type Monitor } from "./monitor-data";
 import type { DeepFeature, Definitions, FirstResult } from "./deep";
 import { resultKinds } from "./deep";
+import { changePushPrivacy, closePushNotifications, configuredKey, currentSubscription, fingerprint, notifyPushChange, PushCleanupError } from "./push";
+import { withPushLock } from "./push-lock";
 
+interface CleanupTarget {
+  id?: string;
+  member: string | null;
+  endpoint?: string | null;
+  proof?: string;
+  deleted?: boolean;
+}
+interface PushRegistration {
+  registerPush(app: string, sub: PushSubscriptionJSON, agent: string): Promise<void>;
+  removeEndpoint(endpoint: string): Promise<void>;
+}
 interface AppRow {
   url?: string | null;
   id: string;
@@ -41,6 +54,11 @@ export interface Gateway {
   deepCounts(app: string, feature: string): Promise<number[]>;
   firstResult(app: string, feature: string): Promise<FirstResult | null>;
   settings(app: string): Promise<AlertSettings>;
+  devices(): Promise<PushDevice[]>;
+  removeDevice(id: string): Promise<void>;
+  withPushRegistration<T>(action: (operations: PushRegistration) => Promise<T>): Promise<T>;
+  pushEnabled(app: string, enabled: boolean): Promise<void>;
+  testPush(app: string, device: string): Promise<boolean>;
   emailSetting(app: string, enabled: boolean): Promise<void>;
   disconnectSlack(app: string): Promise<void>;
   testSlack(app: string): Promise<boolean>;
@@ -61,7 +79,7 @@ export interface Gateway {
   requestReset(email: string): Promise<void>;
   reauthenticate(): Promise<void>;
   updatePassword(password: string, nonce?: string): Promise<void>;
-  logout(): Promise<void>;
+  logout(options?: { accountDeleted?: boolean; deviceOnly?: boolean }): Promise<void>;
   firstVisit(): Promise<boolean>;
   apps(): Promise<AppSummary[]>;
   create(name: string, url: string): Promise<string>;
@@ -76,10 +94,21 @@ export interface KeySummary {
   expires_at: string | null;
 }
 export interface AlertSettings {
+  push?: boolean;
+  subscribed?: boolean;
   email: boolean;
   channel: string | null;
   connected: boolean;
   broken: boolean;
+}
+
+export interface PushDevice {
+  id: string;
+  endpoint: string;
+  vapid_fingerprint: string | null;
+  current_session: boolean;
+  user_agent: string;
+  created_at: string;
 }
 
 function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
@@ -98,8 +127,148 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
         if (event === "PASSWORD_RECOVERY") initialRecovery = session?.user.id;
         if (!session) initialRecovery = undefined;
       }).data.subscription : undefined;
+  async function removeEndpoint(endpoint: string) {
+    const {error} = await client.from("push_subscriptions").delete().eq("endpoint",endpoint);
+    if (error) throw error;
+  }
+  async function registerPush(app: string, sub: PushSubscriptionJSON, agent: string) {
+    const member = observedMember ?? read(lastMemberKey,null);
+    const proof = await subscriptionProof(sub);
+    const {data,error} = await client.rpc("register_push", {app,p_endpoint:sub.endpoint,
+      p_key:sub.keys?.p256dh,p_auth:sub.keys?.auth,p_agent:agent,p_fingerprint:await fingerprint(configuredKey()?.buffer)});
+    if (error || !data) throw error ?? Error("기기 등록 실패");
+    write(registeredKey,JSON.stringify({member,endpoint:sub.endpoint,proof}));
+    notifyPushChange();
+  }
+  const lastMemberKey = "ship-ping-last-member";
+  const cleanupKey = "ship-ping-push-cleanup";
+  const registeredKey = "ship-ping-browser-push";
+  let observedMember: string | null | undefined;
+  let pending: string | null = null;
+  function read(key: string, fallback: string | null) {
+    try { return localStorage.getItem(key); } catch { return fallback; }
+  }
+  function write(key: string, value: string | null) {
+    try {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key,value);
+    } catch { /* Web Locks still protects this tab's in-memory marker. */ }
+  }
+  function saveTarget(target: CleanupTarget | null) {
+    pending = target && JSON.stringify(target);
+    write(cleanupKey,pending);
+  }
+  async function subscriptionProof(sub: PushSubscriptionJSON) {
+    const keys = sub.keys;
+    if (!keys?.p256dh || !keys.auth) throw new PushCleanupError();
+    const proof = await fingerprint(new TextEncoder()
+      .encode([sub.endpoint,keys.p256dh,keys.auth].join("\n")).buffer);
+    if (!proof) throw new PushCleanupError();
+    return proof;
+  }
+  async function snapshot() {
+    const sub = await currentSubscription();
+    return sub ? {endpoint:sub.endpoint,proof:await subscriptionProof({...sub.toJSON(),endpoint:sub.endpoint})} : {endpoint:null};
+  }
+  async function checkTarget(target: CleanupTarget, remove: boolean) {
+    const result = await client.rpc("cleanup_push_target",{
+      p_member:target.member,p_endpoint:target.endpoint ?? null,proof:target.proof,p_remove:remove,
+    }).abortSignal(AbortSignal.timeout(5000));
+    if (result.error || !["owned","other","missing"].includes(result.data)) throw new PushCleanupError();
+    return result.data;
+  }
+  // Runs only under the origin-wide lock. Keep the target after any failure,
+  // including when unsubscribe succeeded and discarded the browser keys.
+  async function finishCleanup(destination: () => string | null, captured?: ReturnType<typeof snapshot>) {
+    const raw = read(cleanupKey,pending);
+    if (!raw) return;
+    const member = read(lastMemberKey,null);
+    const target: CleanupTarget = raw === "1" ? {member}
+      : /^[0-9a-f]{64}$/.test(raw) ? {member,endpoint:null,proof:raw} : JSON.parse(raw);
+    if (target.endpoint === undefined) {
+      Object.assign(target,await (captured ?? snapshot()));
+      saveTarget(target);
+    }
+    if (target.proof && target.member) {
+      const state = await checkTarget(target,false).catch(async error => {
+        await closePushNotifications();
+        throw error;
+      });
+      if (state !== "other") await closePushNotifications();
+      if (state === "owned" || (target.deleted && state === "missing")) {
+        const sub = await currentSubscription();
+        if (sub && (!target.endpoint || target.endpoint === sub.endpoint) && await subscriptionProof({...sub.toJSON(),endpoint:sub.endpoint}) === target.proof
+            && !await sub.unsubscribe()) throw new PushCleanupError();
+        if (state === "owned") await checkTarget(target,true);
+      }
+    } else {
+      await closePushNotifications();
+    }
+    const recorded = read(lastMemberKey,null);
+    if (!recorded || recorded === target.member) write(lastMemberKey,destination());
+    const registered = read(registeredKey,null);
+    if (registered) {
+      const binding: CleanupTarget = JSON.parse(registered);
+      if (binding.member === target.member && binding.proof === target.proof) write(registeredKey,null);
+    }
+    saveTarget(null);
+    notifyPushChange();
+  }
+  function cleanFor(previous: string | null, user: string | null, deleted = false) {
+    const recorded = read(lastMemberKey,previous);
+    if (recorded && previous !== recorded) return Promise.resolve();
+    let captured: ReturnType<typeof snapshot> | undefined;
+    if (!read(cleanupKey,pending)) {
+      const registered = read(registeredKey,null);
+      const binding: CleanupTarget | null = registered && JSON.parse(registered);
+      if (binding && binding.member === previous) {
+        saveTarget({...binding,id:crypto.randomUUID(),deleted});
+      } else {
+        saveTarget({id:crypto.randomUUID(),member:previous,deleted});
+        captured = snapshot();
+        // The lock can be queued behind another tab when this read fails.
+        void captured.catch(() => {});
+      }
+    }
+    const marker = read(cleanupKey,pending);
+    return withPushLock(async () => {
+      // The pending server cleanup remains useful even if the worker is
+      // unavailable. An unsuccessful device recovery leaves its lock intact.
+      if (user) await recoverLockedPush(user).catch(() => {});
+      if (marker !== read(cleanupKey,pending)) return;
+      await finishCleanup(() => user === null ? null : observedMember ?? user,captured);
+    })
+      .catch(() => { /* Keep the durable marker for startup or explicit opt-in. */ });
+  }
+  // Re-read auth under the cross-tab lock. A queued SIGNED_IN callback may
+  // belong to the session that just completed a device-only logout.
+  async function recoverLockedPush(user?: string) {
+    const {data, error} = await client.auth.getSession();
+    if (error) throw error;
+    if (data.session && (!user || data.session.user.id === user)) {
+      await changePushPrivacy("recover-push");
+    }
+  }
+  async function signOutLocally() {
+    const { error } = await client.auth.signOut({ scope: "local" });
+    if (error) {
+      const remaining = await client.auth.getSession();
+      if (remaining.error || remaining.data.session) throw error;
+    }
+    withdrawalToken = undefined;
+  }
   return {
     requests,
+    withPushRegistration(action) {
+      return withPushLock(async () => {
+        try {
+          await recoverLockedPush();
+          await finishCleanup(() => observedMember ?? read(lastMemberKey,null));
+        }
+        catch { throw new PushCleanupError(); }
+        return action({registerPush,removeEndpoint});
+      });
+    },
     async account() {
       const { data: { user } } = await client.auth.getUser();
       if (!user?.email) throw Error("로그인이 필요해요");
@@ -189,6 +358,20 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
     async settings(app) {
       return value(await client.rpc("notification_settings", { app }));
     },
+    async devices() {
+      return value(await client.rpc("list_push_devices"));
+    },
+    async removeDevice(id) {
+      const {error} = await client.from("push_subscriptions").delete().eq("id",id);
+      if (error) throw error;
+    },
+    async pushEnabled(app, enabled) {
+      const {error} = await client.rpc("set_push_enabled",{app,enabled});
+      if (error) throw error;
+    },
+    async testPush(app, device) {
+      return value(await client.rpc("queue_test_push",{app,device}));
+    },
     async emailSetting(app, enabled) {
       const { error } = await client.rpc("set_notification_email", {
         app,
@@ -242,9 +425,19 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       return data.session?.user.id ?? null;
     },
     listen(fn) {
-      const { data } = client.auth.onAuthStateChange((event, session) =>
-        fn(session?.user.id ?? null, event === "PASSWORD_RECOVERY"),
-      );
+      const { data } = client.auth.onAuthStateChange((event, session) => {
+        const user = session?.user.id ?? null;
+        const recorded = read(lastMemberKey,observedMember ?? null);
+        const previous = observedMember === undefined ? recorded : observedMember;
+        const initialSignOut = observedMember === undefined && !user && event === "INITIAL_SESSION";
+        observedMember = user;
+        if (read(cleanupKey,pending) || (previous === recorded && (previous !== user || initialSignOut))) {
+          void cleanFor(recorded,user);
+        } else if (user && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+          void withPushLock(() => recoverLockedPush(user)).catch(() => {});
+        }
+        fn(user, event === "PASSWORD_RECOVERY");
+      });
       earlyListener?.unsubscribe();
       if (initialRecovery) {
         fn(initialRecovery, true);
@@ -295,9 +488,26 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       if (result.error) throw result.error;
       return request;
     },
-    async logout() {
-      const { error } = await client.auth.signOut({ scope: "local" });
-      if (error) throw error;
+    async logout({accountDeleted, deviceOnly} = {}) {
+      const {data, error: sessionError} = await client.auth.getSession();
+      const previous = observedMember ?? read(lastMemberKey,null) ?? data.session?.user.id ?? null;
+      await cleanFor(previous,null,accountDeleted);
+      if (deviceOnly) {
+        await withPushLock(async () => {
+          await changePushPrivacy("lock-push");
+          await signOutLocally();
+        });
+      } else {
+        if (sessionError) throw sessionError;
+        const token = data.session?.access_token ?? withdrawalToken;
+        if (token) {
+          // This sends POST /logout?scope=local with the user's JWT, without
+          // changing SDK storage or notifying other tabs.
+          const {error} = await client.auth.admin.signOut(token,"local");
+          if (error && error.code !== "session_not_found" && error.code !== "user_not_found") throw error;
+        }
+        await signOutLocally();
+      }
     },
     async firstVisit() {
       const { data, error } = await client.auth.getUser();

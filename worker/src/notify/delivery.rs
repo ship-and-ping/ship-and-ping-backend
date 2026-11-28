@@ -1,3 +1,4 @@
+use super::push::Target;
 use super::{Notice, render_mail, sentence};
 use crate::endpoint::Supabase;
 use serde_json::{Value, json};
@@ -155,13 +156,24 @@ async fn slack(hook: &str, body: String) -> Outcome {
         Outcome::Failed("슬랙 발송 실패")
     }
 }
+async fn current_push_target(db: &Supabase, notice: &Notice) -> Result<Option<Target>> {
+    rpc(
+        db,
+        "prepare_push_delivery",
+        json!({"id":notice.id,"token":notice.claim_token,"app":notice.app}),
+    )
+    .await?
+    .json()
+    .await
+}
+
 pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
     // Ten rows leave room for one provider request, reservation and completion per row.
     let rows: Vec<ClaimedNotice> = rpc(db, "claim_notification_payloads", json!({"limit":10}))
         .await?
         .json()
         .await?;
-    let mut groups = BTreeMap::<(String, String), Vec<Notice>>::new();
+    let mut groups = BTreeMap::<(bool, String, String), Vec<Notice>>::new();
     for claimed in rows {
         let mut row = claimed.notice;
         if row.channel == "email" {
@@ -178,6 +190,7 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
         };
         groups
             .entry((
+                row.channel == "push", // Finish email and Slack before contacting push providers.
                 row.channel.clone(),
                 target.unwrap_or_else(|| row.id.to_string()),
             ))
@@ -187,6 +200,28 @@ pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
     let origin = setting(env, "WEB_ORIGIN");
     for (_, rows) in groups {
         let first = &rows[0];
+        if first.channel == "push" {
+            let target = match current_push_target(db, first).await {
+                Ok(Some(target)) => target,
+                Ok(None) => continue, // Revoked or superseded lease, already settled by the DB.
+                Err(_) => {
+                    console_error!("Push target lookup failed");
+                    continue; // Leave the lease for recovery.
+                }
+            };
+            let result = super::push::send(first, &target, env).await;
+            if rpc(
+                db,
+                "complete_push",
+                json!({"id":first.id,"token":first.claim_token,"result":result}),
+            )
+            .await
+            .is_err()
+            {
+                console_error!("Push completion failed");
+            }
+            continue;
+        }
         let outcome = {
             if first.channel == "email" {
                 if let Some(to) = &first.email {

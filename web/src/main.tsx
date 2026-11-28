@@ -6,6 +6,9 @@ import { gateway } from "./data";
 import { httpsOrigin } from "./domain";
 import "./styles/tokens.css";
 import "./styles/app.css";
+import { startPwa } from "./push";
+
+startPwa();
 
 function start() {
   const {
