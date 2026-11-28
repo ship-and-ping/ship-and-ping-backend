@@ -62,14 +62,14 @@ function Brand() {
   );
 }
 export function PublicBar() {
+  const { pathname } = useLocation();
   return (
     <header className="bar">
       <Brand />
       <nav aria-label="시작 메뉴">
-        <Link to="/login">로그인</Link>
-        <Link className="button" to="/login">
-          시작하기
-        </Link>
+        {pathname === "/login"
+          ? <Link to="/signup">회원 가입</Link>
+          : <Link to="/login">로그인</Link>}
       </nav>
     </header>
   );

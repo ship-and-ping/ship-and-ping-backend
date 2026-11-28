@@ -22,6 +22,16 @@ import { Account } from "./Account";
 import { AppSettings } from "./AppSettings";
 import { ToastProvider, useToast } from "./Toast";
 
+const loginIssueKey = "ship-ping-login-issue";
+const uuid = "[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}";
+const notificationIssue = new RegExp("^/apps/" + uuid + "/issues/" + uuid + "$", "i");
+function readLoginIssue() {
+  try {
+    const path = sessionStorage.getItem(loginIssueKey);
+    return path && notificationIssue.test(path) ? path : null;
+  } catch { return null; }
+}
+
 function useApps(api: Gateway) {
   const [apps, setApps] = useState<AppSummary[]>();
   const [error, setError] = useState(false);
@@ -292,6 +302,17 @@ function AppRoutes({ api, ingest }: { api: Gateway; ingest: string }) {
   const { pathname } = useLocation();
   const prev = useRef(pathname);
   const navigate = useNavigate();
+  const [loginIssue, setLoginIssue] = useState(readLoginIssue);
+  useEffect(() => {
+    if (user === null && notificationIssue.test(pathname)) setLoginIssue(pathname);
+    if ((user && pathname === loginIssue) || pathname === "/") setLoginIssue(null);
+  }, [user, pathname, loginIssue]);
+  useEffect(() => {
+    try {
+      if (loginIssue) sessionStorage.setItem(loginIssueKey, loginIssue);
+      else sessionStorage.removeItem(loginIssueKey);
+    } catch { /* Same-tab navigation still has the path in React state. */ }
+  }, [loginIssue]);
   useEffect(() => {
     let active = true,
       notified = false;
@@ -319,6 +340,7 @@ function AppRoutes({ api, ingest }: { api: Gateway; ingest: string }) {
   const markPending = useCallback((active: boolean) => { deleting.current = active; }, []);
   async function logout(deviceOnly = false) {
     await api.logout({deviceOnly});
+    setLoginIssue(null);
     deleting.current = false;
     issued.current = null;
     setUser(null);
@@ -329,6 +351,7 @@ function AppRoutes({ api, ingest }: { api: Gateway; ingest: string }) {
   }
   const finishWithdrawal = useCallback(async (result: "done" | "unauthorized" | "login_required" = "done", deviceOnly = false) => {
     await api.logout({accountDeleted: result === "done", deviceOnly});
+    setLoginIssue(null);
     deleting.current=false; issued.current=null;
     const notices = {
       done: { kind: "success", title: "탈퇴를 마쳤어요" },
@@ -360,12 +383,13 @@ function AppRoutes({ api, ingest }: { api: Gateway; ingest: string }) {
     );
   if (user === undefined)
     return <main role="status">로그인 상태를 확인하는 중</main>;
+  const afterLogin = loginIssue ? <Navigate replace to={loginIssue}/> : <AfterLogin api={api}/>;
   return (
     <Routes>
       <Route path="/login/approve" element={<LoginApproval api={api} user={user ?? null}/>}/>
-      <Route path="/signup" element={user ? <AfterLogin api={api}/> : <AuthPage api={api} mode="signup"/>}/>
+      <Route path="/signup" element={user ? afterLogin : <AuthPage api={api} mode="signup"/>}/>
       <Route path="/forgot-password" element={<AuthPage api={api} mode="forgot"/>}/>
-      <Route path="/reset-password" element={<AuthPage api={api} mode="reset" expired={() => setRecoveryUser(null)} recovery={!!user && recoveryUser === user}/>}/>
+      <Route path="/reset-password" element={<AuthPage api={api} mode="reset" fromIssue={!!loginIssue} expired={() => setRecoveryUser(null)} recovery={!!user && recoveryUser === user}/>}/>
       <Route path="/account" element={user ? <Shell key={user} onLogout={logout}>
         <Account api={api} origin={ingest} pending={markPending} logout={logout} done={finishWithdrawal}/>
       </Shell> : <Navigate to="/login" replace/>}/>
@@ -375,7 +399,7 @@ function AppRoutes({ api, ingest }: { api: Gateway; ingest: string }) {
       />
       <Route
         path="/login"
-        element={user ? <AfterLogin api={api} /> : <AuthPage api={api} mode="login" />}
+        element={user ? afterLogin : <AuthPage api={api} mode="login" fromIssue={!!loginIssue}/>}
       />
       <Route
         path="/apps/*"

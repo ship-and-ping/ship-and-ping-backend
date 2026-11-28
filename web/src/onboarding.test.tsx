@@ -8,7 +8,7 @@ import {
   act,
   within,
 } from "@testing-library/react";
-import { Link, MemoryRouter } from "react-router-dom";
+import { Link, MemoryRouter, useLocation } from "react-router-dom";
 import { axe } from "vitest-axe";
 import { App } from "./App";
 import { LoginWaiting } from "./LoginApproval";
@@ -121,6 +121,43 @@ it("로그인은 기본 제출이고 메일 링크는 구분선 다음 보조 �
     expect(screen.queryByRole("button", {name:/Google/})).toBeNull();
   } finally { vi.unstubAllEnvs(); }
 });
+
+const issuePath = "/apps/10000000-0000-0000-0000-000000000001/issues/20000000-0000-0000-0000-000000000002";
+const issueHint = "알림에서 온 문제를 열려면 로그인해 주세요.";
+function LocationProbe() {
+  return <span data-testid="path">{useLocation().pathname}</span>;
+}
+function openWithPath(path: string, api: Gateway) {
+  return render(<MemoryRouter initialEntries={[path]}><LocationProbe/><App api={api} ingest={base}/></MemoryRouter>);
+}
+it("알림 문제 경로만 새로고침 후 로그인에서 한 번 복원하고 기존 권한 오류를 표시한다", async () => {
+  const guest = fake(null);
+  const first = openWithPath(issuePath + "?source=email#details", guest);
+  await screen.findByText(issueHint);
+  expect(screen.getByTestId("path").textContent).toBe("/login");
+  first.unmount();
+  const member = fake(null);
+  vi.mocked(member.monitor).mockRejectedValue(Error("not available"));
+  let session!: (id: string | null) => void;
+  member.listen = callback => { session = callback; return () => {}; };
+  const second = openWithPath("/login", member);
+  await screen.findByText(issueHint);
+  await act(async () => session("another-member"));
+  await screen.findByRole("heading", { name: "기록을 불러오지 못했어요" });
+  expect(screen.getByTestId("path").textContent).toBe(issuePath);
+  second.unmount();
+  openWithPath("/login", fake());
+  await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/apps"));
+});
+
+it.each(["//outside.invalid/path", "https://outside.invalid", "/account", "/apps/a/issues/%2Foutside"])(
+  "저장된 값 %s은 알림 문제 경로로 사용하지 않는다", async value => {
+    sessionStorage.setItem("ship-ping-login-issue", value);
+    openWithPath("/login", fake());
+    await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/apps"));
+    expect(sessionStorage.getItem("ship-ping-login-issue")).toBeNull();
+  },
+);
 it("설정된 Google 보조 버튼은 이메일 없이 인증을 시작한다", async () => {
   vi.stubEnv("VITE_GOOGLE_LOGIN_ENABLED", "true");
   try {

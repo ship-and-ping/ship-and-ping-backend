@@ -12,7 +12,7 @@ const titles = {
   reset: "새 비밀번호 정하기", account: "비밀번호 저장",
 };
 
-export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mode; saved?: () => void; expired?: () => void }) {
+export function AuthForm({ api, mode, saved, expired, fromIssue }: { api: Gateway; mode: Mode; saved?: () => void; expired?: () => void; fromIssue?: boolean }) {
   const navigate = useNavigate();
   const locked = useRef(false);
   const [request,setRequest] = useState(() => (mode==="signup" || mode==="login") && api.requests ? remembered() : undefined);
@@ -115,7 +115,7 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
           }
           await api.updatePassword(password, nonce);
         } else await api.updatePassword(password);
-        if (mode === "reset") navigate("/apps", {replace:true});
+        if (mode === "reset") navigate(fromIssue ? "/login" : "/apps", {replace:true});
         else saved?.();
       }
       form.reset();
@@ -160,7 +160,10 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
         value={displayText(email,"login-email")} onChange={e => setEmail(e.target.value)}/>
     </label>{fieldError("email")}</>}
     {mode !== "forgot" && <>
-      <label htmlFor={passwordId}>{newPassword ? "새 비밀번호" : "비밀번호"}</label>
+      <div className="password-label">
+        <label htmlFor={passwordId}>{newPassword ? "새 비밀번호" : "비밀번호"}</label>
+        {mode === "login" && <Link to="/forgot-password">비밀번호 찾기</Link>}
+      </div>
       <div className="auth-password">
         <input id={passwordId} required name="password" aria-invalid={invalidField === "password"}
           aria-describedby={[newPassword && hintId, invalidField === "password" && errorId].filter(Boolean).join(" ") || undefined} type={visible ? "text" : "password"}
@@ -199,20 +202,18 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
   </form>;
 }
 
-export function AuthPage({ api, mode, recovery = false, expired }: { api: Gateway; mode: Exclude<Mode,"account">; recovery?: boolean; expired?: () => void }) {
+export function AuthPage({ api, mode, recovery = false, expired, fromIssue = false }: { api: Gateway; mode: Exclude<Mode,"account">; recovery?: boolean; expired?: () => void; fromIssue?: boolean }) {
   return <>
     <a className="skip" href="#main">본문으로 가기</a><PublicBar/>
-    <main id="main" className={mode === "login" ? "public login-page" : "public"}>
+    <main id="main" className={"public auth-page" + (mode === "login" ? " login-page" : "")}>
       <h1 tabIndex={-1}>{mode === "login" ? "쉽앤핑 시작하기" : titles[mode]}</h1>
       <div className="even">
         <Hero title="내 앱, 지금도 괜찮을까요?" detail="앱이 어디서 막혔는지 쉽앤핑이 지켜보고 알려 드려요."/>
         <section className="panel">
           {mode === "login" && <h2>로그인</h2>}
+          {mode === "login" && fromIssue && <p>알림에서 온 문제를 열려면 로그인해 주세요.</p>}
           {mode === "reset" && !recovery ? <p role="alert">링크가 만료됐거나 이미 사용됐어요. 새 링크를 받아 주세요.</p>
-            : <AuthForm key={mode} api={api} mode={mode} expired={expired}/>}
-          {mode === "login" && <>
-            <div className="actions"><Link to="/signup">회원 가입</Link><Link to="/forgot-password">비밀번호 찾기</Link></div>
-          </>}
+            : <AuthForm key={mode} api={api} mode={mode} expired={expired} fromIssue={fromIssue}/>}
           {mode === "reset" && <p><Link to="/forgot-password">재설정 메일 다시 받기</Link></p>}
           <Link to={mode === "login" ? "/" : "/login"}>{mode === "login" ? "쉽앤핑 소개로 돌아가기" : "로그인으로 돌아가기"}</Link>
         </section>

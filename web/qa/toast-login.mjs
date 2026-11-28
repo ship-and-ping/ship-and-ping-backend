@@ -7,7 +7,7 @@ import { createServer } from "vite";
 import { mockPage } from "./fixtures.mjs";
 
 const phase = process.argv[2];
-assert(["before", "after"].includes(phase), "Pass before or after");
+assert(["before", "auth-before", "after"].includes(phase), "Pass before, auth-before or after");
 const dir = resolve("../docs/design/qa/toast-login");
 await mkdir(dir, { recursive: true });
 const server = await createServer({
@@ -23,7 +23,7 @@ await server.listen();
 let browser;
 try {
   browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : "chrome" });
-  for (const width of [1440, 390]) {
+  for (const width of phase === "auth-before" ? [] : [1440, 390]) {
     for (const colorScheme of ["light", "dark"]) {
       const context = await browser.newContext({
         viewport: { width, height: width === 390 ? 844 : 900 },
@@ -45,7 +45,7 @@ try {
         assert.equal(await page.locator(".bar").evaluate(el => el.getBoundingClientRect().top), 0);
         const box = await page.locator(".toast").boundingBox();
         assert(box && box.x > 0 && box.x + box.width < width);
-        assert.equal(await page.locator(".login-page .panel").evaluate(el => getComputedStyle(el).animationDelay), "0.072s");
+        if (width === 1440) assert.equal(await page.locator(".login-page .panel").evaluate(el => getComputedStyle(el).animationDelay), "0.072s");
         if (width === 390) assert.equal(box.width, width - 16);
       }
       await page.screenshot({ path: resolve(dir, phase + "-" + width + "-" + colorScheme + ".png") });
@@ -61,15 +61,55 @@ try {
       await context.close();
     }
   }
+  if (phase !== "before") {
+    const issue = "/apps/10000000-0000-0000-0000-000000000001/issues/20000000-0000-0000-0000-000000000002";
+    for (const [name, path] of [["login", issue], ["signup", "/signup"], ["forgot", "/forgot-password"], ["device-200", "/account"]]) {
+      const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
+      const page = await context.newPage();
+      const device = name === "device-200";
+      await mockPage(page, "normal", device, origin);
+      await page.goto(origin + path);
+      if (device) {
+        await page.route("**/auth/v1/logout*", route => route.fulfill({ status: 500, json: { message: "QA offline" } }));
+        await page.getByRole("main").getByRole("button", { name: "로그아웃", exact: true }).click();
+        await page.getByRole("button", { name: "그래도 이 기기에서 로그아웃" }).click();
+        const toast = page.locator(".toast");
+        await toast.waitFor();
+        await page.evaluate(() => { document.documentElement.style.zoom = "2"; });
+        await page.waitForTimeout(350);
+        const box = await toast.boundingBox();
+        assert(box && box.x >= 0 && box.x + box.width <= 390 && box.y + box.height <= 844);
+        if (phase === "after") {
+          assert((await toast.locator("p").boundingBox()).width > 280);
+          assert(await toast.getByRole("button", { name: "안내 닫기" }).isVisible());
+        }
+      } else {
+        const field = page.getByLabel("이메일 주소");
+        await field.waitFor();
+        await page.waitForTimeout(350);
+        const fieldBox = await field.boundingBox();
+        console.log(name, "email y", fieldBox.y);
+        if (phase === "after") {
+          assert(fieldBox.y < 360);
+          if (name === "login") {
+            assert(await page.getByText("알림에서 온 문제를 열려면 로그인해 주세요.").isVisible());
+            assert((await page.getByRole("link", { name: "비밀번호 찾기" }).boundingBox()).y < 550);
+          }
+        }
+      }
+      await page.screenshot({ path: resolve(dir, phase + "-" + name + ".png") });
+      await context.close();
+    }
+  }
   if (phase === "after") {
     const gallery = await browser.newPage();
     await gallery.goto(pathToFileURL(resolve(dir, "index.html")).href);
     const sizes = await gallery.locator("img").evaluateAll(images => images.map(img => img.naturalWidth));
-    assert.deepEqual(sizes, [1440, 1440, 1440, 1440, 390, 390, 390, 390]);
+    assert(sizes.length >= 8 && sizes.every(width => [1440, 390].includes(width)));
     const video = gallery.locator("video");
     await video.evaluate(async el => { el.muted = true; await el.play(); });
     await gallery.waitForFunction(() => document.querySelector("video").currentTime > 0.2);
-    console.log("Gallery: 8 original images loaded and WebM playback verified.");
+    console.log("Gallery:", sizes.length, "images loaded and WebM playback verified.");
     await gallery.close();
   }
 } finally {

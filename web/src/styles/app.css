@@ -915,6 +915,7 @@ h1[tabindex="-1"]:focus { outline: none; }
 .key-notice { border-inline-start: 3px solid var(--sp-line-strong); }
 .toast-region {
   position: fixed;
+  container-type: inline-size;
   z-index: 100;
   inset-inline-end: max(var(--sp-space-6), env(safe-area-inset-right));
   inset-block-end: max(var(--sp-space-6), env(safe-area-inset-bottom));
@@ -957,6 +958,16 @@ h1[tabindex="-1"]:focus { outline: none; }
   color: var(--sp-ink-2);
 }
 .toast-close:hover { background: var(--sp-surface-2); }
+@container (max-width: 17rem) {
+  .toast {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: var(--sp-space-1);
+    padding: var(--sp-space-2) var(--sp-space-3) var(--sp-space-3);
+  }
+  .toast > div { grid-column: 1 / -1; grid-row: 2; }
+  .toast-close { grid-column: 2; grid-row: 1; margin: 0; }
+}
 @keyframes toast-in { from { transform: translateY(8px); opacity: 0; } }
 @keyframes toast-out { to { transform: translateY(4px); opacity: 0; } }
 @keyframes toast-fade-in { from { opacity: 0; } }
@@ -969,11 +980,31 @@ h1[tabindex="-1"]:focus { outline: none; }
   }
 }
 .login-page .auth-form input:focus { border-color: var(--sp-focus); }
+.password-label { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-space-2); }
+.password-label a { display: inline-flex; align-items: center; min-height: var(--sp-touch); color: var(--sp-ink-2); font-size: var(--sp-text-sm); }
+@media (max-width: 639px) {
+  .auth-page { padding-block: var(--sp-space-4); }
+  .auth-page > h1 { margin-bottom: var(--sp-space-3); }
+  .auth-page .even { gap: var(--sp-space-3); }
+  .auth-page .even > .hero-card {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-space-3);
+    margin: 0;
+    padding: var(--sp-space-2) var(--sp-space-4);
+    border-radius: var(--sp-radius-md);
+    box-shadow: none;
+  }
+  .auth-page .hero-card > .sheep { position: static; flex: 0 0 var(--sp-space-8); width: var(--sp-space-8); }
+  .auth-page .hero-card h2 { font-size: 1rem; }
+  .auth-page .hero-card p { display: none; }
+}
 @media (prefers-reduced-motion: no-preference) {
   .login-page .even > .hero-card, .login-page .even > .panel {
     animation: toast-in var(--sp-dur-rise) var(--sp-ease-out) backwards;
   }
   .login-page .even > .panel { animation-delay: 72ms; }
+  .login-page .even > .panel:focus-within { animation: none; }
   .login-page .sheep-eye {
     transform-box: fill-box;
     transform-origin: center;
@@ -981,6 +1012,9 @@ h1[tabindex="-1"]:focus { outline: none; }
   }
   .login-page .auth-form input { transition: border-color var(--sp-dur-press) ease-out; }
   .login-page .auth-form { --press-scale: .98; }
+}
+@media (max-width: 639px) {
+  .login-page .even > .panel { animation: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .toast { animation: toast-fade-in var(--sp-dur-swap) ease-out both !important; }
