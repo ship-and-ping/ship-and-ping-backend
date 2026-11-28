@@ -4,14 +4,16 @@ set search_path=public,extensions;
 select no_plan();
 insert into auth.users(id) values ('00000000-0000-0000-0000-000000000053');
 insert into apps(owner_id,name) select id,'volume' from auth.users;
+insert into alert_channels(app_id,owner_id,email_enabled) select id,owner_id,true from apps
+ on conflict(app_id) do update set email_enabled=true;
 insert into features(app_id,kind,method,route,name)
- select a.id,'auto','GET','/'||name,name from apps a cross join (values ('busy'),('rare')) f(name);
+ select a.id,'auto','GET','/'||f.name,f.name from apps a cross join (values ('busy'),('rare')) f(name);
 insert into app_versions(app_id,version) select id,'old' from apps;
 insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist)
  select app_id,id,'old',date_bin('5 minutes',now(),timestamptz 'epoch'),n,0,0,60000*n,array_fill(0,array[15])||array[n]
  from features cross join lateral (select case name when 'busy' then 2000 else 10 end n) x;
 select evaluate_all();
-select is((select kind from incidents i join features f on f.id=i.feature_id where f.name='busy'),'slow','heavy traffic opens a slow incident');
+select is((select i.kind from incidents i join features f on f.id=i.feature_id where f.name='busy'),'slow','heavy traffic opens a slow incident');
 select is((select (metric_at_open->>'requests_per_minute')::numeric from incidents i join features f on f.id=i.feature_id where f.name='rare'),1::numeric,'opening ten-minute rate');
 delete from stats_5m;
 update incidents set opened_at=now()-interval '20 minutes';
@@ -26,6 +28,8 @@ select is((select status from incidents i join features f on f.id=i.feature_id w
 update stats_5m set total=999,hist=array[999]||array_fill(0,array[15]);
 select evaluate_all();
 select ok((select volume_recovered_at is null and status='open' from incidents i join features f on f.id=i.feature_id where f.name='busy'),'just below half still waits');
+select is((select count(*) from notifications n join incidents i on i.id=n.incident_id join features f on f.id=i.feature_id
+ where f.name='busy' and n.channel='email' and n.event='volume_quiet'),1::bigint,'quiet notification queued once');
 update stats_5m set total=1000,hist=array[1000]||array_fill(0,array[15]);
 select evaluate_all();
 select is((select status from incidents i join features f on f.id=i.feature_id where f.name='busy'),'open','old proof cannot resolve after load returns');
