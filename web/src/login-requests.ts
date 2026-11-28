@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface LoginRequest { request_id: string; poll_secret: string; match_code: string; expires_at: string }
-export interface Decision { status: string; created_at?: string; client_info?: {browser:string; place:string} }
+export interface Decision { status: string; local_consumed?: boolean; created_at?: string; client_info?: {browser:string; place:string} }
 
 export function loginRequests(client: SupabaseClient, origin: string, send = fetch) {
   const base = origin + "/v1/login-requests";
@@ -36,12 +36,24 @@ export function loginRequests(client: SupabaseClient, origin: string, send = fet
 }
 
 const storageKey = "ship-ping-login-request";
-export function remembered(): LoginRequest | undefined {
+const uuid = "[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}";
+const issueRoute = new RegExp("^/apps/" + uuid + "/issues/" + uuid + "$", "i");
+export function notificationIssuePath(value: unknown): string | null {
+  return typeof value === "string" && issueRoute.test(value) ? value : null;
+}
+export function remembered(): (LoginRequest & {issuePath?: string}) | undefined {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) ?? "null");
     if (saved && Date.parse(saved.expires_at)>Date.now()) return saved;
     localStorage.removeItem(storageKey);
   } catch { /* Browser storage can be disabled. */ }
 }
-export function remember(request: LoginRequest) { localStorage.setItem(storageKey,JSON.stringify(request)); }
-export function forget(id: string) { if (remembered()?.request_id===id) localStorage.removeItem(storageKey); }
+export function remember(request: LoginRequest, issuePath?: string | null) {
+  localStorage.setItem(storageKey, JSON.stringify({ ...request, issuePath: notificationIssuePath(issuePath) ?? undefined }));
+}
+export function takeRememberedRequest(id: string) {
+  const saved = remembered();
+  if (saved?.request_id !== id) return;
+  localStorage.removeItem(storageKey);
+  return saved;
+}

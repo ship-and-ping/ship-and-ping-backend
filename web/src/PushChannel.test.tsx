@@ -1,7 +1,8 @@
-import {cleanup, fireEvent, render, screen, waitFor} from "@testing-library/react";
+import {cleanup, fireEvent, render, screen, waitFor, within} from "@testing-library/react";
 import {afterEach, expect, it, vi} from "vitest";
 import type {Gateway} from "./data";
 import {PushChannel} from "./PushChannel";
+import {ToastProvider} from "./Toast";
 import {PushCleanupError,startPwa} from "./push";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -20,10 +21,33 @@ function setup(home: boolean, permission: NotificationPermission = "granted", ag
   const operations = {registerPush:vi.fn(),removeEndpoint:vi.fn()};
   const api = {devices:vi.fn(async () => rotated || loggedOut || legacy ? [{id:"old",endpoint:sub.endpoint,user_agent:"iPhone",current_session:!legacy,
     created_at:"2026-11-27",vapid_fingerprint:rotated ? "03" : "04"}] : []),
-    ...operations,withPushRegistration:vi.fn((action: (ops:typeof operations) => Promise<void>) => action(operations))};
-  render(<PushChannel api={api as unknown as Gateway} app="mine" settings={{push:true,email:false,connected:false,broken:false,channel:null}} reload={vi.fn()}/>);
+    ...operations, removeDevice:vi.fn(), testPush:vi.fn(), withPushRegistration:vi.fn((action: (ops:typeof operations) => Promise<void>) => action(operations))};
+  render(<ToastProvider><PushChannel api={api as unknown as Gateway} app="mine" settings={{push:true,email:false,connected:false,broken:false,channel:null}} reload={vi.fn()}/></ToastProvider>);
   return {api,manager,sub,old,requestPermission};
 }
+it.each([true,false])("현재 기기 여부(%s)에 맞는 삭제 안내를 표시한다", async local => {
+  const {api,manager,old} = setup(true,"granted","PC",false,true);
+  if (local) manager.getSubscription.mockResolvedValue(old);
+  if (local) await screen.findByRole("button", {name:"시험 푸시 보내기"});
+  fireEvent.click(await screen.findByText("등록한 기기 1대"));
+  fireEvent.click(screen.getByRole("button", {name:"기기 삭제"}));
+  const toast = within(await screen.findByRole("article"));
+  expect(toast.getByText(local ? "이 기기에서 받던 모든 앱의 푸시가 꺼졌어요." : "삭제한 기기에서 받던 모든 앱의 푸시가 꺼졌어요.")).toBeTruthy();
+  expect(api.removeDevice).toHaveBeenCalledWith("old");
+});
+it.each([true,false])("시험 푸시가 예약된 경우(%s)에만 성공 토스트를 띄운다", async reserved => {
+  const {api,manager,old} = setup(true,"granted","PC",false,true);
+  manager.getSubscription.mockResolvedValue(old);
+  api.testPush.mockResolvedValue(reserved);
+  fireEvent.click(await screen.findByRole("button", {name:"시험 푸시 보내기"}));
+  if (reserved) {
+    expect(within(await screen.findByRole("article")).getByText("시험 푸시를 예약했어요")).toBeTruthy();
+  } else {
+    await screen.findByText("시험 푸시는 분당 한 번 보낼 수 있어요.");
+    expect(screen.queryByRole("article")).toBeNull();
+  }
+  expect(api.testPush).toHaveBeenCalledWith("mine","old");
+});
 it("shows the Safari instructions until launched from the Home Screen", () => {
   const {requestPermission} = setup(false);
   expect(screen.getByText(/iOS·iPadOS 16.4 이상/)).toBeTruthy();
