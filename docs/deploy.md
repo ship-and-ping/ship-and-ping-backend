@@ -33,7 +33,19 @@ GitHub 저장소 Settings → Environments에서 `production`을 만들고 배�
 
 슬랙 연결은 선택 사항이다. 나중에 Slack 앱의 Incoming Webhooks를 켜고 Worker 원점의 `/v1/slack/callback`을 등록한 뒤 `SLACK_CLIENT_ID`와 `SLACK_CLIENT_SECRET`을 운영 Worker Secret으로 추가하면 연결을 시작할 수 있다.
 
-워크스페이스별 Slack webhook은 OAuth 설치 시 Supabase Vault에 저장된다. 웹 빌드의 세 `VITE_` 항목은 브라우저에 공개되므로 서버 키는 Worker에만 둔다.
+워크스페이스별 Slack webhook은 OAuth 설치 시 Supabase Vault에 저장된다. 웹 빌드의 `VITE_` 항목은 브라우저에 공개되므로 서버 키는 Worker에만 둔다.
+
+### 홈 화면 앱 푸시를 처음 켤 때
+
+저장소 폴더에서 개인 터미널로 `node scripts/generate-vapid.mjs`를 한 번 실행한다. 화면에 나온 두 줄에서 등호 오른쪽 값만 복사한다. 개인 키는 비밀번호처럼 보관한다. 사용자 구독은 생성 당시 공개키와 연결되므로 배포할 때마다 새 키를 만들 필요는 없다.
+
+| 순서 | 설정할 곳 | 이름 | 붙여 넣을 값 |
+|---|---|---|---|
+| 1 | Cloudflare → Workers & Pages → 운영 Worker → Settings → Variables and Secrets → Add → Secret | `VAPID_PRIVATE_KEY` | 개인 키 |
+| 2 | 같은 Worker의 Variables and Secrets → Add → Secret | `VAPID_PUBLIC_KEY` | 공개키 |
+| 3 | GitHub 저장소 → Settings → Environments → production → Environment secrets → Add environment secret | `VITE_VAPID_PUBLIC_KEY` | 2번과 같은 공개키 |
+
+T46(#44) 다음에 T49를 병합하고 Supabase 마이그레이션을 적용한다. 아래 3장의 순서대로 Worker, Pages를 배포한다. iOS 16.4 이상에서 Safari의 공유 버튼 → 홈 화면에 추가를 누른 뒤 홈 화면의 쉽앤핑을 열어 로그인한다. **알림 설정 → 푸시 켜기 → 허용 → 시험 푸시 보내기**를 누르고 다음 분에 알림을 확인한다. 시험 알림을 누르면 알림이 닫힌다. 실제 문제 알림을 누르면 해당 문제의 상세 화면이 열린다.
 
 ## 3. Worker와 Pages 배포 · 사람
 

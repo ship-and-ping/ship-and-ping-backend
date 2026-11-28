@@ -20,6 +20,7 @@ import { Notifications } from "./Notifications";
 import { Connect } from "./Connect";
 import { Account } from "./Account";
 import { AppSettings } from "./AppSettings";
+import { deviceLogoutNotice } from "./LogoutButton";
 
 function useApps(api: Gateway) {
   const [apps, setApps] = useState<AppSummary[]>();
@@ -314,15 +315,16 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     };
   }, [api]);
   const markPending = useCallback((active: boolean) => { deleting.current = active; }, []);
-  async function logout() {
-    await api.logout();
+  async function logout(deviceOnly = false) {
+    await api.logout({deviceOnly});
     deleting.current = false;
     issued.current = null;
     setUser(null);
-    setNotice("로그아웃했어요");
+    setNotice(deviceOnly ? "이 기기에서 로그아웃했어요. " + deviceLogoutNotice : "로그아웃했어요");
     navigate("/login",{replace:true});
   }
-  const finishWithdrawal = useCallback((result: "done" | "unauthorized" | "login_required" = "done") => {
+  const finishWithdrawal = useCallback(async (result: "done" | "unauthorized" | "login_required" = "done", deviceOnly = false) => {
+    await api.logout({accountDeleted: result === "done", deviceOnly});
     deleting.current=false; issued.current=null;
     setNotice({
       done: "탈퇴를 마쳤어요",
@@ -330,7 +332,6 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
       login_required: "다시 로그인해 주세요.",
     }[result]);
     setUser(null);
-    void api.logout().catch(()=>{});
     navigate("/login",{replace:true});
   },[api,navigate]);
   useEffect(() => {
@@ -372,7 +373,7 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
         path="/login"
         element={user ? <AfterLogin api={api} /> : <>
           {notice && <p className="panel" role="status">
-            <strong>{notice}</strong>{notice === "로그아웃했어요" && " 이 기기에서 로그아웃했어요. 문제가 생기면 알림은 계속 보내 드려요."}
+            <strong>{notice}</strong>{notice === "로그아웃했어요" && " 이 기기에서 푸시를 다시 받으려면 로그인한 뒤 알림 설정에서 켜 주세요."}
           </p>}
           <AuthPage api={api} mode="login" />
         </>}

@@ -8,6 +8,11 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+aes-gcm = "0.10"
+base64 = "0.22"
+getrandom = { version = "0.2", features = ["js"] }
+hkdf = "0.12"
+p256 = { version = "0.13", features = ["ecdh", "ecdsa"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
 regex = "1"
 unicode-normalization = "0.1"
