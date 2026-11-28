@@ -8,7 +8,7 @@ import {
   act,
   within,
 } from "@testing-library/react";
-import { Link, MemoryRouter } from "react-router-dom";
+import { Link, MemoryRouter, useLocation } from "react-router-dom";
 import { axe } from "vitest-axe";
 import { App } from "./App";
 import { LoginWaiting } from "./LoginApproval";
@@ -18,6 +18,8 @@ import type { Gateway, Snapshot } from "./data";
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  localStorage.removeItem("ship-ping-login-request");
+  sessionStorage.removeItem("ship-ping-login-issue");
 });
 const pub = "sp_pub_" + "0".repeat(64);
 const secret = "sp_srv_" + "1".repeat(64);
@@ -60,6 +62,7 @@ function fake(user: string | null = "member"): Gateway {
     listen: () => () => {},
     login: vi.fn(),
     passwordLogin: vi.fn(),
+    sendInstallMail: vi.fn(), requestLoginCode: vi.fn(), verifyLoginCode: vi.fn(), pushReady: vi.fn(),
     signup: vi.fn(),
     requestReset: vi.fn(),
     updatePassword: vi.fn(),
@@ -121,6 +124,137 @@ it("로그인은 기본 제출이고 메일 링크는 구분선 다음 보조 �
     expect(screen.queryByRole("button", {name:/Google/})).toBeNull();
   } finally { vi.unstubAllEnvs(); }
 });
+
+const issuePath = "/apps/10000000-0000-0000-0000-000000000001/issues/20000000-0000-0000-0000-000000000002";
+const issueHint = "알림에서 온 문제를 열려면 로그인해 주세요.";
+it("홈 화면 앱에서도 알림에서 들어온 문제를 설치 안내보다 먼저 연다", async () => {
+  const push = await import("./push");
+  const home = vi.spyOn(push,"standalone").mockReturnValue(true);
+  try {
+    sessionStorage.setItem("ship-ping-login-issue",issuePath);
+    const member = fake();
+    vi.mocked(member.monitor).mockRejectedValue(Error("not available"));
+    openWithPath("/login",member);
+    await waitFor(()=>expect(screen.getByTestId("path").textContent).toBe(issuePath));
+  } finally { home.mockRestore(); sessionStorage.removeItem("ship-ping-login-issue"); }
+});
+function LocationProbe() {
+  return <span data-testid="path">{useLocation().pathname}</span>;
+}
+function openWithPath(path: string, api: Gateway) {
+  return render(<MemoryRouter initialEntries={[path]}><LocationProbe/><App api={api} ingest={base}/></MemoryRouter>);
+}
+it.each(["/login", "/login/"])("%s 상단에는 회원 가입 링크를 표시한다", async path => {
+  open(path, fake(null));
+  const menu = within(await screen.findByRole("navigation", {name:"시작 메뉴"}));
+  expect(menu.getByRole("link", {name:"회원 가입"}).getAttribute("href")).toBe("/signup");
+  expect(menu.queryByRole("link", {name:"로그인"})).toBeNull();
+});
+
+const approvalUrl = "/login/approve?req=sample&proof=fixture";
+const pendingRequest = () => ({
+  request_id:"sample", poll_secret:"fixture", match_code:"07", expires_at:new Date(Date.now()+600000).toISOString(),
+});
+
+it("메일 로그인을 요청한 브라우저의 새 탭에서 승인하면 원래 문제를 한 번 연다", async () => {
+  const guest = fake(null);
+  vi.mocked(guest.login).mockResolvedValue(pendingRequest());
+  guest.requests = {create:vi.fn(), poll:vi.fn().mockResolvedValue("pending"), decide:vi.fn()};
+  const requestTab = openWithPath(issuePath + "?source=mail#extra", guest);
+  await screen.findByText(issueHint);
+  fireEvent.change(screen.getByLabelText("이메일 주소"), {target:{value:"member@example.invalid"}});
+  fireEvent.click(screen.getByRole("button", {name:/메일 링크로 받기/}));
+  await screen.findByRole("heading", {name:"메일을 확인해 주세요"});
+  requestTab.unmount();
+  sessionStorage.removeItem("ship-ping-login-issue"); // A new tab shares localStorage only.
+  const member = fake();
+  vi.mocked(member.monitor).mockRejectedValue(Error("not available"));
+  member.requests = {create:vi.fn(), poll:vi.fn(), decide:vi.fn()
+    .mockResolvedValueOnce({status:"used", local_consumed:true}).mockResolvedValue({status:"used"})};
+  const approvalTab = openWithPath(approvalUrl, member);
+  await waitFor(() => expect(screen.getByTestId("path").textContent).toBe(issuePath));
+  expect(member.requests.decide).toHaveBeenCalledWith("sample","local","fixture",undefined,"fixture");
+  expect(localStorage.getItem("ship-ping-login-request")).toBeNull();
+  approvalTab.unmount();
+  openWithPath(approvalUrl, member);
+  await screen.findByText("이미 처리한 요청이에요.");
+  expect(screen.getByTestId("path").textContent).toBe("/login/approve");
+});
+
+it("다른 기기의 승인 탭은 숫자를 확인한 뒤 요청 PC에서 계속하도록 안내한다", async () => {
+  const member = fake();
+  member.requests = {create:vi.fn(), poll:vi.fn(), decide:vi.fn()
+    .mockResolvedValueOnce({status:"pending"}).mockResolvedValueOnce({status:"approved"})};
+  openWithPath(approvalUrl + "&next=" + issuePath, member);
+  const code = await screen.findByRole("textbox", {name:"PC 확인 숫자 두 자리"});
+  fireEvent.change(code, {target:{value:"07"}});
+  fireEvent.click(screen.getByRole("button", {name:"이 PC 로그인 승인"}));
+  await screen.findByRole("heading", {name:"승인했어요."});
+  expect(screen.getByText("로그인을 요청한 기기에서 이어서 보세요.")).toBeTruthy();
+  expect(member.requests.decide).toHaveBeenCalledWith("sample","approve","fixture","07");
+  expect(screen.getByTestId("path").textContent).toBe("/login/complete");
+  fireEvent.click(screen.getByRole("link", {name:"내 앱으로 가기"}));
+  await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/apps"));
+});
+
+it("동시에 두 승인 탭이 used를 받아도 요청을 소비한 탭만 원래 문제로 간다", async () => {
+  localStorage.setItem("ship-ping-login-request", JSON.stringify({...pendingRequest(), issuePath}));
+  const member = fake();
+  vi.mocked(member.monitor).mockRejectedValue(Error("not available"));
+  const replies: ((result: {status:string; local_consumed?:boolean}) => void)[] = [];
+  const decide = vi.fn(() => new Promise<{status:string; local_consumed?:boolean}>(resolve => replies.push(resolve)));
+  member.requests = {create:vi.fn(), poll:vi.fn(), decide};
+  const winner = openWithPath(approvalUrl, member);
+  const duplicate = openWithPath(approvalUrl, member);
+  await waitFor(() => expect(decide).toHaveBeenCalledTimes(2));
+  await act(async () => replies[1]({status:"used"}));
+  expect(within(duplicate.container).getByText("이미 처리한 요청이에요.")).toBeTruthy();
+  expect(localStorage.getItem("ship-ping-login-request")).toBeTruthy();
+  await act(async () => replies[0]({status:"used",local_consumed:true}));
+  expect(within(winner.container).getByTestId("path").textContent).toBe(issuePath);
+  expect(within(duplicate.container).getByTestId("path").textContent).toBe("/login/approve");
+  expect(localStorage.getItem("ship-ping-login-request")).toBeNull();
+  expect(member.monitor).toHaveBeenCalledTimes(1);
+});
+
+it.each(["//outside.invalid", "https://outside.invalid", issuePath.replace("/issues/", "\\issues/"), encodeURIComponent(issuePath), issuePath + "?extra=1"])(
+  "새 탭은 승인 요청에 저장된 잘못된 복귀 경로 %s를 버린다", async issue => {
+    localStorage.setItem("ship-ping-login-request", JSON.stringify({...pendingRequest(), issuePath:issue}));
+    const member = fake();
+    member.requests = {create:vi.fn(), poll:vi.fn(), decide:vi.fn().mockResolvedValue({status:"used",local_consumed:true})};
+    openWithPath(approvalUrl, member);
+    await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/apps"));
+    expect(localStorage.getItem("ship-ping-login-request")).toBeNull();
+  },
+);
+it("알림 문제 경로만 새로고침 후 로그인에서 한 번 복원하고 기존 권한 오류를 표시한다", async () => {
+  const guest = fake(null);
+  const first = openWithPath(issuePath + "?source=email#details", guest);
+  await screen.findByText(issueHint);
+  expect(screen.getByTestId("path").textContent).toBe("/login");
+  first.unmount();
+  const member = fake(null);
+  vi.mocked(member.monitor).mockRejectedValue(Error("not available"));
+  let session!: (id: string | null) => void;
+  member.listen = callback => { session = callback; return () => {}; };
+  const second = openWithPath("/login", member);
+  await screen.findByText(issueHint);
+  await act(async () => session("another-member"));
+  await screen.findByRole("heading", { name: "기록을 불러오지 못했어요" });
+  expect(screen.getByTestId("path").textContent).toBe(issuePath);
+  second.unmount();
+  openWithPath("/login", fake());
+  await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/apps"));
+});
+
+it.each(["//outside.invalid/path", "https://outside.invalid", "/account", "/apps/a/issues/%2Foutside"])(
+  "저장된 값 %s은 알림 문제 경로로 사용하지 않는다", async value => {
+    sessionStorage.setItem("ship-ping-login-issue", value);
+    openWithPath("/login", fake());
+    await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/apps"));
+    expect(sessionStorage.getItem("ship-ping-login-issue")).toBeNull();
+  },
+);
 it("설정된 Google 보조 버튼은 이메일 없이 인증을 시작한다", async () => {
   vi.stubEnv("VITE_GOOGLE_LOGIN_ENABLED", "true");
   try {
@@ -238,6 +372,9 @@ it.each([false,true])("로그아웃 실패 시 계정 화면을 유지하고 선
   fireEvent.click(account.getByRole("button",{name:deviceOnly ? "그래도 이 기기에서 로그아웃" : "다시 시도"}));
   await screen.findByRole("heading",{name:"로그인"});
   expect(api.logout).toHaveBeenLastCalledWith({deviceOnly});
+  const title = await screen.findByText(deviceOnly ? "이 기기에서 로그아웃했어요" : "로그아웃했어요");
+  const toast = within(title.closest('[role="status"]') as HTMLElement);
+  expect(toast.getByText(deviceOnly ? /알림 내용은 가려지지만/ : "푸시 알림은 다시 로그인하면 알림 설정에서 켤 수 있어요.")).toBeTruthy();
 });
 
 it.each([false,true])("waits for sign-out without repeating the withdrawal (device only %s)", async deviceOnly => {
@@ -425,9 +562,9 @@ it.each([false, true])("이메일 설정(%s)을 바꾼 뒤 재조회가 실패�
   expect(api.emailSetting).toHaveBeenCalledWith("a", !email);
 });
 it.each([
-  [true, "시험 알림을 예약했어요. 잠시 뒤 슬랙에서 확인해 주세요."],
+  [true, "잠시 뒤 슬랙에서 확인해 주세요."],
   [false, "잠시 뒤 다시 시도해 주세요. 시험 알림은 분당 한 번 보낼 수 있어요."],
-] as const)("시험 알림 예약 결과(%s)는 재조회 중과 실패 뒤에도 버튼 옆에 남는다", async (reserved, result) => {
+] as const)("시험 슬랙 예약 성공(%s)은 토스트에 표시하고 재조회 실패와 구분한다", async (reserved, result) => {
   const api = fake();
   const settings = {email:false, connected:true, broken:false, channel:"#모임"};
   let finish!: (reserved: boolean) => void;
@@ -443,10 +580,12 @@ it.each([
   expect(panel.getByRole<HTMLButtonElement>("button", {name:"시험 알림 요청 중"}).disabled).toBe(true);
   await act(async () => finish(reserved));
   expect(panel.getByRole("button", {name:"시험 알림 보내기"})).toBeTruthy();
-  expect(panel.getByRole("status").textContent).toBe(result);
+  const feedback = reserved ? within(screen.getByRole("article")) : panel;
+  expect(feedback.getByText(result)).toBeTruthy();
+  if (!reserved) expect(screen.queryByRole("article")).toBeNull();
   await act(async () => failRefresh(new Error("offline")));
   await screen.findByText(/최신 상태를 불러오지 못했어요/);
-  expect(panel.getByRole("status").textContent).toBe(result);
+  expect(feedback.getByText(result)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", {name:"다시 불러오기"}));
   await waitFor(() => expect(api.settings).toHaveBeenCalledTimes(3));
   expect(api.testSlack).toHaveBeenCalledTimes(1);
@@ -844,7 +983,7 @@ it("재인증 번호 오류와 만료 후 재전송하고, 재조회 실패에�
   fireEvent.click(save);
   await screen.findByText("비밀번호를 저장했어요.");
   expect(api.updatePassword).toHaveBeenLastCalledWith("example phrase","456456");
-  expect(api.account).toHaveBeenCalledTimes(2);
+  await waitFor(() => expect(api.account).toHaveBeenCalledTimes(2));
   expect(document.activeElement).toBe(screen.getByRole("button",{name:"비밀번호 바꾸기"}));
 });
 it("메일 링크 회원이 비밀번호를 만들면 방법과 변경 단추가 갱신된다", async () => {

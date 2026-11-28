@@ -55,7 +55,9 @@ T46(#44) 다음에 T49를 병합하고 Supabase 마이그레이션을 적용한�
 
 ## 4. Supabase Auth 설정 · 사람
 
-Authentication → URL Configuration의 **Site URL**에 운영 Pages 원점을 넣는다. Redirect URLs에는 같은 원점의 정확한 `/login`과 `/reset-password`를 등록한다. Google 제공자를 사용할 때는 Google OAuth 클라이언트에도 Supabase 콘솔에 표시된 콜백 URI를 등록한다.
+Authentication → URL Configuration의 **Site URL**에 운영 Pages 원점을 끝 슬래시 없이 넣는다. Redirect URLs에는 같은 원점의 정확한 `/login`, `/install`, `/reset-password`를 등록한다. Email OTP 길이는 6자리, 만료는 600초, Token verifications는 IP당 5분에 10회로 설정한다. Google 제공자를 사용할 때는 Google OAuth 클라이언트에도 Supabase 콘솔에 표시된 콜백 URI를 등록한다.
+
+홈 화면 앱의 6자리 코드는 Worker가 Resend로 보내고 DB에서 회원별로 10분·오답 5회·일회 사용을 강제한다. 올바른 코드가 소비된 뒤에만 Worker가 기존 회원용 Auth 해시를 발급하고 홈 화면 앱이 `verifyOtp(type=email)`로 세션을 받는다. 코드 메일 양식은 Worker 배포물에 포함된다. 운영에서 코드 발송과 시험 푸시를 확인하려면 두 T61 마이그레이션, Worker의 `WEB_ORIGIN`·`SUPABASE_URL`·`SUPABASE_SECRET_KEY`·`RESEND_API_KEY`·확인된 `MAIL_FROM`, `VAPID_PRIVATE_KEY`·`VAPID_PUBLIC_KEY` 및 일치하는 Pages의 `VITE_VAPID_PUBLIC_KEY`가 필요하다.
 
 이메일 제공자를 활성화하고 Custom SMTP에 Resend SMTP 자격 증명과 테스트 발신 주소 `onboarding@resend.dev`를 설정한다. Email Templates에서 `supabase/templates/`의 `confirmation.html`, `magic-link.html`, `recovery.html`을 각각 Confirm signup, Magic link, Reset password에 적용한다. 세 양식의 `{{ .ConfirmationURL }}`은 앱이 요청한 복귀 경로를 보존한다.
 

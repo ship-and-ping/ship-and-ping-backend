@@ -73,6 +73,10 @@ export interface Gateway {
   session(): Promise<string | null>;
   listen(fn: (id: string | null, recovery?: boolean) => void): () => void;
   login(email?: string): Promise<void | LoginRequest>;
+  sendInstallMail(): Promise<"sent" | "limited">;
+  pushReady(): Promise<boolean>;
+  requestLoginCode(email: string): Promise<void>;
+  verifyLoginCode(email: string, code: string): Promise<void>;
   requests?: ReturnType<typeof loginRequests>;
   passwordLogin(email: string, password: string): Promise<void>;
   signup(email: string, password: string): Promise<void | LoginRequest>;
@@ -118,6 +122,15 @@ function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
 }
 export function gateway(client: SupabaseClient, origin?: string): Gateway {
   const requests = origin ? loginRequests(client,origin) : undefined;
+  async function installCodeRequest(path:string, body:{email:string;code?:string}) {
+    if (!origin) throw Error("코드 로그인 설정이 필요해요.");
+    const response = await fetch(origin+"/v1/install-code"+path, {
+      method:"POST",credentials:"omit",redirect:"error",cache:"no-store",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(body),
+    });
+    if (!response.ok) throw Object.assign(Error("코드를 확인하지 못했어요."),{status:response.status});
+    return response;
+  }
   const columns = "id,name,url,created_at,first_record_at";
   let withdrawalToken: string | undefined;
   // A fast Auth redirect can finish before React mounts the route listener.
@@ -430,6 +443,7 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
         const recorded = read(lastMemberKey,observedMember ?? null);
         const previous = observedMember === undefined ? recorded : observedMember;
         const initialSignOut = observedMember === undefined && !user && event === "INITIAL_SESSION";
+        if (!user) write("ship-ping-install-complete",null);
         observedMember = user;
         if (read(cleanupKey,pending) || (previous === recorded && (previous !== user || initialSignOut))) {
           void cleanFor(recorded,user);
@@ -470,6 +484,31 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
     },
     async updatePassword(password, nonce) {
       const { error } = await client.auth.updateUser({ password, nonce, data: { ship_ping_password_set: true } });
+      if (error) throw error;
+    },
+    async pushReady() {
+      if (!origin || !import.meta.env.VITE_VAPID_PUBLIC_KEY) return false;
+      const response = await fetch(origin + "/v1/push-config",{redirect:"error"});
+      if (!response.ok) throw Error("푸시 설정 확인 실패");
+      return (await response.json()).public_key === import.meta.env.VITE_VAPID_PUBLIC_KEY;
+    },
+    async sendInstallMail() {
+      const {data,error} = await client.auth.getSession();
+      if (error || !origin || !data.session) throw Error("로그인이 필요해요.");
+      const response = await fetch(origin + "/v1/install-mail", {
+        method:"POST", redirect:"error", headers:{Authorization:"Bearer " + data.session.access_token},
+      });
+      if (response.status === 429) return "limited";
+      if (!response.ok) throw Error("발송 실패");
+      return "sent";
+    },
+    async requestLoginCode(email) {
+      await installCodeRequest("",{email});
+    },
+    async verifyLoginCode(email, code) {
+      const response = await installCodeRequest("/verify",{email,code});
+      const {token_hash} = await response.json();
+      const {error} = await client.auth.verifyOtp({token_hash,type:"email"});
       if (error) throw error;
     },
     async login(email) {

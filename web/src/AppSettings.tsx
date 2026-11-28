@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CurrentAppName } from "./Layout";
 import { Copy } from "./Connect";
+import { useToast } from "./Toast";
 import { displayText, sanitizeRoute } from "./normalize";
 import { cleanFeatureField } from "./deep";
 import { isStrong } from "./issue-prompt";
@@ -20,7 +21,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
   const [keys, setKeys] = useState<KeySummary[]>([]);
   const [attempt, reload] = useState(0);
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
+  const showToast = useToast();
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -30,8 +31,8 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
   const feedback = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
     if (deletion === "failed") retryDelete.current?.focus();
-    else if (status || error) feedback.current?.focus();
-  }, [deletion, status, error]);
+    else if (error) feedback.current?.focus();
+  }, [deletion, error]);
   const [issued, setIssued] = useState<Partial<Record<KeySummary["kind"], {
     raw: string;
     copied: boolean;
@@ -80,7 +81,6 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
   async function change(work: () => Promise<void>) {
     setBusy(true);
     setError("");
-    setStatus("");
     try {
       await work();
     } catch {
@@ -109,9 +109,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
           )}
         </p>
       )}
-      <p role="status" ref={error ? undefined : feedback} tabIndex={-1}>
-        {status || (!snapshot && !error ? "앱 설정을 불러오는 중" : "")}
-      </p>
+      {!snapshot && !error && <p role="status">앱 설정을 불러오는 중</p>}
       {snapshot && (
         <fieldset className="settings-sections" disabled={busy}>
           <section className="panel">
@@ -147,7 +145,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
                   setUrl(displayText(nextUrl));
                   setConfirmation("");
                   setDeletion("ready");
-                  setStatus("앱 정보를 저장했어요.");
+                  showToast({ kind: "success", title: "앱 정보를 저장했어요." });
                 })
               }
             >
@@ -181,7 +179,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
                           row === l ? updated : row,
                         ),
                       });
-                      setStatus("기능 이름표를 저장했어요.");
+                      showToast({ kind: "success", title: "기능 이름표를 저장했어요." });
                     })
                   }
                 />
@@ -227,7 +225,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
                                 delete next[k.kind];
                                 return next;
                               });
-                              setStatus("키를 폐기했어요.");
+                              showToast({ kind: "success", title: "키를 폐기했어요." });
                             });
                         }}
                       >
@@ -247,7 +245,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
                         const raw = await api.issue(id, kind);
                         setIssued(current => ({...current,[kind]:{raw,copied:false}}));
                         setKeys(await api.appKeys(id));
-                        setStatus(title + "를 재발급했어요. 새 키를 복사해 주세요.");
+                        showToast({ kind: "success", title: title + "를 재발급했어요.", detail: "새 키를 복사해 주세요." });
                       });
                   }}
                 >

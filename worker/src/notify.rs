@@ -6,6 +6,8 @@ mod push;
 #[cfg(target_arch = "wasm32")]
 mod delivery;
 #[cfg(target_arch = "wasm32")]
+pub(crate) use delivery::send_resend;
+#[cfg(target_arch = "wasm32")]
 pub use delivery::{deliver, post, setting, valid_hook};
 
 #[derive(Deserialize)]
@@ -203,7 +205,7 @@ fn notice_link(n: &Notice, origin: &str) -> String {
     }
 }
 
-struct Mail {
+pub(crate) struct Mail {
     subject: String,
     text: String,
     html: String,
@@ -213,6 +215,31 @@ impl Mail {
     fn payload(&self, from: &str, to: &str) -> Value {
         json!({"from":from,"to":[to],"subject":self.subject,"text":self.text,"html":self.html})
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn login_code_mail(code: u32) -> Mail {
+    let text = format!(
+        "홈 화면의 쉽앤핑에서 {code:06}을 입력해 주세요. 코드는 10분 동안 유효하고 다섯 번 틀리면 새 코드가 필요해요."
+    );
+    Mail {
+        subject: "쉽앤핑 홈 화면 앱 로그인 코드".into(),
+        html: format!(
+            "<html lang=\"ko\"><h1>홈 화면 앱 로그인</h1><p>홈 화면의 쉽앤핑에 아래 숫자를 입력해 주세요.</p><strong style=\"font-size:32px\">{code:06}</strong><p>10분 안에 입력해 주세요. 다섯 번 틀리면 새 코드를 받아 주세요.</p></html>"
+        ),
+        text,
+    }
+}
+
+pub(crate) fn install_mail(origin: &str) -> Option<Mail> {
+    let link = format!("{}/install", web_origin(Some(origin))?);
+    Some(Mail {
+        subject: "휴대폰으로 쉽앤핑 알림 받기".into(),
+        text: format!(
+            "아이폰에서는 Safari로 여세요. 홈 화면에 쉽앤핑을 추가하고 알림을 켜 주세요.\n{link}"
+        ),
+        html: include_str!("notify/install.html").replace("{{install_url}}", &link),
+    })
 }
 
 struct MailContent {
@@ -428,6 +455,16 @@ mod tests {
                 assert!(body.contains(expected), "{expected} missing from {body}");
             }
         }
+    }
+
+    #[test]
+    fn install_mail_contains_only_a_public_install_link() {
+        let mail = install_mail("https://web.example.invalid").unwrap();
+        let url = "https://web.example.invalid/install";
+        assert_eq!(mail.html.matches("href=").count(), 1);
+        assert!(mail.html.contains(&format!("href=\"{url}\"")));
+        assert!(mail.text.ends_with(url));
+        assert!(install_mail("https://web.example.invalid/?key=private").is_none());
     }
 
     #[test]

@@ -38,7 +38,9 @@ export async function mockPage(page, state, member, origin) {
         switch (action) {
           case "approve": loginStatus = match_code === matchCode ? "approved" : "mismatch"; break;
           case "deny": loginStatus = "denied"; break;
-          case "local": loginStatus = "used"; break;
+          case "local":
+            loginStatus = "used";
+            return route.fulfill({json:{status:loginStatus,local_consumed:true}});
           default: throw Error("Unknown QA login action: " + action);
         }
         return route.fulfill({json:{status:loginStatus}});

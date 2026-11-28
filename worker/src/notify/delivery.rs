@@ -84,21 +84,27 @@ async fn email(
     {
         return Ok(Outcome::Deferred);
     }
-    let payload = mail.payload(&from, to);
-    let response = post(
-        "https://api.resend.com/emails",
-        "application/json",
-        payload.to_string(),
-        Some(&format!("Bearer {key}")),
-    )
-    .await;
     Ok(
-        if response.is_ok_and(|r| (200..300).contains(&r.status_code())) {
+        if send_resend(&key, &from, to, mail)
+            .await
+            .is_ok_and(|s| (200..300).contains(&s))
+        {
             Outcome::Sent
         } else {
             Outcome::Failed("메일 발송 실패")
         },
     )
+}
+
+pub(crate) async fn send_resend(key: &str, from: &str, to: &str, mail: super::Mail) -> Result<u16> {
+    post(
+        "https://api.resend.com/emails",
+        "application/json",
+        mail.payload(from, to).to_string(),
+        Some(&format!("Bearer {key}")),
+    )
+    .await
+    .map(|r| r.status_code())
 }
 async fn deliver_email(
     db: &Supabase,
