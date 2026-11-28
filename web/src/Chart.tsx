@@ -1,5 +1,5 @@
-import { useEffect, useId, useMemo, useState, type PointerEvent } from "react";
-import { approximateDuration, summarize, type Stat } from "./monitor-data";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type RefObject } from "react";
+import { approximateDuration, formatDuration, summarize, type Stat } from "./monitor-data";
 import { periodName } from "./MonitorToolbar";
 import {formatMetric, serverMetrics, type ServerSlot} from "./server-data";
 import "./styles/chart.css";
@@ -25,7 +25,10 @@ function buckets(rows: Stat[], start: number, now: number, count: number, thresh
     const from = start + i * width;
     const until = from + width;
     const endLabel = weekday.format(from) === weekday.format(until) ? clockMinute : dateTime;
-    return { label: dateTime.format(from) + " ~ " + endLabel.format(until), ...summarize(group,thresholds) };
+    const label = dateTime.format(from) + " ~ " + endLabel.format(until);
+    const startLabel = width >= day ? label : (from % hour === 0 ? clock : clockMinute).format(from);
+    return { label, startLabel,
+      hasRecords:group.length > 0, ...summarize(group,thresholds) };
   });
 }
 type Bucket = ReturnType<typeof buckets>[number];
@@ -65,8 +68,8 @@ function lineSegments(values:(number|null)[], ordinate:(n:number) => number, bot
   return segments.filter(s => s.first !== s.last).map(s => ({line:s.line,area:s.line+" L"+s.last+" "+bottom+" L"+s.first+" "+bottom+" Z"}));
 }
 
-function verticalTicks(peak: number, duration: boolean) {
-  const required = Math.max(peak / 5, duration ? 10 : 1);
+function verticalTicks(peak: number, duration: boolean, divisions = 5) {
+  const required = Math.max(peak / divisions, duration ? 10 : 1);
   const power = 10 ** Math.floor(Math.log10(required));
   const step = [1, 2, 2.5, 5, 10].map(n => n * power)
     .find(n => n >= required && (duration || Number.isInteger(n)))!;
@@ -136,6 +139,7 @@ function description(p:Bucket,p95:number|null) {
   return p.label + values(p,p95).map(([name,value]) => " · "+name+" "+value).join("");
 }
 type Cursor = {index:number; owner:string};
+const sameCursor = (a:Cursor|null,b:Cursor|null) => a?.index === b?.index && a?.owner === b?.owner;
 type Selection = {
   active:Cursor|null; selected:number; focus:(cursor:Cursor|null) => void; hover:(cursor:Cursor|null) => void;
 };
@@ -149,25 +153,79 @@ function PanelHelp({title,text}:{title:string; text:string}) {
     {open && <span id={id} role="tooltip">{text}</span>}</span>;
 }
 
-function StatPanel({title,help,value,series,selection,points,p95,unit}:{title:string; help:string; value:string; series:(number|null)[]; unit?:string;
-  selection:Selection; points:Bucket[]; p95:number|null}) {
+function SparkReadout({plot,x,text}:{plot:RefObject<HTMLDivElement|null>; x:number; text:string}) {
+  const wrapper = useRef<HTMLDivElement>(null);
+  const bubble = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const graph = plot.current, row = wrapper.current, tip = bubble.current;
+    if (!graph || !row || !tip) return;
+    const card = graph.parentElement!;
+    const place = () => {
+      if (row.offsetParent !== card) return; // Mobile uses the shared row below the cards.
+      const bounds = graph.getBoundingClientRect();
+      const panel = card.getBoundingClientRect();
+      const space = row.getBoundingClientRect();
+      const popup = tip.getBoundingClientRect();
+      const cursor = bounds.left + x * bounds.width / 100;
+      const clearance = 8;
+      const sideRoom = x < 50 ? space.right - cursor : cursor - space.left;
+      let top = bounds.bottom - popup.height;
+      if (sideRoom < popup.width + clearance) {
+        const above = panel.top - popup.height - clearance;
+        top = above >= 0 ? above : panel.bottom + clearance;
+      }
+      row.style.setProperty("--tip-top",(top - panel.top - card.clientTop)+"px");
+    };
+    place();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(place) : null;
+    observer?.observe(graph);
+    observer?.observe(tip);
+    window.addEventListener("scroll",place,{capture:true,passive:true});
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("scroll",place,true);
+    };
+  },[plot,x,text]);
+  return <div ref={wrapper} className="spark-readout" data-align={x < 50 ? "end" : "start"}>
+    <div ref={bubble} role="tooltip" className="flow-tip"><strong>{text}</strong></div>
+  </div>;
+}
+
+function StatPanel({title,help,value,series,unit,serverMetric=false,selection,points,p95}:{title:string; help:string; value:string; series:(number|null)[];
+  unit:"건"|"초"|"%"|"ms"|"개"; serverMetric?:boolean; selection:Selection; points:Bucket[]; p95:number|null}) {
   const active = selection.active?.index;
-  const labelAt = unit ? (index:number) => series[index] == null ? "기록 없음" : formatMetric(series[index]!,unit) : undefined;
-  const peak = Math.max(1,...series.map(n => n ?? 0));
-  const pointY = (n:number) => 26-22*n/peak;
-  const runs = lineSegments(series,pointY,30);
+  const plot = useRef<HTMLDivElement>(null);
+  const peak = Math.max(0,...series.map(n => plotTime(n ?? 0)));
+  const levels = unit === "%" ? [0,50,100] : verticalTicks(peak,unit === "초",3);
+  const max = levels[levels.length-1];
+  // Leave room for the selected dot at both ends of the value axis.
+  const pointY = (n:number) => 88 - 76 * plotTime(n) / max;
+  const runs = lineSegments(series,pointY,pointY(0));
+  function valueAt(index:number) {
+    const n = series[index];
+    if (n === null) return "기록 없음";
+    if (serverMetric) return formatMetric(n,unit);
+    return unit === "초" ? formatDuration(n) : Math.round(n).toLocaleString("ko-KR") + unit;
+  }
+  const reading = (index:number) => points[index].startLabel + " · " + valueAt(index);
   return <article className="stat-panel">
     <header><h3>{title}</h3><PanelHelp title={title} text={help}/></header>
-    <strong className="stat-value">{active !== undefined && labelAt ? labelAt(active) : value}</strong>
-    <div className="spark-plot"><svg viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
-      {runs.map(run => <g key={run.line}><path d={run.area} fill="currentColor" opacity=".12"/>
-        <path d={run.line} fill="none" stroke="currentColor" strokeWidth="1.6" vectorEffect="non-scaling-stroke"/></g>)}
+    <strong className="stat-value">{serverMetric && active !== undefined ? valueAt(active) : value}</strong>
+    <div ref={plot} className="spark-plot"><svg aria-hidden="true">
+      {levels.map(level => <line key={level} className={level === 0 ? "spark-zero" : undefined}
+        x1="0" x2="100%" y1={percent(pointY(level))} y2={percent(pointY(level))}
+        stroke="var(--sp-line-strong)" strokeDasharray={level === 0 ? undefined : "2 4"}/>)}
+      <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+        {runs.map(run => <g key={run.line}><path d={run.area} fill="currentColor" opacity=".12"/>
+          <path d={run.line} fill="none" stroke="currentColor" strokeWidth="1.6" vectorEffect="non-scaling-stroke"/></g>)}
+      </svg>
       {series.map((n,i) => n !== null && (series[i-1] == null && series[i+1] == null || i === active) &&
-        <circle key={i} cx={center(i,series.length)} cy={pointY(n)} r="1.5" fill="currentColor"/>)}
-      {active !== undefined && <line className="spark-cursor" x1={center(active,series.length)} x2={center(active,series.length)} y1="0" y2="30" vectorEffect="non-scaling-stroke"/>}
-    </svg><CursorTarget owner={title} points={points} selection={selection} p95={p95} labelAt={labelAt}/>
-      {selection.active?.owner === title && <CursorTip index={selection.active.index} points={points} p95={p95} metric={labelAt?.(selection.active.index)}/>}
+        <circle key={i} className={i === active ? "spark-active" : undefined}
+          cx={percent(center(i,series.length))} cy={percent(pointY(n))} r={i === active ? 4 : 2.5} fill="currentColor"/>)}
+    </svg><CursorTarget owner={title} points={points} selection={selection} p95={p95} reading={reading} crosshair/>
     </div>
+    {selection.active?.owner === title && <SparkReadout plot={plot}
+      x={center(selection.active.index,series.length)} text={reading(selection.active.index)}/>}
   </article>;
 }
 
@@ -223,7 +281,7 @@ function Plot({ points, labels, duration = false, baseline, p95 = null, samples 
   </figure>;
 }
 
-function CursorTarget({owner,points,p95,selection,crosshair=false,labelAt}:{owner:string; points:Bucket[]; p95:number|null; selection:Selection; crosshair?:boolean; labelAt?:(index:number)=>string}) {
+function CursorTarget({owner,points,p95,selection,crosshair=false,reading}:{owner:string; points:Bucket[]; p95:number|null; selection:Selection; crosshair?:boolean; reading?:(index:number) => string}) {
   const active = selection.active?.index;
   const selected = active ?? selection.selected;
   function select(index:number) {
@@ -236,7 +294,7 @@ function CursorTarget({owner,points,p95,selection,crosshair=false,labelAt}:{owne
   }
   return <>
     <div role="slider" tabIndex={0} className="flow-hit" aria-label={owner} aria-valuemin={1} aria-valuemax={points.length}
-      aria-valuenow={selected+1} aria-valuetext={labelAt ? points[selected].label+" · "+labelAt(selected) : description(points[selected],p95)}
+      aria-valuenow={selected+1} aria-valuetext={reading ? reading(selected) : description(points[selected],p95)}
       onFocus={() => select(selected)} onBlur={() => selection.focus(null)}
       onPointerEnter={e => {if (e.pointerType !== "touch") selection.hover({owner,index:pointAt(e)});}}
       onPointerDown={e => {
@@ -287,31 +345,39 @@ export function Chart({ rows, days, now, baseline, p95 = null, samples, learnsRa
   const period = useMemo(() => summarize(rows.filter(r => Date.parse(r.bucket) >= start && Date.parse(r.bucket) <= now),thresholds),[rows,start,now,thresholds]);
   const [selected,setSelected] = useState(() => Math.max(0,points.findIndex(p => p.total > 0)));
   const [focused,setFocused] = useState<Cursor|null>(null);
-  const [hovered,hover] = useState<Cursor|null>(null);
+  const [hovered,setHovered] = useState<Cursor|null>(null);
   const active = hovered ?? focused;
-  const selection:Selection = {selected,active,hover,focus:cursor => {setFocused(cursor); if (cursor) setSelected(cursor.index);}};
+  const selection:Selection = {selected,active,
+    hover:cursor => { if (!sameCursor(hovered,cursor)) setHovered(cursor); },
+    focus:cursor => {
+      if (!sameCursor(focused,cursor)) setFocused(cursor);
+      if (cursor && selected !== cursor.index) setSelected(cursor.index);
+    },
+  };
   useEffect(() => {
-    function escape(e:KeyboardEvent) { if (e.key === "Escape") {setFocused(null); hover(null);} }
+    function escape(e:KeyboardEvent) { if (e.key === "Escape") {setFocused(null); setHovered(null);} }
     document.addEventListener("keydown",escape);
     return () => document.removeEventListener("keydown",escape);
   },[]);
   const worst = points.reduce((a, b) => a.failures >= b.failures ? a : b);
   const occupied = points.filter(p => p.total > 0).length;
   const shared = {selection,points,p95};
+  const longestTime = points.reduce((longest,p) => p.startLabel.length > longest.length ? p.startLabel : longest,"");
+  const totalLabel = period.total.toLocaleString("ko-KR")+"건";
   return <>
     <p className="flow-range">{dateTime.format(start)} ~ {dateTime.format(now)} · 한국 시간</p>
-    <div className="stat-grid">
-      <StatPanel {...shared} title="사용 건수" help="선택한 기간의 전체 사용 횟수예요." value={period.total.toLocaleString("ko-KR")+"건"} series={points.map(p => p.total)}/>
-      <StatPanel {...shared} title="실패율" help="판정할 수 있는 요청 중 실패한 비율이에요." value={rate(period.eligible,period.failures)} series={points.map(p => p.eligible ? 100*p.failures/p.eligible : null)}/>
-      <StatPanel {...shared} title="보통 속도" help="성공 요청에 걸린 시간의 중앙값이에요." value={approximateDuration(period.median)} series={points.map(p => p.median === null ? null : plotTime(p.median))}/>
-      {!!thresholds?.size && <StatPanel {...shared} title="만족도" help="선택 기간 중 평소 상한 안에 끝난 성공 요청 비율이에요." value={period.satisfaction === null ? "기록 없음" : period.satisfaction+"%"} series={points.map(p => p.satisfaction)}/>}
+    <div className="stat-grid" data-readout-size={longestTime+" · "+(totalLabel.length > 6 ? totalLabel : "기록 없음")}>
+      <StatPanel {...shared} title="사용 건수" unit="건" help="선택한 기간의 전체 사용 횟수예요." value={totalLabel} series={points.map(p => p.hasRecords ? p.total : null)}/>
+      <StatPanel {...shared} title="실패율" unit="%" help="판정할 수 있는 요청 중 실패한 비율이에요." value={rate(period.eligible,period.failures)} series={points.map(p => p.eligible ? 100*p.failures/p.eligible : null)}/>
+      <StatPanel {...shared} title="보통 속도" unit="초" help="성공 요청에 걸린 시간의 중앙값이에요." value={approximateDuration(period.median)} series={points.map(p => p.median)}/>
+      {!!thresholds?.size && <StatPanel {...shared} title="만족도" unit="%" help="선택 기간 중 평소 상한 안에 끝난 성공 요청 비율이에요." value={period.satisfaction === null ? "기록 없음" : period.satisfaction+"%"} series={points.map(p => p.satisfaction)}/>}
     </div>
     <section aria-label="서버 상태"><h3>서버 상태</h3>
       {resources.some(row => serverMetrics.some(([key]) => row.peaks[key] != null)) ? <div className="stat-grid">
         {serverMetrics.map(([key,title,unit]) => {
           const series = points.map((_,i) => resources.find(row => row.slot === i)?.peaks[key] ?? null);
           const measured = series.filter(n => n !== null);
-          return measured.length ? <StatPanel {...shared} key={key} title={title} unit={unit}
+          return measured.length ? <StatPanel {...shared} key={key} title={title} unit={unit} serverMetric
             help={"앱 서버 전체의 구간별 최댓값이에요."} value={formatMetric(Math.max(...measured),unit)} series={series}/> : null;
         })}
       </div> : <p>추가 연결 요청문으로 서버 상태도 볼 수 있어요</p>}
