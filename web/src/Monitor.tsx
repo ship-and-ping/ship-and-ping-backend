@@ -11,7 +11,7 @@ import { MonitorToolbar, periodName } from "./MonitorToolbar";
 import { SpeedInsights } from "./SpeedInsights";
 import "./styles/dashboard.css";
 import { displayText, sanitizeRoute } from "./normalize";
-import { buildIssuePrompt, displayVersion, heartbeatResolution, noErrorSamples } from "./issue-prompt";
+import { buildIssuePrompt, displayVersion, heartbeatResolution, noErrorSamples, queueDescription } from "./issue-prompt";
 import {
   summarize,
   formatDuration,
@@ -37,7 +37,7 @@ const title = (f: Feature | undefined, i: Incident) =>
   displayText(f?.name ?? "기능") +
   {
     slow: "이 느려졌어요",
-    failure: i.metric_at_open?.consecutive ? "에서 3건 연속 실패했어요" : "에서 실패가 늘었어요",
+    failure: i.metric_at_open?.interruptions ? "의 응답이 잠시 멈췄어요" : i.metric_at_open?.consecutive ? "에서 3건 연속 실패했어요" : "에서 실패가 늘었어요",
     unconfirmed: "의 기록 전송이 끊겼을 수 있어요",
     silent: "의 살아 있음 신호가 끊겼어요",
   }[i.kind];
@@ -513,9 +513,13 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
   );
   const streak = proof?.consecutive_successes ?? 0;
   const duration = proof?.latest_duration_ms;
-  const normal = f.method === "*" ? null : f.baselines;
-  const p95 = normal?.p95_ms ?? Infinity;
-  const threshold = Math.min(f.slow_threshold_ms, p95 + 500, Math.max(p95, (normal?.p50_ms ?? Infinity) + 499));
+  const metric = i.metric_worst ?? i.metric_at_open;
+  const opening = i.metric_at_open ?? metric;
+  const p95 = opening?.baseline_p95 ?? Infinity;
+  const p50 = opening?.baseline_p50 ?? Infinity;
+  const cap = opening?.threshold ?? f.slow_threshold_ms;
+  const threshold = opening?.slow_rule === "absolute" ? cap
+    : Math.min(cap, p95 + 500, Math.max(p95, p50 + 499));
   const slow = i.kind === "slow" && duration != null && duration > threshold;
   const again = (proof?.latest_success === false || slow) && i.status === "open";
   const versions = version != null
@@ -531,8 +535,6 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
           .slice(0, 1)
           .map((v) => v.version),
       ];
-  const metric = i.metric_worst ?? i.metric_at_open;
-  const opening = i.metric_at_open ?? metric;
   const openedVersion = data.versions.find(v => v.version === i.opened_version);
   const onset = Date.parse(data.promptContext?.incident_start ?? data.promptContext?.slow_start ?? i.opened_at);
   const input = {
@@ -544,6 +546,11 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
     kind: i.kind,
     consecutive: i.metric_at_open?.consecutive,
     unconfirmed: opening?.unconfirmed,
+    interruptions: metric?.interruptions ?? i.metric_at_open?.interruptions,
+    queueMs: metric?.queue_ms,
+    queuePct: metric?.queue_pct,
+    cpuPct: data.serverContext?.peaks?.system_cpu_pct,
+    stealPct: data.serverContext?.peaks?.steal_pct,
     opened: i.opened_at,
     closed: i.closed_at,
     versionFirstSeen: openedVersion?.first_seen_at,
@@ -627,6 +634,7 @@ function Issue({
   const hasFailureCounts = i.kind === "failure" && metric?.total != null && metric.failures != null;
   function summaryTitle() {
     if (i.status === "resolved") return verificationMessage();
+    if (input.interruptions) return displayText(f.name) + "의 응답이 잠시 멈췄어요";
     if (hasFailureCounts && !i.metric_at_open?.consecutive) {
       return displayText(f.name) + " " + displayText(String(metric.total)) + "건 중 " +
         displayText(String(metric.failures)) + "건 실패";
@@ -637,6 +645,7 @@ function Issue({
     if (i.status === "dismissed" && i.closed_at)
       return when(new Date(Date.parse(i.closed_at) + day).toISOString()) + "까지 다시 알리지 않아요.";
     if (i.status === "resolved") return "해결 전 기록 · " + details(i, metric, f);
+    if (input.interruptions) return "10초 동안 완료 응답 0건 · 끊김 또는 시간 초과 " + input.interruptions + "건";
     if (i.kind === "unconfirmed" && metric?.unconfirmed != null)
       return "사용 결과를 확인하지 못한 기록 " + displayText(String(metric.unconfirmed)) + "건";
     return hasFailureCounts && !i.metric_at_open?.consecutive ? "감지 구간 · 최근 30분" : details(i, metric, f);
@@ -660,6 +669,7 @@ function Issue({
       <Hero showSheep={false} badge={<StatusBadge state={i.status} />}
         mood={i.status === "open" ? "worried" : "relieved"} arrived={i.status === "resolved"}
         title={summaryTitle()} detail={summaryDetail()} />
+      {queueDescription(input.queueMs, input.queuePct) && <p>{queueDescription(input.queueMs, input.queuePct)}</p>}
       <section aria-label="문제 종류">
         <h2>{prompt.diagnosis.title}</h2>
         <p>확신: {prompt.diagnosis.confidence}</p>

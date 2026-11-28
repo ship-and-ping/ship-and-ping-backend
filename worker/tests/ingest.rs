@@ -38,6 +38,90 @@ fn server_heartbeat_requires_a_server_source_and_no_request_records() {
 }
 
 #[test]
+fn queue_source_and_invalid_values_do_not_opt_in_old_senders() {
+    let mut row = request();
+    row["duration_ms"] = json!(11000);
+    for (platform, credential, wait, failures, measured) in [
+        ("server", "Bearer sp_srv_fixture", json!(-1), 0, 0),
+        ("browser", "Bearer sp_srv_fixture", json!(2), 0, 0),
+        ("server", "Bearer sp_pub_fixture", json!(2), 0, 0),
+        ("server", "Bearer sp_srv_fixture", json!(2), 1, 1),
+    ] {
+        row["queue_ms"] = wait;
+        let mut input = batch(vec![row.clone(), request()]);
+        input["platform"] = json!(platform);
+        let (bytes, _) = prepare(credential, &serde_json::to_vec(&input).unwrap(), NOW).unwrap();
+        let rpc: Value = serde_json::from_slice(&bytes).unwrap();
+        let stats = &rpc["payload"]["stats"][0];
+        assert_eq!(stats["failures"], failures);
+        assert_eq!(stats["queue_count"], measured);
+        assert_eq!(stats["flow"]["1800000000"], json!([2 - failures, failures]));
+    }
+}
+
+fn server_batch(rows: Vec<Value>) -> Value {
+    let mut input = batch(rows);
+    input["platform"] = json!("server");
+    let (rpc, _) = prepare(
+        "Bearer sp_srv_fixture",
+        &serde_json::to_vec(&input).unwrap(),
+        NOW,
+    )
+    .unwrap();
+    serde_json::from_slice(&rpc).unwrap()
+}
+
+#[test]
+fn queue_share_uses_only_requests_with_valid_measured_wait() {
+    let mut rows = vec![request()];
+    for wait in [
+        json!(0),
+        json!(35),
+        json!(-1),
+        json!(51),
+        json!(600001),
+        json!("9"),
+    ] {
+        let mut r = request();
+        r["queue_ms"] = wait;
+        rows.push(r);
+    }
+    let rpc = server_batch(rows);
+    let s = &rpc["payload"]["stats"][0];
+    assert_eq!(s["total"], 7);
+    assert_eq!(s["queue_count"], 2);
+    assert_eq!(s["queue_ms_sum"], 35);
+    assert_eq!(s["queue_total_ms"], 100);
+}
+
+#[test]
+fn terminal_outcomes_override_http_status_and_respect_deadline() {
+    let mut rows = vec![];
+    for (status, ms, limit, kind) in [
+        (499, 560, Some(10000), Some("aborted")),
+        (200, 10001, None, None),
+        (200, 10000, None, None),
+        (200, 1934, Some(1000), None),
+        (0, 100, None, Some("timeout")),
+        (200, 600001, Some(600000), None),
+    ] {
+        let mut r = request();
+        r["status"] = json!(status);
+        r["duration_ms"] = json!(ms);
+        r["timeout_ms"] = json!(limit);
+        r["queue_ms"] = json!(0);
+        r["error_kind"] = json!(kind);
+        rows.push(r);
+    }
+    let rpc = server_batch(rows);
+    let s = &rpc["payload"]["stats"][0];
+    assert_eq!(s["failures"], 5);
+    assert_eq!(s["total"], 6);
+    assert_eq!(s["client_errors"], 0);
+    assert_eq!(rpc["payload"]["error_samples"][1]["error_kind"], "timeout");
+}
+
+#[test]
 fn aggregates_only_measured_request_timings() {
     let mut measured = request();
     measured["db_ms"] = json!(0);

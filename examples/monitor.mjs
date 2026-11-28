@@ -47,7 +47,7 @@ export function monitor(config, platform) {
   }
   const timer = setInterval(flush, 30_000);
   timer.unref?.();
-  function record(method, status, start) {
+  function record(method, status, start, timing = {}) {
     records.push({
       type: "request",
       route,
@@ -59,6 +59,7 @@ export function monitor(config, platform) {
         error_kind: "storage_failed",
         error_message: "StorageError",
       }),
+      ...timing,
     });
     if (records.length >= 50) void flush();
   }

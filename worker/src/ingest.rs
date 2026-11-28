@@ -183,6 +183,8 @@ enum Data {
         method: String,
         status: u16,
         duration_ms: u32,
+        queue_ms: Option<Value>,
+        timeout_ms: Option<u32>,
         db_ms: Option<u32>,
         external_ms: Option<u32>,
         error_kind: Option<String>,
@@ -211,6 +213,11 @@ struct Stats {
     server_errors: u32,
     client_errors: u32,
     duration_sum_ms: u64,
+    queue_ms_sum: u64,
+    queue_total_ms: u64,
+    queue_count: u32,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    flow: BTreeMap<i64, [u32; 2]>,
     db_ms_sum: u64,
     db_ms_count: u32,
     external_ms_sum: u64,
@@ -218,7 +225,7 @@ struct Stats {
     #[serde(rename = "hist_30", skip_serializing_if = "no_refined_samples")]
     hist: [u32; BOUNDS.len() + 1],
     // Transient inputs for DB-side aggregation with the feature's current threshold.
-    timings: Vec<(usize, u32, Option<bool>)>,
+    timings: Vec<(usize, u32, Option<bool>, bool)>,
 }
 
 fn no_refined_samples(hist: &[u32; BOUNDS.len() + 1]) -> bool {
@@ -707,6 +714,7 @@ impl Aggregate {
         value: &serde_json::value::RawValue,
         now_ms: i64,
         key: &str,
+        server_source: bool,
         position: usize,
     ) -> Result<(), ApiError> {
         let data: Data = serde_json::from_str(value.get()).map_err(|_| ApiError::Invalid)?;
@@ -723,20 +731,36 @@ impl Aggregate {
                 method,
                 status,
                 duration_ms,
+                queue_ms,
+                timeout_ms,
                 db_ms,
                 external_ms,
                 error_kind,
                 error_message,
             } => {
                 let path = clean_route(&path)?;
+                let queue_ms = queue_ms
+                    .and_then(|v| v.as_u64())
+                    .filter(|n| server_source && *n <= u64::from(duration_ms.min(600000)));
+                let deadline = timeout_ms.filter(|n| (1..=600000).contains(n));
+                let measured = queue_ms.is_some() || deadline.is_some();
+                let terminal = match error_kind.as_deref() {
+                    Some("aborted") => Some("aborted"),
+                    Some("timeout") => Some("timeout"),
+                    _ if measured && duration_ms > deadline.unwrap_or(10000) => Some("timeout"),
+                    _ => None,
+                };
                 require(
                     valid_method(&method)
                         && (status == 0 || (100..600).contains(&status))
-                        && duration_ms <= 600000
+                        && (duration_ms <= 600000 || terminal.is_some())
                         && db_ms.is_none_or(|n| n <= 600000)
                         && external_ms.is_none_or(|n| n <= 600000),
                 )?;
-                let client = (400..500).contains(&status);
+                // Classify the actual elapsed time before capping the stored failure sample.
+                let duration_ms = duration_ms.min(600000);
+                let error_kind = terminal.map(str::to_owned).or(error_kind);
+                let client = terminal.is_none() && (400..500).contains(&status);
                 let failed = !client && (status == 0 || status >= 500 || error_kind.is_some());
                 let has_details = error_message.is_some() || error_kind.is_some();
                 if matches!(status, 401 | 403) || (failed || client) && has_details {
@@ -751,6 +775,15 @@ impl Aggregate {
                 row.server_errors += u32::from(status >= 500);
                 row.client_errors += u32::from(client);
                 row.duration_sum_ms += u64::from(duration_ms);
+                if let Some(ms) = queue_ms {
+                    row.queue_ms_sum += ms;
+                    row.queue_total_ms += u64::from(duration_ms);
+                    row.queue_count += 1;
+                }
+                if status != 0 || terminal.is_some() {
+                    let counts = row.flow.entry(ts.timestamp()).or_default();
+                    counts[usize::from(terminal.is_some())] += 1;
+                }
                 if let Some(ms) = db_ms {
                     row.db_ms_sum += u64::from(ms);
                     row.db_ms_count += 1;
@@ -760,8 +793,12 @@ impl Aggregate {
                     row.external_ms_count += 1;
                 }
                 row.hist[BOUNDS.partition_point(|bound| *bound < duration_ms)] += 1;
-                row.timings
-                    .push((position, duration_ms, (!client).then_some(!failed)));
+                row.timings.push((
+                    position,
+                    duration_ms,
+                    (!client).then_some(!failed),
+                    queue_ms.is_some(),
+                ));
             }
             Data::AttemptStart {
                 ts: _,
@@ -873,8 +910,12 @@ pub fn prepare_ingest(
         counters.accepted += 1;
     }
     let mut aggregate = Aggregate::default();
+    let server_source = batch.platform == "server" && key.starts_with("sp_srv_");
     for (position, value) in records.into_iter().enumerate() {
-        if aggregate.add(&value, now_ms, key, position).is_ok() {
+        if aggregate
+            .add(&value, now_ms, key, server_source, position)
+            .is_ok()
+        {
             counters.accepted += 1;
         } else {
             counters.dropped += 1;

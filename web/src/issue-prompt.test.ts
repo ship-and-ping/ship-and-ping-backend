@@ -5,6 +5,20 @@ import { buildIssuePrompt, displayVersion } from "./issue-prompt";
 import { shown, hidden } from "../../worker/tests/version-vectors.mjs";
 
 const base = { feature: "결제", route: "/buy", versions: ["v1"], errors: [] };
+it("Trova에서 대기가 큰 경우 서버 자원을 먼저 조사한다", () => {
+  const measured = { ...base, versions: ["3e66a68"], queueMs: 433, queuePct: 77, interruptions: 124, cpuPct: 96, stealPct: 73 };
+  const {text, diagnosis} = buildIssuePrompt(measured);
+  expect(text).toContain("처리 전 대기 평균 0.4초(전체의 77%)");
+  expect(diagnosis.type).toBe("resource");
+  expect(diagnosis.reasons.join(" ")).toContain("77%");
+  expect(text).toContain("응답 멈춤");
+  expect(text).toContain("서버 CPU 최대 96%");
+  expect(text).toContain("CPU steal 최대 73%");
+  expect(text).toContain("CPU·스레드 풀·인스턴스 크기부터");
+  expect(text).not.toContain("바뀐 코드부터");
+  expect(buildIssuePrompt({...measured, queuePct: 49}).text).not.toContain("인스턴스 크기부터");
+  expect(buildIssuePrompt(base).text).not.toContain("처리 전 대기");
+});
 it.each([500, 502])("HTTP_%i 표본에서 가림을 유지하며 반복 오류 이름을 복사한다", status => {
   const sample = { at: "2026-11-28T01:23:00Z", http_status: status, error_kind: "HTTP_" + status, message: "LookupError: private detail" };
   expect(buildIssuePrompt({ ...base, errors: [sample] }).text).toContain("- 10:23 KST LookupError\n");

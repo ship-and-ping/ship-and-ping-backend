@@ -9,7 +9,7 @@ export function IncidentServerSummary({context}:{context?:ServerContext}) {
     return value == null ? [] : [<div key={key}><dt>{label}</dt><dd>{formatMetric(value,unit)}</dd></div>];
   });
   return <section className="panel"><h2>사건 구간 서버 기록</h2>{metrics.length
-    ? <><p>문제가 열린 시각부터 해결 시각 또는 현재까지의 최댓값이에요.</p><dl>{metrics}</dl></>
+    ? <><p>감지 구간부터 해결 시각 또는 현재까지 측정한 최댓값이에요.</p><dl>{metrics}</dl></>
     : <p>이 구간에 받은 서버 지표가 없어요.</p>}</section>;
 }
 export function SilentIssue({issue,context,dismiss}:{issue:Incident; context?:ServerContext; dismiss:()=>Promise<void>}) {

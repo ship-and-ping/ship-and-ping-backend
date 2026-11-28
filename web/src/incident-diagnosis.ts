@@ -38,6 +38,11 @@ export function classifyIncident(input: IssueInput) {
     return diagnosis("memory", "보통", "사건 중 여러 번 측정한 메모리 사용량이 계속 늘었어요.");
   if (ctx?.db_slow && input.kind === "slow")
     return diagnosis("database", "보통", "이 기능이 느려진 동안 DB 처리 시간도 늘었어요.");
+  if (input.kind !== "unconfirmed" && input.queueMs != null && Number.isFinite(input.queueMs) && input.queueMs > 0 &&
+      input.queuePct != null && input.queuePct >= 50 && input.queuePct <= 100)
+    return diagnosis("resource", ctx?.cpu_high ? "높음" : "보통",
+      "전체 응답 시간의 " + input.queuePct + "%를 처리 시작 전에 기다렸어요.",
+      ctx?.cpu_high ? "사건 중 서버 CPU 사용률이 85% 이상으로 두 번 이상 측정됐어요." : "사건 시각의 CPU와 스레드 풀 사용량을 확인해 주세요.");
   if (input.kind === "slow" && peers && ratio != null && ratio >= 3 && ctx?.related_server_errors != null &&
       !ctx.related_server_partial && ctx.related_server_errors <= 3)
     return diagnosis("resource", ctx.cpu_high ? "높음" : "보통",

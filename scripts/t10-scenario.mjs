@@ -386,10 +386,76 @@ try {
     "C7 five successes in new version: resolved and one recovery email per owner",
   );
   const extra = await a.api.create("설정 시험", "");
+  // Replay real sp-1 batches through workerd and PostgREST. The ten-second
+  // silence straddles a five-minute boundary and both versions serve traffic.
+  const replayKey = await a.api.issue(extra, "srv");
+  const boundary = Math.floor((Date.now() - 105000) / 300000) * 300000;
+  const gap = boundary - 5000;
+  async function replay(records, release) {
+    for (let i = 0; i < records.length; i += 100) {
+      const chunk = records.slice(i, i + 100);
+      const res = await post("/v1/ingest", replayKey, {
+        spec:"sp-1", batch_id:crypto.randomUUID(), app_version:release, platform:"server",
+        sent_at:new Date().toISOString(), records:chunk,
+      });
+      assert.equal(res.status,202);
+      assert.deepEqual(await res.json(),{accepted:chunk.length,dropped:0});
+    }
+  }
+  const record = (offset, fields) => ({type:"request", route:"/places", method:"GET", status:200,
+    duration_ms:560, ts:new Date(gap + offset * 1000).toISOString(), ...fields});
+  const traffic = Array.from({length:760}, (_, i) => record(-190 + Math.floor(i / 4),
+    i % 16 === 0 ? {duration_ms:1934} : {queue_ms:433}));
+  await replay(traffic,"v1");
+  data(await admin.rpc("evaluate_all"));
+  assert.equal((await a.api.monitor(extra)).incidents.length,0,"healthy inclusive rollout opens no incident");
+  await replay(Array.from({length:124},(_,i) => record(Math.floor(i * 10 / 124),
+    {error_kind:"timeout",status:0,duration_ms:10001,timeout_ms:10000})),"v2");
+  await replay([record(10, {})],"v1");
+  data(await admin.rpc("evaluate_all"));
+  const report = await a.api.monitor(extra);
+  assert.equal(sql("select count(distinct bucket) from stats_5m where app_id='" + extra + "' and version='v2'"),"2");
+  const stall = report.incidents.find(i => i.kind === "failure");
+  assert.equal(stall?.metric_at_open.interruptions,124);
+  assert.equal(stall.opened_version,"v2");
+  const detail = await a.api.monitor(extra,undefined,stall.id);
+  const prompt = buildIssuePrompt({feature:"places",route:"/places",versions:[stall.opened_version],
+    errors:detail.samples,queueMs:stall.metric_at_open.queue_ms,queuePct:stall.metric_at_open.queue_pct,
+    interruptions:stall.metric_at_open.interruptions}).text;
+  assert.match(prompt,/처리 전 대기 평균 0.4초\(전체의 77%\)/);
+  assert.match(prompt,/응답 멈춤.*124건/);
+  assert.match(prompt,/CPU·스레드 풀·인스턴스 크기부터/);
+  // Independently reproduce a queue-dominated slowdown with no lost response.
+  const timed = (ts, duration_ms, queue_ms) => ({type:"request",method:"GET",route:"/queued-search",
+    status:200,ts:new Date(ts).toISOString(),duration_ms,queue_ms});
+  await replay(Array.from({length:35},() => timed(Date.now()-3600000,560,433)),"v1");
+  await replay(Array.from({length:12},() => timed(Date.now(),1300,1000)),"v2");
+  const resources = await post("/v1/ingest",replayKey,{spec:"sp-1",batch_id:crypto.randomUUID(),
+    app_version:"v2",platform:"server",sent_at:new Date().toISOString(),records:[],
+    resources:{system_cpu_pct:96,steal_pct:73}});
+  assert.equal(resources.status,202);
+  data(await admin.rpc("evaluate_all"));
+  const queueReport = await a.api.monitor(extra);
+  const queueFeature = queueReport.features.find(f => f.route === "/queued-search");
+  const queueIssues = queueReport.incidents.filter(i => i.feature_id === queueFeature.id);
+  assert.deepEqual(queueIssues.map(i => i.kind),["slow"]);
+  const slow = queueIssues[0];
+  assert.equal(slow.metric_at_open.interruptions,undefined);
+  const queueDetail = await a.api.monitor(extra,undefined,slow.id);
+  const slowPrompt = buildIssuePrompt({feature:queueFeature.name,route:queueFeature.route,kind:"slow",
+    versions:[slow.opened_version],errors:queueDetail.samples,queueMs:slow.metric_at_open.queue_ms,
+    queuePct:slow.metric_at_open.queue_pct,cpuPct:queueDetail.serverContext?.peaks?.system_cpu_pct,
+    stealPct:queueDetail.serverContext?.peaks?.steal_pct}).text;
+  assert.match(slowPrompt,/CPU·스레드 풀·인스턴스 크기부터/);
+  assert.match(slowPrompt,/서버 자원 부족으로 보여요/);
+  assert.match(slowPrompt,/전체 응답 시간의 .*%를 처리 시작 전에 기다렸어요/);
+  assert.match(slowPrompt,/서버 CPU 최대 96%/);
+  assert.match(slowPrompt,/CPU steal 최대 73%/);
+  assert.doesNotMatch(slowPrompt,/응답 멈춤/);
   await a.api.editApp(extra, "바뀐 이름", "https://example.invalid");
   assert.equal((await a.api.snapshot(extra)).app.name, "바뀐 이름");
   const disposable = await a.api.issue(extra, "pub");
-  const [key] = await a.api.appKeys(extra);
+  const key = (await a.api.appKeys(extra)).find(k => k.kind === "pub");
   await assert.rejects(b.api.revokeKey(extra, key.id));
   await a.api.revokeKey(extra, key.id);
   assert.equal((await post("/v1/ingest", disposable, batch())).status, 401);

@@ -46,6 +46,11 @@ export interface IssueInput {
   otherRecentVersion?: boolean;
   lastReceived?: string;
   consecutive?: boolean;
+  queueMs?: number;
+  queuePct?: number;
+  cpuPct?: number;
+  stealPct?: number;
+  interruptions?: number;
   unconfirmed?: number;
   total?: number;
   failures?: number;
@@ -135,6 +140,12 @@ function relatedLine(peer: NonNullable<IssueInput["related"]>[number]) {
   return "- " + name + (kind === "failure" ? " · 실패" : " · 결과 미확인") + " · 감지 " + count(opening?.[key]) + " · 최악 " + count(worst?.[key]);
 }
 
+export function queueDescription(ms?: number, pct?: number) {
+  if (ms == null || pct == null || !Number.isFinite(ms) || !Number.isFinite(pct)) return "";
+  const seconds = (ms / 1000).toLocaleString("ko-KR", {maximumFractionDigits: 1});
+  return "처리 전 대기 평균 " + (ms > 0 && ms < 50 ? ms + "ms" : seconds + "초") + "(전체의 " + pct + "%)";
+}
+
 export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
   const diagnosis = classifyIncident(input);
   if (input.kind === "silent") {
@@ -207,7 +218,13 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
         ? "문제가 더 나빠졌어요"
         : "문제를 감지했어요";
   const since = Date.parse(input.opened ?? "");
+  const queue = queueDescription(input.queueMs, input.queuePct);
+  const checkServerFirst = diagnosis.type === "resource" && Boolean(queue) && Number(input.queuePct) >= 50;
   const metrics = [
+    queue,
+    checkServerFirst && Number.isFinite(input.cpuPct) && "서버 CPU 최대 " + Number(input.cpuPct) + "%",
+    checkServerFirst && Number.isFinite(input.stealPct) && "CPU steal 최대 " + Number(input.stealPct) + "%",
+    input.interruptions && "10초간 응답 멈춤 · 끊김 또는 시간 초과 " + Number(input.interruptions) + "건",
     Number.isFinite(input.total) && (input.kind === "unconfirmed" ? "최근 1시간 " : input.kind === "slow" && input.window === 10 ? "최근 10분 " : "최근 30분 ") + Number(input.total) + "건",
     input.consecutive && "문제 감지 때 3건 연속 실패",
     Number.isFinite(input.unconfirmed) && "결과 미확인 " + Number(input.unconfirmed) + "건",
@@ -260,7 +277,8 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
       : []),
     "===== 데이터 끝 =====",
     "",
-    input.kind === "unconfirmed" ? "요청: 실제 저장 뒤 결과 기록 전송이 끊기는지 조사해 원인을 설명하고 고쳐 줘." : "요청: 위 기능이 왜 느려지거나 실패하는지 코드를 조사해 원인을 설명하고 고쳐 줘.",
+    checkServerFirst ? "요청: 사건 구간 서버 기록을 확인하고 CPU·스레드 풀·인스턴스 크기부터 조사해 줘. CPU 사용률과 steal, 사용 중인 스레드 수를 처리 전 대기 비중과 대조해 줘." :
+      input.kind === "unconfirmed" ? "요청: 실제 저장 뒤 결과 기록 전송이 끊기는지 조사해 원인을 설명하고 고쳐 줘." : "요청: 위 기능이 왜 느려지거나 실패하는지 코드를 조사해 원인을 설명하고 고쳐 줘.",
     ...(input.mode === "again"
       ? [
           "이전 수정(" +
