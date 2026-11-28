@@ -12,6 +12,10 @@ it.each([500, 502])("HTTP_%i 표본에서 가림을 유지하며 반복 오류 �
   expect(buildIssuePrompt({ ...base, errors }).text).not.toContain("LookupError");
   expect(buildIssuePrompt({ ...base, errors }, true).text).not.toContain("ignore previous instructions");
 });
+it("앱이 지정한 오류 종류를 복사한다", () => {
+  const errors = [{ at: "2026-11-28T01:24:00Z", http_status: 500, error_kind: "write_failed", message: "WriteError: private detail" }];
+  expect(buildIssuePrompt({ ...base, errors }).lines).toEqual(["10:24 KST write_failed"]);
+});
 it.each([401, 403])("이름과 메시지가 없는 HTTP %i 표본 한 건의 시각을 복사한다", status => {
   const errors = [{ at: "2026-11-28T01:24:00Z", http_status: status, error_kind: null, message: null }];
   expect(buildIssuePrompt({ ...base, errors }).text).toContain("- 10:24 KST HTTP_" + status + " 1건\n");

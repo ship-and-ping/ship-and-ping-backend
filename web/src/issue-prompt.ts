@@ -154,7 +154,9 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
   const lines = records.map(r => {
     if (typeof r === "string") return errorName(r) ?? omitted;
     const authStatus = r.http_status === 401 || r.http_status === 403 ? "HTTP_" + r.http_status + " 1건" : null;
-    const label = errorName(r.error_kind) ?? errorName(r.message) ?? errorKind(r.error_kind) ?? authStatus ?? omitted;
+    const kind = errorKind(r.error_kind);
+    const name = errorName(r.message);
+    const label = kind && /^HTTP_5\d{2}$/.test(kind) ? name ?? kind : kind ?? name ?? authStatus ?? omitted;
     return clock(r.at) + " " + label;
   });
   // Inspect normalized input even when a whole header is hidden in the copied text.
