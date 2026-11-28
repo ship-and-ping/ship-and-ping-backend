@@ -19,6 +19,7 @@ describe("요청문에 삽입되는 값", () => {
     expect(replacement.split("\n")).toContain("이 앱의 새 쉽앤핑 키: " + key);
     expect(replacement.match(/sp_(?:pub|srv)_\w+/g)).toEqual([key]);
     for (const prompt of [first, replacement]) {
+      expect(prompt).toContain("app_version에는 배포한 git 커밋 짧은 해시(없으면 배포 버전 번호)를 넣고, 서버 시작 시각이나 무작위 값은 쓰지 마세요");
       expect(prompt).toContain(".gitignore");
       expect(prompt).toContain("3~4단계");
       expect(prompt).toContain("코드나 커밋에 남지 않았는지 검색");

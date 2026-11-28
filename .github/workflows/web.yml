@@ -1,10 +1,10 @@
 name: web
 on:
   pull_request:
-    paths: ['web/**', 'docs/specs/sanitize-vectors.json', 'supabase/tests/sanitize_vectors.sql', '.github/workflows/web.yml']
+    paths: ['web/**', 'worker/src/version.js', 'worker/tests/version-vectors.mjs', 'docs/specs/sanitize-vectors.json', 'supabase/tests/sanitize_vectors.sql', '.github/workflows/web.yml']
   push:
     branches: [main]
-    paths: ['web/**', 'docs/specs/sanitize-vectors.json', 'supabase/tests/sanitize_vectors.sql', '.github/workflows/web.yml']
+    paths: ['web/**', 'worker/src/version.js', 'worker/tests/version-vectors.mjs', 'docs/specs/sanitize-vectors.json', 'supabase/tests/sanitize_vectors.sql', '.github/workflows/web.yml']
 permissions:
   contents: read
 jobs:

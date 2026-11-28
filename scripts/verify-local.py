@@ -51,6 +51,10 @@ def verify(tmp, stack):
     config = (ROOT / "scripts/t10-config.toml").read_text().replace("ship-and-ping-t10", project)
     (tmp / "supabase/config.toml").write_text(config)
     shutil.copytree(ROOT / "web", tmp / "web", ignore=shutil.ignore_patterns("node_modules", "dist", ".env*", ".vite"))
+    for name in ["src/version.js", "tests/version-vectors.mjs"]:
+        target = tmp / "worker" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(WORKER / name, target)
     shutil.copytree(ROOT / "docs", tmp / "docs")
     run("npm", "ci", cwd=tmp / "web")
     run("npm", "test", cwd=tmp / "web")
