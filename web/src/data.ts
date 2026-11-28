@@ -106,6 +106,7 @@ export interface PushDevice {
   id: string;
   endpoint: string;
   vapid_fingerprint: string | null;
+  current_session: boolean;
   user_agent: string;
   created_at: string;
 }
@@ -335,7 +336,7 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       return value(await client.rpc("notification_settings", { app }));
     },
     async devices() {
-      return value(await client.from("push_subscriptions").select("id,endpoint,user_agent,created_at,vapid_fingerprint").order("created_at"));
+      return value(await client.rpc("list_push_devices"));
     },
     async removeDevice(id) {
       const {error} = await client.from("push_subscriptions").delete().eq("id",id);

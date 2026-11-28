@@ -19,7 +19,7 @@ export function PushChannel({api, app, settings, reload}: Props) {
   const supported = "Notification" in window && "PushManager" in window && "serviceWorker" in navigator;
   const current = devices.find(d => d.endpoint === endpoint);
   const keyChanged = current && (!keyHash || current.vapid_fingerprint !== keyHash || (browserHash && browserHash !== keyHash));
-  const stale = keyChanged;
+  const stale = Boolean(endpoint) && (!current?.current_session || keyChanged);
   useEffect(() => {
     const update = () => setInstallable(canInstall());
     const updateDevices = () => setVersion(v => v + 1);

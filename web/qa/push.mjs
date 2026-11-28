@@ -31,7 +31,7 @@ try {
       Object.defineProperty(navigator,"serviceWorker",{value:{register:async () => reg,getRegistration:async () => reg}});
       Object.defineProperty(window,"Notification",{value:{permission:home?"granted":"default"}});
     },{home,endpoint});
-    await page.route("**/rest/v1/push_subscriptions?**",r => r.fulfill({json:home?[{id:"one",vapid_fingerprint:createHash("sha256").update(Buffer.from([4])).digest("hex"),user_agent:"iPhone",created_at:"2026-11-27",endpoint}]:[]}));
+    await page.route("**/rpc/list_push_devices",r => r.fulfill({json:home?[{id:"one",current_session:true,vapid_fingerprint:createHash("sha256").update(Buffer.from([4])).digest("hex"),user_agent:"iPhone",created_at:"2026-11-27",endpoint}]:[]}));
     await page.route("**/rpc/register_push",r => r.fulfill({json:"one"}));
     await page.route("**/rpc/notification_settings",r => r.fulfill({json:{push:true,subscribed:home,email:true,connected:false,broken:false,channel:null}}));
     await page.goto(origin+"/apps/demo/notifications");

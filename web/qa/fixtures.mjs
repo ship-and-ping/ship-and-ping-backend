@@ -72,7 +72,7 @@ export async function mockPage(page, state, member, origin) {
         failures: state === "failure" ? 6 : 0, hist: [0,0,0,0,14] }],
       feature_map_suggestions: [], error_samples: [], attempts: [], app_key_list: [], demo_insights: [],
       notification_settings: { email: true, connected: false, broken: false, channel: null, push:true, subscribed:false },
-      push_subscriptions: [],
+      list_push_devices: [],
       incident_verification: { version: null, consecutive_successes: 0 },
     };
     if (!Object.hasOwn(rows, name)) throw Error("Missing QA fixture: " + name);

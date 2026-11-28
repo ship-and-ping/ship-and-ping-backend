@@ -3,19 +3,24 @@ create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
 select no_plan();
 insert into auth.users(id) values ('00000000-0000-0000-0000-000000000049'),('00000000-0000-0000-0000-000000000048');
+insert into auth.sessions(id,user_id) select gen_random_uuid(),id from auth.users;
+select set_config('test.first_claims',jsonb_build_object('sub',user_id,'session_id',id)::text,true)
+ from auth.sessions where user_id='00000000-0000-0000-0000-000000000049';
+select set_config('test.second_claims',jsonb_build_object('sub',user_id,'session_id',id)::text,true)
+ from auth.sessions where user_id='00000000-0000-0000-0000-000000000048';
 insert into apps(owner_id,name) values ('00000000-0000-0000-0000-000000000049','push');
 select set_config('test.app',id::text,true) from apps;
-select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000049',true);
+select set_config('request.jwt.claims',current_setting('test.first_claims'),true);
 set local role authenticated;
 select register_push(current_setting('test.app')::uuid,'https://web.push.apple.com/fixture','B'||repeat('A',86),repeat('A',22),'iPhone');
 select register_push(current_setting('test.app')::uuid,'https://web.push.apple.com/fixture','B'||repeat('A',86),repeat('A',22),'iPhone');
 select is((select count(id) from push_subscriptions),1::bigint,'one device on retry');
 select throws_ok($$select register_push(current_setting('test.app')::uuid,'http://example.invalid/device','B'||repeat('A',86),repeat('A',22),'PC')$$,'23514',null,'reject insecure endpoint');
-select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000048',true);
+select set_config('request.jwt.claims',current_setting('test.second_claims'),true);
 select is_empty('select id from push_subscriptions','other member cannot see devices');
 delete from push_subscriptions;
 select throws_ok($$select register_push(current_setting('test.app')::uuid,'https://web.push.apple.com/other','B'||repeat('A',86),repeat('A',22),'PC')$$,'42501',null,'cannot subscribe another app');
-select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000049',true);
+select set_config('request.jwt.claims',current_setting('test.first_claims'),true);
 select ok(queue_test_push(current_setting('test.app')::uuid,id),'test button queues delivery') from push_subscriptions;
 select ok(not queue_test_push(current_setting('test.app')::uuid,id),'test cooldown') from push_subscriptions;
 reset role;

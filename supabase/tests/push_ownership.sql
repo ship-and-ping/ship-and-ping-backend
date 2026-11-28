@@ -4,16 +4,21 @@ set search_path=public,extensions;
 select no_plan();
 
 insert into auth.users(id) values ('00000000-0000-0000-0000-000000000049'),('00000000-0000-0000-0000-000000000048');
+insert into auth.sessions(id,user_id) select gen_random_uuid(),id from auth.users;
+select set_config('test.first_claims',jsonb_build_object('sub',user_id,'session_id',id)::text,true)
+ from auth.sessions where user_id='00000000-0000-0000-0000-000000000049';
+select set_config('test.second_claims',jsonb_build_object('sub',user_id,'session_id',id)::text,true)
+ from auth.sessions where user_id='00000000-0000-0000-0000-000000000048';
 insert into apps(owner_id,name) values ('00000000-0000-0000-0000-000000000049','first');
 select set_config('test.app',id::text,true) from apps;
 insert into apps(owner_id,name) values ('00000000-0000-0000-0000-000000000048','second');
 select set_config('test.second',id::text,true) from apps where name='second';
-select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000049',true);
+select set_config('request.jwt.claims',current_setting('test.first_claims'),true);
 set local role authenticated;
 select set_config('test.device',register_push(current_setting('test.app')::uuid,'https://web.push.apple.com/shared',
  'B'||repeat('A',86),repeat('A',22),'iPhone',repeat('1',64))::text,true);
 select ok(queue_test_push(current_setting('test.app')::uuid,current_setting('test.device')::uuid),'old account queues a push');
-select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000048',true);
+select set_config('request.jwt.claims',current_setting('test.second_claims'),true);
 select throws_ok($$select register_push(current_setting('test.second')::uuid,'https://web.push.apple.com/shared','B'||repeat('A',86),
  repeat('Z',22),'PC')$$,'42501',null,'endpoint alone cannot claim an existing subscription');
 select throws_ok($$select register_push(current_setting('test.second')::uuid,'https://web.push.apple.com/shared',
@@ -31,14 +36,14 @@ select is((select count(*) from mismatched),1::bigint,'mismatched job claimed fo
 select is((select push_target from mismatched),null::jsonb,'mismatched job has no delivery target');
 select is_empty('select id from push_subscriptions','mismatched subscription deleted at dispatch');
 select register_push(current_setting('test.second')::uuid,'https://web.push.apple.com/new','B'||repeat('A',86),repeat('Z',22),'PC');
-select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000049',true);
+select set_config('request.jwt.claims',current_setting('test.first_claims'),true);
 set local role authenticated;
 select unregister_browser_push('https://web.push.apple.com/new','B'||repeat('A',86),repeat('Z',22));
 reset role;
 select is_empty('select id from push_subscriptions','switch can revoke the exact old subscription');
 select ok(not has_function_privilege('anon','unregister_browser_push(text,text,text)','execute'),'anonymous revocation denied');
 
-select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000049',true);
+select set_config('request.jwt.claims',current_setting('test.first_claims'),true);
 select register_push(current_setting('test.app')::uuid,'https://web.push.apple.com/device'||n,
  'B'||repeat('A',86),repeat('A',22),'PC') from generate_series(1,11) n;
 select is((select count(*) from push_subscriptions),10::bigint,'ten devices per account');
@@ -68,7 +73,7 @@ select ok(not has_function_privilege('authenticated','prepare_push_delivery(uuid
 select register_push(current_setting('test.app')::uuid,'https://web.push.apple.com/revoke','B'||repeat('A',86),repeat('Z',22),'PC');
 select set_config('test.proof',encode(extensions.digest(endpoint || chr(10) || p256dh || chr(10) || auth,'sha256'),'hex'),true)
  from push_subscriptions where endpoint='https://web.push.apple.com/revoke';
-select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000048',true);
+select set_config('request.jwt.claims',current_setting('test.second_claims'),true);
 set local role authenticated;
 select revoke_push_by_proof(repeat('0',64));
 select is(cleanup_push_target('00000000-0000-0000-0000-000000000048','https://web.push.apple.com/revoke',

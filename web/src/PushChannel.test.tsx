@@ -5,11 +5,11 @@ import {PushChannel} from "./PushChannel";
 import {PushCleanupError,startPwa} from "./push";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
-function setup(home: boolean, permission: NotificationPermission = "granted", agent = "iPhone", rotated = false, loggedOut = false) {
+function setup(home: boolean, permission: NotificationPermission = "granted", agent = "iPhone", rotated = false, loggedOut = false, legacy = false) {
   vi.stubGlobal("crypto", {subtle:{digest:async (_algorithm: string, bytes: ArrayBuffer) => bytes}});
   const sub = {endpoint:"https://web.push.apple.com/device",toJSON:() => ({endpoint:"https://web.push.apple.com/device",keys:{p256dh:"fixture",auth:"fixture"}})};
   const old = {...sub,options:{applicationServerKey:Uint8Array.of(rotated ? 3 : 4).buffer},unsubscribe:vi.fn(async () => true)};
-  const manager = {getSubscription:vi.fn(async () => rotated ? old : null),subscribe:vi.fn(async () => sub)};
+  const manager = {getSubscription:vi.fn(async () => rotated || legacy ? old : null),subscribe:vi.fn(async () => sub)};
   const reg = {pushManager:manager};
   const register = vi.fn(async () => reg);
   vi.stubGlobal("navigator", {userAgent:agent,standalone:home,serviceWorker:{register,getRegistration:register,ready:Promise.resolve(reg)}});
@@ -18,7 +18,7 @@ function setup(home: boolean, permission: NotificationPermission = "granted", ag
   vi.stubGlobal("PushManager",class {});
   vi.stubEnv("VITE_VAPID_PUBLIC_KEY","BA");
   const operations = {registerPush:vi.fn(),removeEndpoint:vi.fn()};
-  const api = {devices:vi.fn(async () => rotated || loggedOut ? [{id:"old",endpoint:sub.endpoint,user_agent:"iPhone",
+  const api = {devices:vi.fn(async () => rotated || loggedOut || legacy ? [{id:"old",endpoint:sub.endpoint,user_agent:"iPhone",current_session:!legacy,
     created_at:"2026-11-27",vapid_fingerprint:rotated ? "03" : "04"}] : []),
     ...operations,withPushRegistration:vi.fn((action: (ops:typeof operations) => Promise<void>) => action(operations))};
   render(<PushChannel api={api as unknown as Gateway} app="mine" settings={{push:true,email:false,connected:false,broken:false,channel:null}} reload={vi.fn()}/>);
@@ -53,6 +53,15 @@ it("explains how to restore denied iPhone permission", async () => {
   await screen.findByText(/설정 → 알림 → 쉽앤핑/);
   expect(manager.subscribe).not.toHaveBeenCalled();
   expect(api.registerPush).not.toHaveBeenCalled();
+});
+it("requires explicit opt-in for a legacy subscription even with the current VAPID key", async () => {
+  const {api,manager} = setup(true,"granted","iPhone",false,false,true);
+  await screen.findByText("다시 켜기 필요");
+  expect(screen.queryByRole("button",{name:"시험 푸시 보내기"})).toBeNull();
+  expect(api.registerPush).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button",{name:"푸시 다시 켜기"}));
+  await waitFor(() => expect(api.registerPush).toHaveBeenCalledOnce());
+  expect(manager.subscribe).not.toHaveBeenCalled();
 });
 it("offers one-tap opt-in after login even if another saved device and app push are enabled", async () => {
   const {api,manager,sub,requestPermission} = setup(true,"granted","PC",false,true);
