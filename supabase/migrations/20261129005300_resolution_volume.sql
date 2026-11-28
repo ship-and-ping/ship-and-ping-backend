@@ -2,11 +2,12 @@ alter table public.incidents add column volume_quiet_since timestamptz,
  add column volume_recovered_at timestamptz;
 
 alter table public.notifications drop constraint notifications_check,
- add constraint notifications_check check ((event in ('open','worse','resolved','volume_quiet')
+ add constraint notifications_check check ((event in ('open','worse','resolved','volume_quiet','volume_unverified')
  and incident_id is not null and test_app is null)
  or (event='test' and incident_id is null and test_app is not null));
 
--- Auto traffic uses the same two five-minute buckets as the short detection window.
+-- Use the last two completed buckets. Counts in the current partial bucket
+-- cannot be apportioned by minute, especially during bursts.
 -- Count every request, including failures, across versions of this feature.
 create function private.feature_rpm(target_app uuid, target_feature uuid) returns numeric
 language sql stable set search_path='' as $$
@@ -14,14 +15,17 @@ language sql stable set search_path='' as $$
    (select count(*) from public.attempts a where a.app_id=f.app_id and a.feature_id=f.id
     and a.started_at between now()-interval '10 minutes' and now())
  else (select coalesce(sum(s.total),0) from public.stats_5m s where s.app_id=f.app_id and s.feature_id=f.id
-   and s.bucket between date_bin('5 minutes',now(),timestamptz 'epoch')-interval '5 minutes' and now())
+   and s.bucket >= date_bin('5 minutes',now(),timestamptz 'epoch')-interval '10 minutes'
+   and s.bucket < date_bin('5 minutes',now(),timestamptz 'epoch'))
  end / 10.0 from public.features f where f.app_id=target_app and f.id=target_feature
 $$;
 create function private.volume_comparison(i public.incidents) returns jsonb
 language sql stable set search_path='' as $$
  select case when i.metric_at_open ? 'requests_per_minute' then jsonb_build_object(
    'opening_rpm',i.metric_at_open->'requests_per_minute','current_rpm',private.feature_rpm(i.app_id,i.feature_id),
-   'volume_quiet',i.status='open' and i.volume_quiet_since is not null)
+   'volume_quiet',i.status='open' and i.volume_quiet_since is not null and i.volume_recovered_at is null,
+   'volume_recovering',i.status='open' and i.volume_recovered_at is not null,
+   'volume_unverified',i.status='quiet' and i.volume_quiet_since is not null)
  else '{}'::jsonb end
 $$;
 revoke all on function private.feature_rpm(uuid,uuid),private.volume_comparison(public.incidents) from public,anon,authenticated,service_role;

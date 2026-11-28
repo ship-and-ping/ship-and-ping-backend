@@ -26,6 +26,8 @@ const weak =
 export const isStrong = (s: string) => strong.some((pattern) => pattern.test(s));
 
 export const volumeQuietMessage = "요청이 줄어 정상처럼 보여요. 같은 부하에서 다시 확인해 주세요";
+export const volumeRecoveringMessage = "요청량이 돌아왔어요. 회복 후 새 버전에서 정상 5건을 확인하고 있어요.";
+export const volumeUnverifiedMessage = "24시간 동안 요청량이 돌아오지 않아 해결 여부를 확인하지 못했어요.";
 export function volumeComparison(opening?: number, current?: number) {
   return Number.isFinite(opening) && Number.isFinite(current)
     ? `개설 때 분당 ${opening}건 → 지금 분당 ${current}건` : undefined;
@@ -35,6 +37,8 @@ export interface IssueInput {
   openingRpm?: number;
   currentRpm?: number;
   volumeQuiet?: boolean;
+  volumeRecovering?: boolean;
+  volumeUnverified?: boolean;
   feature: string;
   route: string;
   versions: string[];
@@ -221,6 +225,9 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
   const versionLine =
     "앱 버전: " + (versions.join(" / 이전 버전: ") || "미확인");
   const status =
+    input.volumeUnverified ? volumeUnverifiedMessage :
+    input.volumeRecovering ? volumeRecoveringMessage :
+    input.volumeQuiet ? volumeQuietMessage :
     input.mode === "again"
       ? "업데이트 뒤에도 문제가 있어요"
       : input.mode === "worse"
@@ -248,7 +255,7 @@ export function buildIssuePrompt(input: IssueInput, includeStrong = false) {
   const text = [
     "[쉽앤핑 문제 보고]",
     "상태: " +
-      (input.volumeQuiet ? volumeQuietMessage : status) +
+      status +
       (metrics ? " · " + metrics : "") + (Number.isFinite(input.worst) ? " · 최악 " + approximateDuration(input.worst!) : ""),
     ...(Number.isFinite(since) ? [(input.kind === "slow" ? "첫 느린 5분 구간 시작 " +
       (ctx?.slow_start ? kst(ctx.slow_start) : "기록 부족") + " · " :

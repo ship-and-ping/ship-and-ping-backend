@@ -5,6 +5,12 @@ import { buildIssuePrompt, displayVersion } from "./issue-prompt";
 import { shown, hidden } from "../../worker/tests/version-vectors.mjs";
 
 const base = { feature: "결제", route: "/buy", versions: ["v1"], errors: [] };
+it("부하 회복 후에는 새 정상 기록을 기다리고 장기 미회복 종료는 확인 못 함으로 안내한다", () => {
+  const recovering = buildIssuePrompt({ ...base, volumeRecovering: true }).text;
+  expect(recovering).toContain("요청량이 돌아왔어요");
+  expect(recovering).not.toContain("요청이 줄어 정상처럼 보여요");
+  expect(buildIssuePrompt({ ...base, volumeUnverified: true }).text).toContain("해결 여부를 확인하지 못했어요");
+});
 it("부하가 줄어든 해결 후보에 요청량과 재확인 안내를 표시한다", () => {
   const { text } = buildIssuePrompt({ ...base, openingRpm: 200, currentRpm: 3, volumeQuiet: true });
   expect(text).toContain("개설 때 분당 200건 → 지금 분당 3건");

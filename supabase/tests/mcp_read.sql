@@ -49,7 +49,7 @@ select is(pg_temp.read_tool('check_resolution',jsonb_build_object('id',current_s
 update incidents set metric_at_open=metric_at_open||'{"requests_per_minute":200}'::jsonb,volume_quiet_since=now()
  where id=current_setting('test.app')::uuid;
 select ok((pg_temp.read_tool('check_resolution',jsonb_build_object('id',current_setting('test.app')))->'data')
- @> '{"opening_rpm":200,"current_rpm":0.8,"volume_quiet":true,"resolved":false}'::jsonb,
+ @> '{"opening_rpm":200,"current_rpm":0,"volume_quiet":true,"resolved":false}'::jsonb,
  'resolution tool reports both rates while awaiting comparable load');
 select is(pg_temp.read_tool('get_feature_metrics',jsonb_build_object('feature',current_setting('test.app'),'range','5m'))#>>'{data,total}','8','feature request count');
 select is(pg_temp.read_tool('get_feature_metrics',jsonb_build_object('feature',current_setting('test.app'),'range','1h'))#>>'{data,baseline_p95_ms}','100','ordinary range');

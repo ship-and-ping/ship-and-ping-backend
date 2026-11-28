@@ -52,7 +52,7 @@ begin
      if current_rpm>=opening_rpm*0.5 and issue.volume_recovered_at is null then
       update public.incidents set volume_recovered_at=now() where id=issue.id returning * into issue;
      elsif current_rpm<opening_rpm*0.5 and issue.volume_recovered_at is not null then
-      update public.incidents set volume_recovered_at=null where id=issue.id returning * into issue;
+      update public.incidents set volume_recovered_at=null,volume_quiet_since=now() where id=issue.id returning * into issue;
      end if;
     end if;
    end if;
@@ -86,6 +86,9 @@ begin
      metric_worst=case when (case when issue.kind='slow' then (metric->>'p50')::numeric>(metric_worst->>'p50')::numeric
        else signal.severity>(metric_worst->>'severity')::numeric end) then metric else metric_worst end,
      last_notified_at=case when change='worse' then now() else last_notified_at end where id=issue.id;
+   elsif issue.volume_quiet_since<=now()-interval '24 hours' and issue.volume_recovered_at is null then
+    update public.incidents set status='quiet',closed_at=now(),last_notified_at=now() where id=issue.id;
+    change := 'volume_unverified';
    elsif issue.volume_quiet_since is null and not exists(select from public.app_versions where app_id=issue.app_id and version<>issue.opened_version and last_seen_at>issue.opened_at) then
     if issue.below_since is null then
      update public.incidents set below_since=now() where id=issue.id;

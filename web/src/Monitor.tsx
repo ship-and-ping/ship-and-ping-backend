@@ -11,7 +11,7 @@ import { MonitorToolbar, periodName } from "./MonitorToolbar";
 import { SpeedInsights } from "./SpeedInsights";
 import "./styles/dashboard.css";
 import { displayText, sanitizeRoute } from "./normalize";
-import { buildIssuePrompt, displayVersion, heartbeatResolution, noErrorSamples, queueDescription, volumeComparison, volumeQuietMessage } from "./issue-prompt";
+import { buildIssuePrompt, displayVersion, heartbeatResolution, noErrorSamples, queueDescription, volumeComparison, volumeQuietMessage, volumeRecoveringMessage, volumeUnverifiedMessage } from "./issue-prompt";
 import {
   summarize,
   formatDuration,
@@ -541,6 +541,8 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
     openingRpm: proof?.opening_rpm,
     currentRpm: proof?.current_rpm,
     volumeQuiet: proof?.volume_quiet,
+    volumeRecovering: proof?.volume_recovering,
+    volumeUnverified: proof?.volume_unverified,
     feature: f.name,
     route: f.route ?? "",
     method: f.method,
@@ -597,6 +599,8 @@ function Issue({
   const { proof, version, fresh, after, streak, duration, slow, again, metric, input } = issueContext(data, f, i);
   function verificationMessage() {
     if (proof?.volume_quiet) return volumeQuietMessage;
+    if (proof?.volume_recovering) return volumeRecoveringMessage;
+    if (proof?.volume_unverified) return volumeUnverifiedMessage;
     if (i.kind === "silent") return i.status === "resolved" ? "살아 있음 신호가 다시 도착했어요." : "다음 살아 있음 신호를 기다리고 있어요.";
     if (i.status === "resolved") {
       const result = i.kind === "slow" ? "평소 속도로 끝났어요." : "성공했어요.";
@@ -631,13 +635,15 @@ function Issue({
       at: observed,
       text: "새 버전 감지 · " + displayVersion(fresh.version),
     });
-  if (i.closed_at) events.push({ at: i.closed_at, text: status[i.status] +
+  if (i.closed_at) events.push({ at: i.closed_at, text: (proof?.volume_unverified ? "해결 여부 확인 못 함" : status[i.status]) +
     (i.resolved_version != null ? " · 버전 " + displayVersion(i.resolved_version) : "") });
   const prompt = buildIssuePrompt(input);
   const copyTitle = prompt.strongCount ? "그 줄 빼고 요청문 복사" : again ? "다시 보낼 요청문 복사" : "AI 조사 요청문 복사";
   const hasFailureCounts = i.kind === "failure" && metric?.total != null && metric.failures != null;
   function summaryTitle() {
     if (proof?.volume_quiet) return "조용해짐 — 같은 부하에서 확인 필요";
+    if (proof?.volume_unverified) return "해결 여부 확인 못 함";
+    if (proof?.volume_recovering) return "요청량 회복 · 새 버전 확인 중";
     if (i.status === "resolved") return verificationMessage();
     if (input.interruptions) return displayText(f.name) + "의 응답이 잠시 멈췄어요";
     if (hasFailureCounts && !i.metric_at_open?.consecutive) {
@@ -701,7 +707,7 @@ function Issue({
             <Timeline events={events.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
               .map(event => ({ ...event, date: when(event.at) }))} />
           </section>
-          {(i.status === "open" || i.status === "resolved") && <section id="verification" className="panel">
+          {(i.status === "open" || i.status === "resolved" || proof?.volume_unverified) && <section id="verification" className="panel">
             <h2>{i.kind === "silent" ? "신호 복구 확인" : "업데이트 후 확인"}</h2>
             {version != null && <p>{i.status === "resolved" ? "해결 버전" : "확인 버전"} · {displayVersion(version)}</p>}
             {input.openingRpm != null && <p>{volumeComparison(input.openingRpm, input.currentRpm)}</p>}
