@@ -5,6 +5,11 @@ import { buildIssuePrompt, displayVersion } from "./issue-prompt";
 import { shown, hidden } from "../../worker/tests/version-vectors.mjs";
 
 const base = { feature: "결제", route: "/buy", versions: ["v1"], errors: [] };
+it("부하가 줄어든 해결 후보에 요청량과 재확인 안내를 표시한다", () => {
+  const { text } = buildIssuePrompt({ ...base, openingRpm: 200, currentRpm: 3, volumeQuiet: true });
+  expect(text).toContain("개설 때 분당 200건 → 지금 분당 3건");
+  expect(text).toContain("같은 부하에서 다시 확인해 주세요");
+});
 it("Trova에서 대기가 큰 경우 서버 자원을 먼저 조사한다", () => {
   const measured = { ...base, versions: ["3e66a68"], queueMs: 433, queuePct: 77, interruptions: 124, cpuPct: 96, stealPct: 73 };
   const {text, diagnosis} = buildIssuePrompt(measured);
