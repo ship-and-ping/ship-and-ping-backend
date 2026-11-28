@@ -327,6 +327,8 @@ function setup(
     })),
     attempts: [],
     demo_insights: [],
+    server_series: [],
+    incident_server_context: {peaks:null},
     incident_verification: { version, consecutive_successes: 0, latest_duration_ms: 100, latest_success: false },
   };
   change?.(rows);

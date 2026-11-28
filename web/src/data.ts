@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { loginRequests, type LoginRequest } from "./login-requests";
 
 import { loadMonitor, type Monitor } from "./monitor-data";
+import { profileAccess } from "./server-data";
 import type { DeepFeature, Definitions, FirstResult } from "./deep";
 import { resultKinds } from "./deep";
 import { changePushPrivacy, closePushNotifications, configuredKey, currentSubscription, fingerprint, notifyPushChange, PushCleanupError } from "./push";
@@ -41,6 +42,7 @@ export interface Snapshot {
   labels: Label[];
 }
 export interface Gateway {
+  profiles?: ReturnType<typeof profileAccess>;
   account(): Promise<{ email: string; joined: string; method: string; hasPassword?: boolean }>;
   withdraw(origin: string): Promise<"done" | "failed" | "limited" | "unknown" | "unauthorized" | "login_required">;
   checkAccount(): Promise<"exists" | "deleted" | "unknown">;
@@ -269,6 +271,7 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
         return action({registerPush,removeEndpoint});
       });
     },
+    profiles: profileAccess(client),
     async account() {
       const { data: { user } } = await client.auth.getUser();
       if (!user?.email) throw Error("로그인이 필요해요");

@@ -38,6 +38,14 @@ pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
         Ok(_) => (),
         Err(_) => console_error!("Scheduled RPC {} failed", rpc),
     }
+    let server_rpc = if rpc == "evaluate_all" {
+        "evaluate_silence"
+    } else {
+        "rollup_server_hours"
+    };
+    if db.rpc(server_rpc, b"{}".to_vec()).await.is_err() {
+        console_error!("Scheduled RPC {} failed", server_rpc);
+    }
     if rpc == "evaluate_all" && crate::notify::deliver(&db, &env).await.is_err() {
         console_error!("Notification delivery interrupted");
     }

@@ -6,6 +6,7 @@ import { status, StatusBadge, Timeline, IssueListItem } from "./IncidentSummary"
 import type { Gateway } from "./data";
 import { Hero, CurrentAppName } from "./Layout";
 import { Chart } from "./Chart";
+import { IncidentServerSummary, SilentIssue } from "./ServerIncident";
 import { MonitorToolbar, periodName } from "./MonitorToolbar";
 import { SpeedInsights } from "./SpeedInsights";
 import "./styles/dashboard.css";
@@ -22,7 +23,7 @@ import {
 } from "./monitor-data";
 
 const day = 86400000;
-const kindName = { failure: "실패", slow: "느림", unconfirmed: "결과 미확인" };
+const kindName = { failure: "실패", slow: "느림", unconfirmed: "결과 미확인", silent: "기록 끊김" };
 const when = (s: string) => new Date(s).toLocaleString("ko-KR", { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Seoul" });
 const time = (ms: number | string | null) =>
   typeof ms === "string" ? displayText(ms) : formatDuration(ms);
@@ -31,8 +32,9 @@ function observedAt(v: Monitor["versions"][number], i?: Incident) {
   return i && Date.parse(v.first_seen_at) <= Date.parse(i.opened_at) ? v.last_seen_at : v.first_seen_at;
 }
 const title = (f: Feature | undefined, i: Incident) =>
-  displayText(f?.name ?? "기능") +
+  (i.kind === "silent" ? "" : displayText(f?.name ?? "기능")) +
   {
+    silent: "기록이 끊겼어요",
     slow: "이 느려졌어요",
     failure: i.metric_at_open?.consecutive ? "에서 3건 연속 실패했어요" : "에서 실패가 늘었어요",
     unconfirmed: "의 기록 전송이 끊겼을 수 있어요",
@@ -42,6 +44,7 @@ const route = (f: Feature) =>
     [f.method, sanitizeRoute(f.route ?? "")].filter(Boolean).join(" "),
   );
 function details(i: Incident, m: Incident["metric_at_open"], f?: Feature) {
+  if (i.kind === "silent") return "평소 기록이 오던 시간에 10분 이상 기록이 없어요.";
   if (!m) return when(i.opened_at) + "부터";
   if (i.kind === "unconfirmed")
     return "사용 결과를 확인하지 못했어요 · " + when(i.opened_at) + "부터";
@@ -198,7 +201,7 @@ function MonitorPage({
       {(feature || issue) && (
         <Link to={base}>{displayText(data.name)} 홈으로</Link>
       )}
-      {selected && incident ? (
+      {incident?.kind === "silent" ? <SilentIssue issue={incident} context={data.serverContext} dismiss={async () => {await api.dismiss(incident.id); retry();}} /> : selected && incident ? (
         <Issue
           data={data}
           feature={selected}
@@ -273,12 +276,12 @@ function Home({ data, base, days, toolbar, loadPrompt }: { data: Monitor; base: 
         <div className="problem-count"><dl><dt>열린 문제 수</dt><dd><strong>{open.length}</strong>개</dd></dl><h2>{stateTitle}</h2></div>
         <div className="incident-tickets">{open.map(issue => <div className="incident-ticket" key={issue.id}>
           <div className="ticket-heading"><span className="ticket-symbol" aria-hidden="true">⚠</span><div>
-            <small>{displayText(find(issue)?.name ?? "기능")} · 감지 당시</small>
+            <small>{issue.kind === "silent" ? "앱 전체" : displayText(find(issue)?.name ?? "기능")} · 감지 당시</small>
             {issue.kind === "failure" && issue.metric_at_open?.failures != null ? <dl><dt>실패 건수</dt><dd>{issue.metric_at_open.failures}건</dd></dl> : <p>{details(issue, issue.metric_at_open, find(issue))}</p>}
           </div></div>
           <p>처음 감지 · <time dateTime={issue.opened_at}>{when(issue.opened_at)}</time></p>
           <div className="incident-actions">
-            <Copy compact text={() => loadPrompt(issue.id)} title={kindName[issue.kind] + " AI 조사 요청문 복사"} />
+            {issue.kind !== "silent" && <Copy compact text={() => loadPrompt(issue.id)} title={kindName[issue.kind] + " AI 조사 요청문 복사"} />}
             <Link className="dashboard-primary" to={base + "/issues/" + issue.id}>문제 보기</Link>
           </div>
         </div>)}</div>
@@ -346,7 +349,7 @@ function DashboardPanels({data,days,feature}: {data:Monitor; days:number; featur
       <select aria-label="그래프에 표시할 기능" value={filter} onChange={e => setFilter(e.target.value)}>
         <option value="">모든 기능</option>{visible.map(f => <option key={f.id} value={f.id}>{displayText(f.name)}</option>)}
       </select>}</header>
-    <Chart key={days + "/" + (selected?.id ?? "")} rows={rows} days={days} now={data.now}
+    <Chart key={days + "/" + (selected?.id ?? "")} rows={rows} days={days} now={data.now} resources={data.serverSeries?.[days]}
       baseline={selected?.baselines?.p50_ms ?? null} p95={selected?.baselines?.p95_ms ?? null}
       thresholds={thresholds} aggregate={!selected && visible.length > 1} learnsRange={selected?.method !== "*"}
       samples={selected?.baselines?.sample_count ?? summarize(rows).successes}/>
@@ -532,7 +535,7 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
     route: f.route ?? "",
     versions,
     step: data.step,
-    kind: i.kind,
+    kind: i.kind === "silent" ? undefined : i.kind,
     consecutive: i.metric_at_open?.consecutive,
     unconfirmed: metric?.unconfirmed,
     opened: i.opened_at,
@@ -649,6 +652,7 @@ function Issue({
       </div>
       </section>
       {f.kind === "deep" && <section><h2>문제 감지 구간부터의 결과</h2><Outcomes stats={summarize(data.stats.filter(r => r.feature_id === f.id && Date.parse(r.bucket) <= Date.parse(i.closed_at ?? new Date(data.now).toISOString())))} /></section>}
+      <IncidentServerSummary context={data.serverContext}/>
       <div className="issue-columns">
         <div className="issue-history">
           <section>

@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState, type PointerEvent } from "react";
 import { approximateDuration, summarize, type Stat } from "./monitor-data";
 import { periodName } from "./MonitorToolbar";
+import {formatMetric, serverMetrics, type ServerSlot} from "./server-data";
 import "./styles/chart.css";
 
 const hour = 3600000;
@@ -148,23 +149,24 @@ function PanelHelp({title,text}:{title:string; text:string}) {
     {open && <span id={id} role="tooltip">{text}</span>}</span>;
 }
 
-function StatPanel({title,help,value,series,selection,points,p95}:{title:string; help:string; value:string; series:(number|null)[];
+function StatPanel({title,help,value,series,selection,points,p95,unit}:{title:string; help:string; value:string; series:(number|null)[]; unit?:string;
   selection:Selection; points:Bucket[]; p95:number|null}) {
   const active = selection.active?.index;
+  const labelAt = unit ? (index:number) => series[index] == null ? "기록 없음" : formatMetric(series[index]!,unit) : undefined;
   const peak = Math.max(1,...series.map(n => n ?? 0));
   const pointY = (n:number) => 26-22*n/peak;
   const runs = lineSegments(series,pointY,30);
   return <article className="stat-panel">
     <header><h3>{title}</h3><PanelHelp title={title} text={help}/></header>
-    <strong className="stat-value">{value}</strong>
+    <strong className="stat-value">{active !== undefined && labelAt ? labelAt(active) : value}</strong>
     <div className="spark-plot"><svg viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
       {runs.map(run => <g key={run.line}><path d={run.area} fill="currentColor" opacity=".12"/>
         <path d={run.line} fill="none" stroke="currentColor" strokeWidth="1.6" vectorEffect="non-scaling-stroke"/></g>)}
       {series.map((n,i) => n !== null && (series[i-1] == null && series[i+1] == null || i === active) &&
         <circle key={i} cx={center(i,series.length)} cy={pointY(n)} r="1.5" fill="currentColor"/>)}
       {active !== undefined && <line className="spark-cursor" x1={center(active,series.length)} x2={center(active,series.length)} y1="0" y2="30" vectorEffect="non-scaling-stroke"/>}
-    </svg><CursorTarget owner={title} points={points} selection={selection} p95={p95}/>
-      {selection.active?.owner === title && <CursorTip index={selection.active.index} points={points} p95={p95}/>}
+    </svg><CursorTarget owner={title} points={points} selection={selection} p95={p95} labelAt={labelAt}/>
+      {selection.active?.owner === title && <CursorTip index={selection.active.index} points={points} p95={p95} metric={labelAt?.(selection.active.index)}/>}
     </div>
   </article>;
 }
@@ -221,7 +223,7 @@ function Plot({ points, labels, duration = false, baseline, p95 = null, samples 
   </figure>;
 }
 
-function CursorTarget({owner,points,p95,selection,crosshair=false}:{owner:string; points:Bucket[]; p95:number|null; selection:Selection; crosshair?:boolean}) {
+function CursorTarget({owner,points,p95,selection,crosshair=false,labelAt}:{owner:string; points:Bucket[]; p95:number|null; selection:Selection; crosshair?:boolean; labelAt?:(index:number)=>string}) {
   const active = selection.active?.index;
   const selected = active ?? selection.selected;
   function select(index:number) {
@@ -234,7 +236,7 @@ function CursorTarget({owner,points,p95,selection,crosshair=false}:{owner:string
   }
   return <>
     <div role="slider" tabIndex={0} className="flow-hit" aria-label={owner} aria-valuemin={1} aria-valuemax={points.length}
-      aria-valuenow={selected+1} aria-valuetext={description(points[selected],p95)}
+      aria-valuenow={selected+1} aria-valuetext={labelAt ? points[selected].label+" · "+labelAt(selected) : description(points[selected],p95)}
       onFocus={() => select(selected)} onBlur={() => selection.focus(null)}
       onPointerEnter={e => {if (e.pointerType !== "touch") selection.hover({owner,index:pointAt(e)});}}
       onPointerDown={e => {
@@ -264,16 +266,17 @@ function CursorTarget({owner,points,p95,selection,crosshair=false}:{owner:string
   </>;
 }
 
-function CursorTip({index,points,p95}:{index:number; points:Bucket[]; p95:number|null}) {
+function CursorTip({index,points,p95,metric}:{index:number; points:Bucket[]; p95:number|null; metric?:string}) {
   const x = center(index,points.length);
   return <div role="tooltip" className="flow-tip"
     style={x < 50 ? {left:`min(calc(${x}% + 8px), 100% - var(--tip-width))`} :
       {right:`min(calc(${100-x}% + 8px), 100% - var(--tip-width))`}}>
-    <strong>{points[index].label}</strong>{values(points[index],p95).map(([name,value]) =>
+    <strong>{points[index].label}</strong>{metric ?? values(points[index],p95).map(([name,value]) =>
       <span key={name}><span className="tip-label">{" · "+name+" "}</span><em>{value}</em></span>)}</div>;
 }
 
-export function Chart({ rows, days, now, baseline, p95 = null, samples, learnsRange = true, thresholds, aggregate }: {
+export function Chart({ rows, days, now, baseline, p95 = null, samples, learnsRange = true, thresholds, aggregate, resources = [] }: {
+  resources?:ServerSlot[];
   rows: Stat[]; days: number; now: number; baseline: number | null; p95?: number | null; samples?: number;
   learnsRange?: boolean;
   thresholds?:ReadonlyMap<string,number>; aggregate?:boolean;
@@ -303,6 +306,16 @@ export function Chart({ rows, days, now, baseline, p95 = null, samples, learnsRa
       <StatPanel {...shared} title="보통 속도" help="성공 요청에 걸린 시간의 중앙값이에요." value={approximateDuration(period.median)} series={points.map(p => p.median === null ? null : plotTime(p.median))}/>
       {!!thresholds?.size && <StatPanel {...shared} title="만족도" help="선택 기간 중 평소 상한 안에 끝난 성공 요청 비율이에요." value={period.satisfaction === null ? "기록 없음" : period.satisfaction+"%"} series={points.map(p => p.satisfaction)}/>}
     </div>
+    <section aria-label="서버 상태"><h3>서버 상태</h3>
+      {resources.some(row => serverMetrics.some(([key]) => row.peaks[key] != null)) ? <div className="stat-grid">
+        {serverMetrics.map(([key,title,unit]) => {
+          const series = points.map((_,i) => resources.find(row => row.slot === i)?.peaks[key] ?? null);
+          const measured = series.filter(n => n !== null);
+          return measured.length ? <StatPanel {...shared} key={key} title={title} unit={unit}
+            help={"앱 서버 전체의 구간별 최댓값이에요."} value={formatMetric(Math.max(...measured),unit)} series={series}/> : null;
+        })}
+      </div> : <p>추가 연결 요청문으로 서버 상태도 볼 수 있어요</p>}
+    </section>
     {occupied <= 3 && <p className="flow-note">{occupied ? "아직 사용 기록이 적어요. 쌓이면 흐름이 보여요." : "이 기간에는 표시할 사용 기록이 없어요."}</p>}
     <div className="flow-plots"><Plot points={points} labels={labels} baseline={null} p95={p95} selection={selection}
       summary={worst.failures ? worst.label + " 구간에 실패 " + worst.failures + "건이 있었어요." : undefined} />

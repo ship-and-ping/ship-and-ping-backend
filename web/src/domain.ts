@@ -1,4 +1,5 @@
 import { normalizePromptInput } from "./normalize";
+import { serverInstructions } from "./server-prompt";
 
 export function httpsOrigin(value: string) {
   const clean = normalizePromptInput(value);
@@ -61,7 +62,8 @@ ${versionRule}
 4. 이름·전화·이메일 같은 입력값, 사용자 계정 ID, 요청·응답 본문, 쿠키·토큰·쿼리 문자열은 보내지 마. 주소 안의 실제 값은 :id로 바꾸고 오류에서 개인정보를 지워.
 5. 쉽앤핑 주소로 가는 요청은 기록하지 말고 전송 오류가 앱 동작을 막지 않게 해. 묶음은 64KB·100건 이내로 나눠. 페이지를 떠날 때도 인증 헤더를 유지해 남은 기록을 보내.
 6. 앱 코드를 읽고 주소별 한국어 기능 이름을 만들어 수집 키로 POST "${base}/v1/feature-map" 에 한 번 보내. 형식은 [{"route":"/meetings/:id","method":"GET","name":"모임 보기"}], 최대 200개야.
-7. 배포 후 앱을 한 번 써 보고 기록 전송 응답이 202인지 확인하는 방법을 알려 줘.
+7. ${serverInstructions}
+8. 배포 후 앱을 한 번 써 보고 프로필과 기록 전송 응답이 202인지 확인하는 방법을 알려 줘.
 
 ${keyInstructions(key)}
 앞에서 지정한 쉽앤핑 수집 주소(INGEST_URL)는 예외야. ${connectRestriction}`;

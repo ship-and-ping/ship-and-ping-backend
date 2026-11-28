@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Insight } from "./insights";
+import type { ServerContext, ServerSlot } from "./server-data";
 
 export interface Feature {
   kind?: "auto" | "deep";
@@ -42,8 +43,8 @@ interface Metric {
 }
 export interface Incident {
   id: string;
-  feature_id: string;
-  kind: "slow" | "failure" | "unconfirmed";
+  feature_id: string | null;
+  kind: "slow" | "failure" | "unconfirmed" | "silent";
   status: "open" | "resolved" | "quiet" | "dismissed";
   opened_version: string;
   resolved_version: string | null;
@@ -54,6 +55,8 @@ export interface Incident {
   notifications: { event: string; sent_at: string; ok: boolean }[];
 }
 export interface Monitor {
+  serverSeries?: Record<number,ServerSlot[]>;
+  serverContext?: ServerContext;
   insights?: Insight[];
   verificationIncidentId?: string;
   verification?: {
@@ -130,11 +133,12 @@ export async function loadMonitor(
   const selected = issueId
     ? incidents.find((i) => i.id === issueId)?.feature_id
     : featureId;
-  if ((issueId || featureId) && !read(features).some((f) => f.id === selected))
+  const silent = incidents.some(i => i.id === issueId && i.kind === "silent");
+  if ((issueId || featureId) && !silent && !read(features).some((f) => f.id === selected))
     throw Error("상세 기록을 찾지 못했어요");
   const incident = incidents.find((i) => i.id === issueId);
-  const verificationIssue = incident?.status === "open" ? incident : !selected
-    ? incidents.find((i) => i.status === "open" && versions.some((v) =>
+  const verificationIssue = silent ? undefined : incident?.status === "open" ? incident : !selected
+    ? incidents.find((i) => i.kind !== "silent" && i.status === "open" && versions.some((v) =>
         v.version !== i.opened_version && Date.parse(v.last_seen_at) > Date.parse(i.opened_at)))
     : undefined;
   const cutoff = new Date(
@@ -204,7 +208,7 @@ export async function loadMonitor(
           .range(a, b),
       )
     : [];
-  const [rows, deepRows, errorKinds, samples, steps, proof, insights] = await Promise.all([
+  const [rows, deepRows, errorKinds, samples, steps, proof, insights, serverSeries, serverContext] = await Promise.all([
     stats,
     attempts,
     kindRows,
@@ -228,6 +232,14 @@ export async function loadMonitor(
       ? client.rpc("incident_verification", { incident_id: verificationIssue.id })
       : undefined,
     issueId ? undefined : client.rpc("demo_insights", {target_app:app}),
+    issueId ? undefined : Promise.all((featureId ? [1/24,1,7] : [days]).map(async range => {
+      const result = await client.rpc("server_series", {
+        target_app:app, since:new Date(now-range*86400000).toISOString(), until_at:new Date(now).toISOString(),
+        slices: range < 1 ? 12 : range === 1 ? 24 : 7,
+      });
+      return [range,read<ServerSlot[]>(result)] as const;
+    })),
+    issueId ? client.rpc("incident_server_context",{incident_id:issueId}) : undefined,
   ]);
   const deepIds = new Set(deep.map((f) => f.id));
   const visibleRows = rows.filter((row) => !deepIds.has(row.feature_id));
@@ -252,6 +264,8 @@ export async function loadMonitor(
   }
   return {
     name: read(header).name,
+    serverSeries: serverSeries ? Object.fromEntries(serverSeries) : undefined,
+    serverContext: serverContext ? read<ServerContext>(serverContext) : undefined,
     insights: insights ? read<Insight[]>(insights) : [],
     verificationIncidentId: verificationIssue?.id,
     verification: proof ? read<NonNullable<Monitor["verification"]>>(proof) : undefined,
