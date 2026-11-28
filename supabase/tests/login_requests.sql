@@ -43,7 +43,12 @@ select is(pg_temp.act('deny')->>'status','denied','owner may decline without sel
 select is(pg_temp.act('claim',c->>'match_code')->>'status','used','denied requests stay closed') from challenge;
 update challenge set c=public.login_create('member@example.test','ip','Safari','대한민국');
 select is(pg_temp.act('local')->>'status','missing','local completion requires PC secret');
-select is(pg_temp.act('local','','member@example.test',c->>'poll_secret')->>'status','used','local completion needs both credentials') from challenge;
+select is(pg_temp.act('local','','member@example.test',c->>'poll_secret'), '{"status":"used","local_consumed":true}'::jsonb,
+  'only the caller consuming the pending local request can restore its destination') from challenge;
+select is(pg_temp.act('local','','member@example.test',c->>'poll_secret'), '{"status":"used"}'::jsonb,
+  'a second local approval receives no return permission') from challenge;
+select is(pg_temp.act('poll','','',c->>'poll_secret'), '{"status":"used"}'::jsonb,
+  'the request PC may observe completion without claiming the local destination') from challenge;
 select is(public.login_create('MEMBER@example.test','different-ip','Chrome','KR')->>'status','limited','creation limit follows normalized email across IPs');
 do $$ begin
  for n in 1..30 loop perform public.login_create('person'||n||'@example.test','burst-ip','Chrome','KR'); end loop;
