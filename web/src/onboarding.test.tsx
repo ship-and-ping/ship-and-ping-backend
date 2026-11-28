@@ -18,6 +18,8 @@ import type { Gateway, Snapshot } from "./data";
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  localStorage.removeItem("ship-ping-login-request");
+  sessionStorage.removeItem("ship-ping-login-issue");
 });
 const pub = "sp_pub_" + "0".repeat(64);
 const secret = "sp_srv_" + "1".repeat(64);
@@ -130,6 +132,65 @@ function LocationProbe() {
 function openWithPath(path: string, api: Gateway) {
   return render(<MemoryRouter initialEntries={[path]}><LocationProbe/><App api={api} ingest={base}/></MemoryRouter>);
 }
+it.each(["/login", "/login/"])("%s 상단에는 회원 가입 링크를 표시한다", async path => {
+  open(path, fake(null));
+  const menu = within(await screen.findByRole("navigation", {name:"시작 메뉴"}));
+  expect(menu.getByRole("link", {name:"회원 가입"}).getAttribute("href")).toBe("/signup");
+  expect(menu.queryByRole("link", {name:"로그인"})).toBeNull();
+});
+
+const approvalUrl = "/login/approve?req=sample&proof=fixture";
+const pendingRequest = () => ({
+  request_id:"sample", poll_secret:"fixture", match_code:"07", expires_at:new Date(Date.now()+600000).toISOString(),
+});
+
+it("메일 로그인을 요청한 브라우저의 새 탭에서 승인하면 원래 문제를 한 번 연다", async () => {
+  const guest = fake(null);
+  vi.mocked(guest.login).mockResolvedValue(pendingRequest());
+  guest.requests = {create:vi.fn(), poll:vi.fn().mockResolvedValue("pending"), decide:vi.fn()};
+  const requestTab = openWithPath(issuePath + "?source=mail#extra", guest);
+  await screen.findByText(issueHint);
+  fireEvent.change(screen.getByLabelText("이메일 주소"), {target:{value:"member@example.invalid"}});
+  fireEvent.click(screen.getByRole("button", {name:/메일 링크로 받기/}));
+  await screen.findByRole("heading", {name:"메일을 확인해 주세요"});
+  requestTab.unmount();
+  sessionStorage.removeItem("ship-ping-login-issue"); // A new tab shares localStorage only.
+  const member = fake();
+  vi.mocked(member.monitor).mockRejectedValue(Error("not available"));
+  member.requests = {create:vi.fn(), poll:vi.fn(), decide:vi.fn().mockResolvedValue({status:"used"})};
+  const approvalTab = openWithPath(approvalUrl, member);
+  await waitFor(() => expect(screen.getByTestId("path").textContent).toBe(issuePath));
+  expect(member.requests.decide).toHaveBeenCalledWith("sample","local","fixture",undefined,"fixture");
+  expect(localStorage.getItem("ship-ping-login-request")).toBeNull();
+  approvalTab.unmount();
+  openWithPath(approvalUrl, member);
+  await screen.findByText("이미 처리한 요청이에요.");
+  expect(screen.getByTestId("path").textContent).toBe("/login/approve");
+});
+
+it("다른 기기의 승인 탭은 숫자를 확인한 뒤 요청 PC에서 계속하도록 안내한다", async () => {
+  const member = fake();
+  member.requests = {create:vi.fn(), poll:vi.fn(), decide:vi.fn()
+    .mockResolvedValueOnce({status:"pending"}).mockResolvedValueOnce({status:"approved"})};
+  openWithPath(approvalUrl + "&next=" + issuePath, member);
+  const code = await screen.findByRole("textbox", {name:"PC 확인 숫자 두 자리"});
+  fireEvent.change(code, {target:{value:"07"}});
+  fireEvent.click(screen.getByRole("button", {name:"이 PC 로그인 승인"}));
+  await screen.findByText("로그인을 요청한 PC에서 계속해 주세요.");
+  expect(member.requests.decide).toHaveBeenCalledWith("sample","approve","fixture","07");
+  expect(screen.getByTestId("path").textContent).toBe("/login/approve");
+});
+
+it.each(["//outside.invalid", "https://outside.invalid", issuePath.replace("/issues/", "\\issues/"), encodeURIComponent(issuePath), issuePath + "?extra=1"])(
+  "새 탭은 승인 요청에 저장된 잘못된 복귀 경로 %s를 버린다", async issue => {
+    localStorage.setItem("ship-ping-login-request", JSON.stringify({...pendingRequest(), issuePath:issue}));
+    const member = fake();
+    member.requests = {create:vi.fn(), poll:vi.fn(), decide:vi.fn().mockResolvedValue({status:"used"})};
+    openWithPath(approvalUrl, member);
+    await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/apps"));
+    expect(localStorage.getItem("ship-ping-login-request")).toBeNull();
+  },
+);
 it("알림 문제 경로만 새로고침 후 로그인에서 한 번 복원하고 기존 권한 오류를 표시한다", async () => {
   const guest = fake(null);
   const first = openWithPath(issuePath + "?source=email#details", guest);

@@ -12,7 +12,7 @@ const titles = {
   reset: "새 비밀번호 정하기", account: "비밀번호 저장",
 };
 
-export function AuthForm({ api, mode, saved, expired, fromIssue }: { api: Gateway; mode: Mode; saved?: () => void; expired?: () => void; fromIssue?: boolean }) {
+export function AuthForm({ api, mode, saved, expired, issuePath }: { api: Gateway; mode: Mode; saved?: () => void; expired?: () => void; issuePath?: string | null }) {
   const navigate = useNavigate();
   const locked = useRef(false);
   const [request,setRequest] = useState(() => (mode==="signup" || mode==="login") && api.requests ? remembered() : undefined);
@@ -95,13 +95,13 @@ export function AuthForm({ api, mode, saved, expired, fromIssue }: { api: Gatewa
         await api.login();
       } else if (action === "link") {
         const pending = await api.login(email.trim());
-        if (pending) { remember(pending); setRequest(pending); }
+        if (pending) { remember(pending, issuePath); setRequest(pending); }
         else setMessage("이 메일 링크는 링크를 연 기기에서 로그인돼요.");
       } else if (mode === "login") {
         await api.passwordLogin(email.trim(), password);
       } else if (mode === "signup") {
         const pending = await api.signup(email.trim(), password);
-        if (pending) { remember(pending); setRequest(pending); }
+        if (pending) { remember(pending, issuePath); setRequest(pending); }
         else setMessage("이 메일 링크는 링크를 연 기기에서 로그인돼요.");
       } else if (mode === "forgot") {
         await api.requestReset(email.trim());
@@ -115,7 +115,7 @@ export function AuthForm({ api, mode, saved, expired, fromIssue }: { api: Gatewa
           }
           await api.updatePassword(password, nonce);
         } else await api.updatePassword(password);
-        if (mode === "reset") navigate(fromIssue ? "/login" : "/apps", {replace:true});
+        if (mode === "reset") navigate(issuePath ? "/login" : "/apps", {replace:true});
         else saved?.();
       }
       form.reset();
@@ -202,7 +202,7 @@ export function AuthForm({ api, mode, saved, expired, fromIssue }: { api: Gatewa
   </form>;
 }
 
-export function AuthPage({ api, mode, recovery = false, expired, fromIssue = false }: { api: Gateway; mode: Exclude<Mode,"account">; recovery?: boolean; expired?: () => void; fromIssue?: boolean }) {
+export function AuthPage({ api, mode, recovery = false, expired, issuePath }: { api: Gateway; mode: Exclude<Mode,"account">; recovery?: boolean; expired?: () => void; issuePath?: string | null }) {
   return <>
     <a className="skip" href="#main">본문으로 가기</a><PublicBar/>
     <main id="main" className={"public auth-page" + (mode === "login" ? " login-page" : "")}>
@@ -211,9 +211,9 @@ export function AuthPage({ api, mode, recovery = false, expired, fromIssue = fal
         <Hero title="내 앱, 지금도 괜찮을까요?" detail="앱이 어디서 막혔는지 쉽앤핑이 지켜보고 알려 드려요."/>
         <section className="panel">
           {mode === "login" && <h2>로그인</h2>}
-          {mode === "login" && fromIssue && <p>알림에서 온 문제를 열려면 로그인해 주세요.</p>}
+          {mode === "login" && issuePath && <p>알림에서 온 문제를 열려면 로그인해 주세요.</p>}
           {mode === "reset" && !recovery ? <p role="alert">링크가 만료됐거나 이미 사용됐어요. 새 링크를 받아 주세요.</p>
-            : <AuthForm key={mode} api={api} mode={mode} expired={expired} fromIssue={fromIssue}/>}
+            : <AuthForm key={mode} api={api} mode={mode} expired={expired} issuePath={issuePath}/>}
           {mode === "reset" && <p><Link to="/forgot-password">재설정 메일 다시 받기</Link></p>}
           <Link to={mode === "login" ? "/" : "/login"}>{mode === "login" ? "쉽앤핑 소개로 돌아가기" : "로그인으로 돌아가기"}</Link>
         </section>

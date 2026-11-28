@@ -7,7 +7,7 @@ import { createServer } from "vite";
 import { mockPage } from "./fixtures.mjs";
 
 const phase = process.argv[2];
-assert(["before", "auth-before", "stack-before", "after"].includes(phase), "Unknown capture phase");
+assert(["before", "auth-before", "stack-before", "after", "approval"].includes(phase), "Unknown QA phase");
 const dir = resolve("../docs/design/qa/toast-login");
 await mkdir(dir, { recursive: true });
 const server = await createServer({
@@ -137,6 +137,7 @@ try {
     }
     await context.close();
   }
+  if (phase === "approval" || phase === "after") await checkApprovalTabs(browser);
   if (phase === "after") {
     const gallery = await browser.newPage();
     await gallery.goto(pathToFileURL(resolve(dir, "index.html")).href);
@@ -157,4 +158,39 @@ function assertFade(frames, phase) {
   const transparentEnd = phase === "entry" ? 0 : 1;
   assert(frames.some(frame => frame.computedOffset === transparentEnd && frame.opacity === "0"), phase + " fades");
   assert(frames.every(frame => !frame.transform || frame.transform === "none"), phase + " has no translation");
+}
+
+async function checkApprovalTabs(browser) {
+  const issue = "/apps/10000000-0000-0000-0000-000000000001/issues/20000000-0000-0000-0000-000000000002";
+  const link = origin + "/login/approve?req=qa-request&proof=fixture";
+  const desktop = await browser.newContext();
+  const phone = await browser.newContext();
+  try {
+    const request = await desktop.newPage();
+    await mockPage(request, "normal", false, origin);
+    await request.route("**/v1/login-requests", route => route.fulfill({
+      json: { request_id:"qa-request", poll_secret:"fixture-only", match_code:"07", expires_at:new Date(Date.now()+600000).toISOString() },
+    }));
+    await request.goto(origin + issue);
+    await request.getByLabel("이메일 주소").fill("member@example.invalid");
+    await request.getByRole("button", {name:/메일 링크로 받기/}).click();
+    await request.getByRole("heading", {name:"메일을 확인해 주세요"}).waitFor();
+
+    const approval = await desktop.newPage();
+    await mockPage(approval, "normal", true, origin);
+    await approval.goto(link);
+    await approval.waitForURL(origin + issue);
+    assert.equal(await approval.evaluate(() => localStorage.getItem("ship-ping-login-request")), null);
+
+    const remote = await phone.newPage();
+    await mockPage(remote, "normal", true, origin);
+    await remote.goto(origin + "/login/approve?req=remote-request&proof=fixture");
+    await remote.getByLabel("PC 확인 숫자 두 자리").fill("07");
+    await remote.getByRole("button", {name:"이 PC 로그인 승인"}).click();
+    await remote.getByText("로그인을 요청한 PC에서 계속해 주세요.").waitFor();
+    console.log("Approval: new tab returned to the issue; separate browser context completed number matching.");
+  } finally {
+    await phone.close();
+    await desktop.close();
+  }
 }

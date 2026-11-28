@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { Gateway } from "./data";
 import { PublicBar } from "./Layout";
-import { forget, remembered, type Decision, type LoginRequest } from "./login-requests";
+import { forget, notificationIssuePath, remembered, type Decision, type LoginRequest } from "./login-requests";
 
 const messages: Record<string,string> = {
   approved:"이 PC 로그인을 승인했어요.", denied:"휴대폰에서 거절했어요.",
@@ -62,7 +62,11 @@ export function LoginApproval({api,user}: {api:Gateway; user:string|null}) {
         const same = local?.request_id===id;
         const result = await api.requests.decide(id,same ? "local" : "inspect",proof,undefined,same ? local.poll_secret : undefined);
         if (!active) return;
-        if (same && result.status==="used") { forget(id); navigate("/login",{replace:true}); return; }
+        if (same && result.status === "used") {
+          forget(id);
+          navigate(notificationIssuePath(local.issuePath) ?? "/login", {replace:true});
+          return;
+        }
         setDetails(result);
         setStatus(result.status);
       } catch { if(active) setStatus("failed"); }

@@ -14,6 +14,7 @@ import { displayText } from "./normalize";
 import { Hero, Landing, LoadingRows, Shell } from "./Layout";
 import { AuthPage } from "./AuthPage";
 import { LoginApproval } from "./LoginApproval";
+import { notificationIssuePath } from "./login-requests";
 import { MonitorRoute } from "./Monitor";
 import { DeepPage } from "./DeepPage";
 import { Notifications } from "./Notifications";
@@ -23,12 +24,9 @@ import { AppSettings } from "./AppSettings";
 import { ToastProvider, useToast } from "./Toast";
 
 const loginIssueKey = "ship-ping-login-issue";
-const uuid = "[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}";
-const notificationIssue = new RegExp("^/apps/" + uuid + "/issues/" + uuid + "$", "i");
 function readLoginIssue() {
   try {
-    const path = sessionStorage.getItem(loginIssueKey);
-    return path && notificationIssue.test(path) ? path : null;
+    return notificationIssuePath(sessionStorage.getItem(loginIssueKey));
   } catch { return null; }
 }
 
@@ -304,7 +302,7 @@ function AppRoutes({ api, ingest }: { api: Gateway; ingest: string }) {
   const navigate = useNavigate();
   const [loginIssue, setLoginIssue] = useState(readLoginIssue);
   useEffect(() => {
-    if (user === null && notificationIssue.test(pathname)) setLoginIssue(pathname);
+    if (user === null && notificationIssuePath(pathname)) setLoginIssue(pathname);
     if ((user && pathname === loginIssue) || pathname === "/") setLoginIssue(null);
   }, [user, pathname, loginIssue]);
   useEffect(() => {
@@ -387,9 +385,9 @@ function AppRoutes({ api, ingest }: { api: Gateway; ingest: string }) {
   return (
     <Routes>
       <Route path="/login/approve" element={<LoginApproval api={api} user={user ?? null}/>}/>
-      <Route path="/signup" element={user ? afterLogin : <AuthPage api={api} mode="signup"/>}/>
+      <Route path="/signup" element={user ? afterLogin : <AuthPage api={api} mode="signup" issuePath={loginIssue}/>}/>
       <Route path="/forgot-password" element={<AuthPage api={api} mode="forgot"/>}/>
-      <Route path="/reset-password" element={<AuthPage api={api} mode="reset" fromIssue={!!loginIssue} expired={() => setRecoveryUser(null)} recovery={!!user && recoveryUser === user}/>}/>
+      <Route path="/reset-password" element={<AuthPage api={api} mode="reset" issuePath={loginIssue} expired={() => setRecoveryUser(null)} recovery={!!user && recoveryUser === user}/>}/>
       <Route path="/account" element={user ? <Shell key={user} onLogout={logout}>
         <Account api={api} origin={ingest} pending={markPending} logout={logout} done={finishWithdrawal}/>
       </Shell> : <Navigate to="/login" replace/>}/>
@@ -399,7 +397,7 @@ function AppRoutes({ api, ingest }: { api: Gateway; ingest: string }) {
       />
       <Route
         path="/login"
-        element={user ? afterLogin : <AuthPage api={api} mode="login" fromIssue={!!loginIssue}/>}
+        element={user ? afterLogin : <AuthPage api={api} mode="login" issuePath={loginIssue}/>}
       />
       <Route
         path="/apps/*"
