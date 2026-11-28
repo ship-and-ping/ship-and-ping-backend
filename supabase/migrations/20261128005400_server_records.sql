@@ -4,6 +4,7 @@ language sql immutable strict set search_path='' as $$
   select case when length(s)>=4 and length(s)%4<>1 and s collate "C" ~ '^[A-Za-z0-9+/]+$' then
     (select rtrim(replace(encode(bytes,'base64'),chr(10),''),'=')=s
        and encode(bytes,'hex') ~ '^(?:[2-6][0-9a-f]|7[0-9a-e])+$'
+       and (length(bytes)>3 or encode(bytes,'escape') collate "C" ~ '[A-Za-z0-9].*[A-Za-z0-9]')
      from (select decode(rpad(s,((length(s)+3)/4)*4,'='),'base64') as bytes) decoded)
     else false end
 $$;
