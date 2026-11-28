@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { Gateway } from "./data";
 import { PublicBar } from "./Layout";
-import { forget, notificationIssuePath, remembered, type Decision, type LoginRequest } from "./login-requests";
+import { notificationIssuePath, remembered, takeRememberedRequest, type Decision, type LoginRequest } from "./login-requests";
 
 const messages: Record<string,string> = {
   approved:"이 PC 로그인을 승인했어요.", denied:"휴대폰에서 거절했어요.",
@@ -24,7 +24,8 @@ export function LoginWaiting({api,request,restart}: {api:Gateway; request:LoginR
         try { next = await api.requests!.poll(request.request_id,request.poll_secret); }
         catch (error) { next = error instanceof TypeError ? "pending" : "failed"; }
       }
-      if (next!=="pending") forget(request.request_id);
+      // A poll observing "used" can race the approval tab that owns the return path.
+      if (next !== "pending" && next !== "used") takeRememberedRequest(request.request_id);
       if (stopped) return;
       setStatus(next);
       if (next==="pending") timer=setTimeout(poll,3500);
@@ -40,7 +41,7 @@ export function LoginWaiting({api,request,restart}: {api:Gateway; request:LoginR
       <p>이 PC에서 메일을 열면 바로 로그인돼요. PC의 로그인 요청은 10분 동안만 승인할 수 있어요.</p>
     </> : <p>{messages[status] ?? messages.failed}</p>}
     {status!=="approved" && <button className={status==="pending" ? "secondary" : undefined}
-      onClick={()=>{forget(request.request_id);restart();}}>이메일 입력으로 돌아가기</button>}
+      onClick={()=>{takeRememberedRequest(request.request_id);restart();}}>이메일 입력으로 돌아가기</button>}
   </section>;
 }
 
@@ -62,10 +63,12 @@ export function LoginApproval({api,user}: {api:Gateway; user:string|null}) {
         const same = local?.request_id===id;
         const result = await api.requests.decide(id,same ? "local" : "inspect",proof,undefined,same ? local.poll_secret : undefined);
         if (!active) return;
-        if (same && result.status === "used") {
-          forget(id);
-          navigate(notificationIssuePath(local.issuePath) ?? "/login", {replace:true});
-          return;
+        if (same && result.status === "used" && result.local_consumed === true) {
+          const consumed = takeRememberedRequest(id);
+          if (consumed) {
+            navigate(notificationIssuePath(consumed.issuePath) ?? "/login", {replace:true});
+            return;
+          }
         }
         setDetails(result);
         setStatus(result.status);
@@ -77,7 +80,15 @@ export function LoginApproval({api,user}: {api:Gateway; user:string|null}) {
   async function decide(action:"approve"|"deny") {
     if (busy || !api.requests) return;
     setBusy(true);
-    try { const result=await api.requests.decide(id,action,proof,code); setStatus(result.status); setCode(""); }
+    try {
+      const result = await api.requests.decide(id,action,proof,code);
+      if (action === "approve" && result.status === "approved") {
+        navigate("/login/complete", {replace:true, state:{approvalComplete:true}});
+        return;
+      }
+      setStatus(result.status);
+      setCode("");
+    }
     catch { setStatus("failed"); }
     finally {setBusy(false);}
   }
@@ -96,7 +107,17 @@ export function LoginApproval({api,user}: {api:Gateway; user:string|null}) {
       <button className="secondary" disabled={busy} onClick={()=>void decide("deny")}>거절</button>
       {busy && <p role="status">요청을 처리하고 있어요.</p>}
     </> : <><p role="status">{status==="loading" ? "요청을 확인하고 있어요." : messages[status] ?? messages.failed}</p>
-      {status==="approved" && <p>로그인을 요청한 PC에서 계속해 주세요.</p>}
       <Link to="/login">쉽앤핑으로 돌아가기</Link></>}
   </section></main></>;
+}
+
+export function ApprovalComplete() {
+  return <>
+    <a className="skip" href="#main">본문으로 가기</a><PublicBar showMenu={false}/>
+    <main id="main" className="public"><section className="panel login-approval">
+      <h1 tabIndex={-1}>승인했어요.</h1>
+      <p>로그인을 요청한 기기에서 이어서 보세요.</p>
+      <Link className="button" to="/apps" replace>내 앱으로 가기</Link>
+    </section></main>
+  </>;
 }
