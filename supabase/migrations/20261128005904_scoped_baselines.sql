@@ -1,14 +1,11 @@
+create index on private.queue_success_5m(app_id,feature_id,bucket);
 create or replace view private.latency_profiles as
- with enrolled as (select f.id feature_id from public.features f where exists(select from private.queue_success_5m q where q.feature_id=f.id))
- select s.app_id,s.feature_id,s.bucket,s.version,p.*
- from enrolled e join private.speed_buckets s using(feature_id)
- left join private.queue_success_5m q using(app_id,feature_id,version,bucket)
- left join public.feature_timing_5m t using(app_id,feature_id,version,bucket)
- cross join lateral (
-   select true inclusive,q.hist,q.counts,q.lo,q.hi,q.sum_ms::numeric/nullif(q.n,0) mean_ms,
-     q.slow_count,q.threshold_ms where q.n>0
-   union all
-   select false,case when q.n is null then s.success_hist else private.add_hist(s.success_hist,
+ select q.app_id,q.feature_id,q.bucket,q.version,true inclusive,q.hist,q.counts,q.lo,q.hi,
+   q.sum_ms::numeric/nullif(q.n,0) mean_ms,q.slow_count,q.threshold_ms
+ from private.queue_success_5m q where q.n>0
+ union all
+ select s.app_id,s.feature_id,s.bucket,s.version,false,
+     case when q.n is null then s.success_hist else private.add_hist(s.success_hist,
      array(select -v from unnest(q.hist) v)) end,
      case when q.n is null then s.duration_counts when s.duration_counts is not null and q.counts is not null
      then (select coalesce(jsonb_object_agg(key,n),'{}') from (
@@ -22,10 +19,29 @@ create or replace view private.latency_profiles as
        and (q.n is null or q.threshold_ms=s.threshold_ms)
        and (s.failures=0 or s.slow_count=0 or s.duration_counts is distinct from '{}'::jsonb)
        then s.threshold_ms end
-   where s.total-s.client_errors-s.failures>coalesce(q.n,0) and s.success_hist is not null
+ from private.speed_buckets s
+ left join private.queue_success_5m q using(app_id,feature_id,version,bucket)
+ left join public.feature_timing_5m t using(app_id,feature_id,version,bucket)
+ where s.total-s.client_errors-s.failures>coalesce(q.n,0) and s.success_hist is not null
      -- Pre-upgrade mixed timing aggregates don't identify individual successes.
-     and (q.n is not null or coalesce(t.queue_count,0)=0)
- ) p;
+     and (q.n is not null or (coalesce(t.queue_count,0)=0 and exists(
+       select from private.queue_success_5m seen where seen.feature_id=s.feature_id)));
+
+-- A constant distribution with complete exact counts has one weighted point.
+create function private.baseline_points(h int[], counts jsonb, lo int, hi int, mean_ms numeric)
+returns table(ms int,n int) language plpgsql immutable parallel safe set search_path='' as $$
+declare weight bigint;
+begin
+ if lo=hi and counts ? lo::text then
+  select sum(v) into weight from unnest(h) v;
+  if weight between 1 and 2147483647 and counts=jsonb_build_object(lo::text,weight) then
+   return query select lo,weight::int;
+   return;
+  end if;
+ end if;
+ return query select p.ms,p.n from private.duration_points(h,counts,lo,hi,mean_ms) p;
+end $$;
+revoke all on function private.baseline_points(int[],jsonb,int,int,numeric) from public,anon,authenticated,service_role;
 
 create function private.refresh_app_legacy(target_app uuid) returns void
 language sql set search_path='' as $$
@@ -49,14 +65,14 @@ language sql set search_path='' as $$
   select s.feature_id,s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms,
    count(*) copies,min(s.bucket) stamp,min(s.min_ms) lo,max(s.max_ms) hi
   from private.speed_buckets s join due d on d.id=s.feature_id and d.kind='auto'
-  where s.bucket>=now()-interval '7 days'
+  where s.app_id=target_app and s.bucket>=now()-interval '7 days'
    and s.bucket<date_bin('5 minutes',now()-interval '10 minutes',timestamptz 'epoch') and s.success_hist is not null
    and not exists(select from outages i where i.feature_id=s.feature_id and s.bucket+interval '5 minutes'>i.opened_at
     and (i.closed_at is null or s.bucket<i.closed_at))
   group by 1,2,3,4,5,6
  ), points as (
   select s.feature_id,p.ms,sum(p.n*s.copies)::bigint n,min(s.stamp) stamp,min(s.lo) lo,max(s.hi) hi
-  from profiles s cross join lateral private.duration_points(s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms) p
+  from profiles s cross join lateral private.baseline_points(s.success_hist,s.duration_counts,s.complete_min,s.complete_max,s.mean_ms) p
   group by 1,2
  ), auto as (
   select feature_id,sum(n)::int n,min(stamp) stamp,min(lo) lo,max(hi) hi,
@@ -95,7 +111,7 @@ begin
    group by 1,2,3,4,5,6,7
  ), points as (
    select p.feature_id,p.inclusive,d.ms,sum(d.n*p.copies)::bigint n,min(p.first_at) first_at
-   from profiles p cross join lateral private.duration_points(p.hist,p.counts,p.lo,p.hi,p.mean_ms) d group by 1,2,3
+   from profiles p cross join lateral private.baseline_points(p.hist,p.counts,p.lo,p.hi,p.mean_ms) d group by 1,2,3
  ), summaries as (
    select feature_id,inclusive,sum(n) n,min(ms) lo,max(ms) hi,min(first_at) first_at,
      case when sum(n)>=30 then private.duration_quantiles(array_agg(ms order by ms),array_agg(n order by ms),array[0.5,0.9,0.95]) end p
