@@ -1,11 +1,49 @@
 -- Service writes enter through the existing app/key lock. Member reads use app RLS.
-create function private.profile_label(v jsonb,lim integer) returns boolean
+create function private.profile_encoded_text(s text) returns boolean
 language sql immutable strict set search_path='' as $$
-  select jsonb_typeof(v)='string' and length(s) between 1 and lim and s=btrim(s)
-    and (s collate "C" ~ '^[a-zA-Z0-9가-힣 +#-]+$' or s in ('Node.js','Next.js','Nuxt.js','Vue.js','.NET','ASP.NET'))
-    and s=private.mask(s) and s !~* '(sk-|glpat-|github_pat_|ghp_|xox[baprs]-|bearer |basic |[A-Za-z0-9]{24})'
-  from (select v#>>'{}' s) input
+  select case when length(s)>=4 and length(s)%4<>1 and s collate "C" ~ '^[A-Za-z0-9+/]+$' then
+    (select rtrim(replace(encode(bytes,'base64'),chr(10),''),'=')=s
+       and encode(bytes,'hex') ~ '^(?:[2-6][0-9a-f]|7[0-9a-e])+$'
+     from (select decode(rpad(s,((length(s)+3)/4)*4,'='),'base64') as bytes) decoded)
+    else false end
 $$;
+revoke all on function private.profile_encoded_text(text) from public,anon,authenticated,service_role;
+
+create function private.profile_label(v jsonb,lim integer) returns boolean
+language plpgsql immutable strict set search_path='' as $$
+declare
+  s text := v#>>'{}';
+  compact text := replace(s,' ','');
+  suffix text := s;
+  word text;
+  fragment text;
+  candidate text;
+  known_only boolean := true;
+  credential constant text := '^(?:bearer|basic|[spr]k(?:$|[- ]|live|test)|glpat|xox[baprs]|githubpat|gh[pousr](?:$|[- ])|spsrv|sppub|sbsecret|apikey|accesstoken|password|akia|asia[0-9]|aiza|eyj)';
+begin
+  if jsonb_typeof(v)<>'string' or length(s) not between 1 and lim
+    or private.mask(s)<>s or private.mask(compact)<>compact or private.profile_encoded_text(compact) then return false; end if;
+  -- Match the same short display words and product names as the Worker.
+  foreach word in array string_to_array(replace(s,'-',' '),' ') loop
+    if suffix collate "C" ~* credential or replace(suffix,' ','') collate "C" ~* credential then return false; end if;
+    candidate := '';
+    foreach fragment in array string_to_array(suffix,' ') loop
+      exit when length(candidate)+length(fragment)>=16 or fragment collate "C" !~ '^[A-Za-z0-9]+$';
+      candidate := candidate||fragment;
+      if private.profile_encoded_text(candidate) then return false; end if;
+    end loop;
+    if word not in ('Node.js','Next.js','Nuxt.js','Vue.js','.NET','ASP.NET','C++','C#','JavaScript','TypeScript',
+      'FastAPI','SQLAlchemy','PostgreSQL','MySQL','MongoDB','SQLite','GitHub','GitLab','Cloudflare','Kubernetes',
+      'Spring','Boot','Framework','Actions') and word collate "C" !~ '^[가-힣]{1,16}$'
+      and word collate "C" !~* '^(check|view|open|use|the|in|on|to|from|previous|release|deploy|redeploy|rollback|version|server|hosting|dashboard|metrics|logs|console)$' then
+      if word collate "C" !~ '^(?:[가-힣]{1,16}|(?:[A-Z]?[a-z]{1,14}|[A-Z]{1,6})[0-9]{0,2}|[0-9]{1,2})$'
+        or private.profile_encoded_text(word) then return false; end if;
+      known_only := false;
+    end if;
+    suffix := substr(suffix,length(word)+2);
+  end loop;
+  return known_only or replace(compact,'-','') collate "C" !~ '[A-Za-z0-9]{16}';
+end $$;
 create function private.valid_profile(p jsonb) returns boolean
 language plpgsql immutable strict set search_path='' as $$
 declare f record; s jsonb;
@@ -66,20 +104,24 @@ create table public.server_minutes (
 );
 create index server_minutes_expiry on public.server_minutes(bucket);
 
--- Existing request buckets establish usual hours. Version timestamps are
--- receiver-side times and take precedence for the most recent activity.
+-- Only accepted requests and attempts establish usual hours. Even an empty
+-- batch updates the version timestamp.
+create function private.backfill_server_minutes() returns void
+language sql set search_path='' as $$
 with history as (
   select distinct app_id,bucket stamp,version from public.stats_5m
-    where bucket between now()-interval '7 days' and now()
+    where total>0 and bucket between now()-interval '7 days' and now()
   union all select app_id,started_at,version from public.attempts where started_at between now()-interval '7 days' and now()
   union all select app_id,ended_at,version from public.attempts where ended_at between now()-interval '7 days' and now()
-  union all select app_id,last_seen_at,version from public.app_versions where last_seen_at between now()-interval '7 days' and now()
 ), minutes as (
   select distinct on (app_id,date_trunc('minute',stamp)) app_id,date_trunc('minute',stamp) bucket,stamp,version
     from history order by app_id,date_trunc('minute',stamp),stamp desc,version
 )
 insert into public.server_minutes(app_id,bucket,last_received,version)
-  select app_id,bucket,stamp,version from minutes;
+  select app_id,bucket,stamp,version from minutes on conflict do nothing;
+$$;
+revoke all on function private.backfill_server_minutes() from public,anon,authenticated,service_role;
+select private.backfill_server_minutes();
 create table public.server_hours (
   app_id uuid references public.apps on delete cascade, bucket timestamptz,
   peaks jsonb not null, primary key(app_id,bucket)
@@ -147,7 +189,7 @@ begin
     select exists(select from public.server_minutes m where m.app_id=k.app_id
       and m.bucket=date_trunc('minute',received) and m.resources is not null) into sampled;
   end if;
-  if (result->>'accepted')::int>0 or payload ? 'resources' then
+  if (result->>'accepted')::int>0 or (payload ? 'resources' and not sampled) then
     insert into public.server_minutes as m(app_id,bucket,last_received,version,resources)
       values(k.app_id,date_trunc('minute',received),received,version_name,payload->'resources')
     on conflict(app_id,bucket) do update set last_received=excluded.last_received,version=excluded.version,
@@ -196,8 +238,10 @@ create function public.server_series(target_app uuid, since timestamptz, until_a
 returns table(slot integer, peaks jsonb)
 language sql stable security invoker set search_path='' as $$
   with samples as (
-    select bucket,resources from public.server_minutes where app_id=target_app and bucket between since and until_at
-    union all select bucket,h.peaks from public.server_hours h where app_id=target_app and bucket between since and until_at
+    select greatest(bucket,since) as bucket,resources from public.server_minutes
+      where app_id=target_app and bucket between date_trunc('minute',since) and until_at
+    union all select greatest(bucket,since),h.peaks from public.server_hours h
+      where app_id=target_app and bucket between date_trunc('hour',since) and until_at
   ), metrics as (
     select least(slices-1,floor(extract(epoch from (bucket-since))*slices/
       nullif(extract(epoch from (until_at-since)),0))::integer) i,key,max(value::numeric) peak

@@ -17,6 +17,18 @@ language sql set search_path='' as $$
     join public.alert_channels c on c.app_id=app and c.owner_id=p.user_id and c.push_enabled
     where private.push_session_active(p.user_id,p.session_id);
 $$;
+-- Invalidate the delivery token as part of closing a silent incident. A late
+-- failure or expired lease must never make its opening notification eligible again.
+create function private.cancel_silent_open() returns trigger language plpgsql set search_path='' as $$
+begin
+  update public.notifications set sent_at=coalesce(new.closed_at,now()),ok=false,error='종결된 문제',
+    claimed_at=null,claim_token=null where incident_id=new.id and event='open' and sent_at is null;
+  return new;
+end $$;
+create trigger cancel_silent_open after update of status on public.incidents
+  for each row when (old.kind='silent' and old.status='open' and new.status<>'open')
+  execute function private.cancel_silent_open();
+revoke all on function private.cancel_silent_open() from public,anon,authenticated,service_role;
 create function private.record_resumed() returns trigger language plpgsql set search_path='' as $$
 declare issue uuid;
 begin
@@ -24,8 +36,6 @@ begin
     last_notified_at=new.last_received where app_id=new.app_id and kind='silent' and status='open'
     returning id into issue;
   if found then
-    update public.notifications set sent_at=new.last_received,ok=false,error='종결된 문제'
-      where incident_id=issue and event='open' and sent_at is null and claimed_at is null;
     perform private.queue_silence(new.app_id,issue,'resolved');
   end if;
   return new;

@@ -1,29 +1,79 @@
-use super::{ApiError, Counts, MAX_BYTES, opaque_diagnostic, private_segment, require};
+use super::{ApiError, Counts, MAX_BYTES, mask, require};
+use base64::{Engine, engine::general_purpose::STANDARD_NO_PAD};
+use regex::Regex;
 use serde_json::{Value, json};
+use std::sync::LazyLock;
+
+fn encoded_text(s: &str) -> bool {
+    s.len() >= 4
+        && STANDARD_NO_PAD
+            .decode(s)
+            .is_ok_and(|bytes| bytes.iter().all(|b| (32..=126).contains(b)))
+}
 
 fn label(value: &Value, max: usize) -> bool {
     let Some(s) = value.as_str() else {
         return false;
     };
-    // A small display alphabet excludes URI syntax, hostnames, IPs and DSNs.
-    // Common framework names with dots are explicitly recognized.
-    let alphabet = matches!(
-        s,
-        "Node.js" | "Next.js" | "Nuxt.js" | "Vue.js" | ".NET" | "ASP.NET"
-    ) || s.chars().all(|c| {
-        c.is_ascii_alphanumeric()
-            || ('가'..='힣').contains(&c)
-            || matches!(c, ' ' | '-' | '+' | '#')
+    // Keep these word and credential rules in sync with private.profile_label.
+    static WORD: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"^(?:[가-힣]{1,16}|(?:[A-Z]?[a-z]{1,14}|[A-Z]{1,6})[0-9]{0,2}|[0-9]{1,2})$")
+            .unwrap()
     });
-    alphabet
-        && !s.is_empty()
-        && s.trim() == s
-        && s.chars().count() <= max
-        && !private_segment(s)
-        && !opaque_diagnostic(s)
-        && !s
-            .split([' ', '-'])
-            .any(|word| word.len() >= 24 && word.is_ascii())
+    static KNOWN: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(concat!(
+            r"^(?:Node\.js|Next\.js|Nuxt\.js|Vue\.js|\.NET|ASP\.NET|C\+\+|C#|JavaScript|TypeScript|",
+            r"FastAPI|SQLAlchemy|PostgreSQL|MySQL|MongoDB|SQLite|GitHub|GitLab|Cloudflare|Kubernetes|",
+            r"Spring|Boot|Framework|Actions|[가-힣]{1,16}|(?i-u:check|view|open|use|the|in|on|to|",
+            r"from|previous|release|deploy|redeploy|rollback|version|server|hosting|dashboard|metrics|logs|console))$"
+        ))
+        .unwrap()
+    });
+    static CREDENTIAL: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(concat!(
+            r"(?i-u)^(?:bearer|basic|[spr]k(?:$|[- ]|live|test)|glpat|xox[baprs]|githubpat|",
+            r"gh[pousr](?:$|[- ])|spsrv|sppub|sbsecret|apikey|accesstoken|password|akia|asia[0-9]|aiza|eyj)"
+        ))
+        .unwrap()
+    });
+    static LONG: LazyLock<Regex> = LazyLock::new(|| Regex::new("[A-Za-z0-9]{16}").unwrap());
+    if s.is_empty() || s.chars().count() > max {
+        return false;
+    }
+    let compact = s.replace(' ', "");
+    if mask(s) != s || mask(&compact) != compact || encoded_text(&compact) {
+        return false;
+    }
+    let mut known_only = true;
+    let mut offset = 0;
+    for word in s.split([' ', '-']) {
+        let suffix = &s[offset..];
+        if CREDENTIAL.is_match(suffix) || CREDENTIAL.is_match(&suffix.replace(' ', "")) {
+            return false;
+        }
+        // Check short Base64 fragments even when surrounded by display words.
+        // The compact length rule below covers longer opaque runs.
+        let mut candidate = String::new();
+        for fragment in suffix.split(' ') {
+            if candidate.len() + fragment.len() >= 16
+                || !fragment.bytes().all(|b| b.is_ascii_alphanumeric())
+            {
+                break;
+            }
+            candidate.push_str(fragment);
+            if encoded_text(&candidate) {
+                return false;
+            }
+        }
+        if !KNOWN.is_match(word) {
+            if !WORD.is_match(word) || encoded_text(word) {
+                return false;
+            }
+            known_only = false;
+        }
+        offset += word.len() + 1;
+    }
+    known_only || !LONG.is_match(&compact.replace('-', ""))
 }
 
 fn range(value: &Value, min: f64, max: f64) -> bool {
@@ -127,6 +177,47 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn profile_display_text_rejects_credentials_and_accepts_product_names() {
+        for bad in [
+            "Bearer abc",
+            "Use Be arer abc",
+            "sk live example",
+            "sk-demo",
+            "s k - demo",
+            "c2VjcmV0",
+            "Use QUJD",
+            "YW Jj ZG Vm",
+            "Use YW Jj ZG Vm now",
+            "%42earer",
+            "Ｂｅａｒｅｒ abc",
+            "abcdefghijklmnop",
+            "abcd efgh ijkl mnop",
+            "ab12cd34ef56gh78",
+        ] {
+            for payload in [
+                json!({"rollback":bad}),
+                json!({"services":[{"kind":"map","feature":"지도","name":bad}]}),
+            ] {
+                assert!(
+                    profile("hash", &serde_json::to_vec(&payload).unwrap()).is_err(),
+                    "{bad}"
+                );
+            }
+        }
+        for good in [
+            "Flask-SQLAlchemy",
+            "flask-login",
+            "C++",
+            "Next.js",
+            "Spring 8",
+            "이전 릴리스 다시 배포",
+            "Check the server dashboard",
+        ] {
+            assert!(label(&json!(good), 80), "{good}");
+        }
     }
 
     #[test]
