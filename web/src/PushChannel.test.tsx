@@ -2,6 +2,7 @@ import {cleanup, fireEvent, render, screen, waitFor} from "@testing-library/reac
 import {afterEach, expect, it, vi} from "vitest";
 import type {Gateway} from "./data";
 import {PushChannel} from "./PushChannel";
+import {ToastProvider} from "./Toast";
 import {PushCleanupError,startPwa} from "./push";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -21,7 +22,7 @@ function setup(home: boolean, permission: NotificationPermission = "granted", ag
   const api = {devices:vi.fn(async () => rotated || loggedOut || legacy ? [{id:"old",endpoint:sub.endpoint,user_agent:"iPhone",current_session:!legacy,
     created_at:"2026-11-27",vapid_fingerprint:rotated ? "03" : "04"}] : []),
     ...operations,withPushRegistration:vi.fn((action: (ops:typeof operations) => Promise<void>) => action(operations))};
-  render(<PushChannel api={api as unknown as Gateway} app="mine" settings={{push:true,email:false,connected:false,broken:false,channel:null}} reload={vi.fn()}/>);
+  render(<ToastProvider><PushChannel api={api as unknown as Gateway} app="mine" settings={{push:true,email:false,connected:false,broken:false,channel:null}} reload={vi.fn()}/></ToastProvider>);
   return {api,manager,sub,old,requestPermission};
 }
 it("shows the Safari instructions until launched from the Home Screen", () => {

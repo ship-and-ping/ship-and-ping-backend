@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>로그아웃 토스트와 로그인 화면 비교 · 쉽앤핑</title>
+  <link rel="stylesheet" href="../../../../web/src/styles/tokens.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--sp-bg); color: var(--sp-ink); font: 1rem/1.6 var(--sp-font); word-break: keep-all; }
+    main { max-width: 1440px; margin: auto; padding: clamp(16px, 3vw, 48px); }
+    h1, h2, p, figure { margin: 0; }
+    h1 { line-height: 1.25; }
+    header p { color: var(--sp-ink-2); margin-top: 8px; }
+    section { padding-block: 32px; border-bottom: 1px solid var(--sp-line); }
+    .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    figcaption { padding-block: 8px; color: var(--sp-ink-2); }
+    img, video { display: block; max-width: 100%; height: auto; border: 1px solid var(--sp-line); border-radius: var(--sp-radius-md); }
+    video { margin-top: 12px; max-height: 38rem; }
+    a:focus-visible { outline: 3px solid var(--sp-focus); display: block; }
+    @media (max-width: 620px) { .pair { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header><h1>로그아웃 토스트와 로그인 화면</h1><p>Windows Edge에서 계정 화면의 로그아웃 버튼을 누른 직후를 캡처했어요. 이미지를 누르면 원본 크기로 열려요.</p></header>
+    <section><h2>로그아웃 직후 움직임</h2>
+      <video controls playsinline preload="metadata" poster="after-390-light.png" width="390" aria-label="휴대폰 화면에서 토스트가 나타나고 자동으로 사라지는 과정" src="motion.webm"></video>
+    </section>
+    <section>
+      <h2>1440px · 밝은 화면</h2>
+      <div class="pair">
+        <figure>
+          <figcaption>변경 전</figcaption>
+          <a href="before-1440-light.png"><img src="before-1440-light.png" width="1440" height="900" alt="1440px 밝은 로그인 화면의 기존 로그아웃 안내"></a>
+        </figure>
+        <figure>
+          <figcaption>변경 후</figcaption>
+          <a href="after-1440-light.png"><img src="after-1440-light.png" width="1440" height="900" alt="1440px 밝은 로그인 화면의 고정 토스트"></a>
+        </figure>
+      </div>
+    </section>
+    <section>
+      <h2>1440px · 어두운 화면</h2>
+      <div class="pair">
+        <figure>
+          <figcaption>변경 전</figcaption>
+          <a href="before-1440-dark.png"><img src="before-1440-dark.png" width="1440" height="900" alt="1440px 어두운 로그인 화면의 기존 로그아웃 안내"></a>
+        </figure>
+        <figure>
+          <figcaption>변경 후</figcaption>
+          <a href="after-1440-dark.png"><img src="after-1440-dark.png" width="1440" height="900" alt="1440px 어두운 로그인 화면의 고정 토스트"></a>
+        </figure>
+      </div>
+    </section>
+    <section>
+      <h2>390px · 밝은 화면</h2>
+      <div class="pair">
+        <figure>
+          <figcaption>변경 전</figcaption>
+          <a href="before-390-light.png"><img src="before-390-light.png" width="390" height="844" alt="390px 밝은 로그인 화면의 기존 로그아웃 안내"></a>
+        </figure>
+        <figure>
+          <figcaption>변경 후</figcaption>
+          <a href="after-390-light.png"><img src="after-390-light.png" width="390" height="844" alt="390px 밝은 로그인 화면의 고정 토스트"></a>
+        </figure>
+      </div>
+    </section>
+    <section>
+      <h2>390px · 어두운 화면</h2>
+      <div class="pair">
+        <figure>
+          <figcaption>변경 전</figcaption>
+          <a href="before-390-dark.png"><img src="before-390-dark.png" width="390" height="844" alt="390px 어두운 로그인 화면의 기존 로그아웃 안내"></a>
+        </figure>
+        <figure>
+          <figcaption>변경 후</figcaption>
+          <a href="after-390-dark.png"><img src="after-390-dark.png" width="390" height="844" alt="390px 어두운 로그인 화면의 고정 토스트"></a>
+        </figure>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

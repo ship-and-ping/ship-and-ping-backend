@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import type { AlertSettings, AppSummary, Gateway } from "./data";
 import { displayText } from "./normalize";
 import { PushChannel } from "./PushChannel";
+import { useToast } from "./Toast";
 
 const ticketKey = "ship-ping-slack-state";
 type Props = { api: Gateway; origin: string };
@@ -105,6 +106,7 @@ export function Notifications({ api, origin }: Props) {
 }
 type NotificationAction = "connect" | "disconnect" | "test" | "email";
 function Settings({ app, api, origin }: Props & { app: string }) {
+  const showToast = useToast();
   const [settings, setSettings] = useState<AlertSettings>();
   const [pending, setPending] = useState<NotificationAction | null>(null);
   const busy = pending !== null;
@@ -149,7 +151,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
   async function saveEmail(enabled: boolean) {
     await api.emailSetting(app, enabled);
     setSettings(current => current && { ...current, email: enabled });
-    setMessage(enabled ? "이메일 알림이 켜졌어요." : "이메일 알림이 꺼졌어요.");
+    showToast({ kind: "success", title: enabled ? "이메일 알림이 켜졌어요." : "이메일 알림이 꺼졌어요." });
   }
   async function disconnect() {
     await api.disconnectSlack(app);

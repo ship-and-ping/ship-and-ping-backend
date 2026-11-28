@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import type { AlertSettings, Gateway, PushDevice } from "./data";
+import { useToast } from "./Toast";
 import { canInstall, configuredKey, deniedHelp, deviceType, fingerprint, install, notifyPushChange, PushCleanupError, requestPushPermission, standalone, subscribe } from "./push";
 
 type Props = { api: Gateway; app: string; settings: AlertSettings; reload(): void };
 export function PushChannel({api, app, settings, reload}: Props) {
+  const showToast = useToast();
   const [devices, setDevices] = useState<PushDevice[]>([]);
   const [endpoint, setEndpoint] = useState("");
   const [keyHash, setKeyHash] = useState<string | null>(null);
@@ -78,7 +80,7 @@ export function PushChannel({api, app, settings, reload}: Props) {
       }
       setEndpoint(sub.endpoint);
     });
-    setMessage("이 기기에서 푸시를 받을 수 있어요.");
+    showToast({ kind: "success", title: "이 기기에서 푸시를 받을 수 있어요." });
     refresh();
   }
   async function remove(device: PushDevice) {
@@ -92,7 +94,7 @@ export function PushChannel({api, app, settings, reload}: Props) {
         notifyPushChange();
       }
     }
-    setMessage("이 기기를 알림 목록에서 삭제했어요.");
+    showToast({ kind: "success", title: "알림 기기를 삭제했어요", detail: "이 기기에서 받던 모든 앱의 푸시가 꺼졌어요." });
   }
   return <section className="panel push-channel">
     <header><h2>앱 푸시</h2><small>{stale ? "다시 켜기 필요" : settings.push && current ? "켜짐" : "홈 화면 앱"}</small></header>

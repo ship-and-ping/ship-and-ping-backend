@@ -202,7 +202,7 @@ export function AuthForm({ api, mode, saved, expired }: { api: Gateway; mode: Mo
 export function AuthPage({ api, mode, recovery = false, expired }: { api: Gateway; mode: Exclude<Mode,"account">; recovery?: boolean; expired?: () => void }) {
   return <>
     <a className="skip" href="#main">본문으로 가기</a><PublicBar/>
-    <main id="main" className="public">
+    <main id="main" className={mode === "login" ? "public login-page" : "public"}>
       <h1 tabIndex={-1}>{mode === "login" ? "쉽앤핑 시작하기" : titles[mode]}</h1>
       <div className="even">
         <Hero title="내 앱, 지금도 괜찮을까요?" detail="앱이 어디서 막혔는지 쉽앤핑이 지켜보고 알려 드려요."/>

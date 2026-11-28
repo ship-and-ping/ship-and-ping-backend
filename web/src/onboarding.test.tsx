@@ -238,6 +238,9 @@ it.each([false,true])("로그아웃 실패 시 계정 화면을 유지하고 선
   fireEvent.click(account.getByRole("button",{name:deviceOnly ? "그래도 이 기기에서 로그아웃" : "다시 시도"}));
   await screen.findByRole("heading",{name:"로그인"});
   expect(api.logout).toHaveBeenLastCalledWith({deviceOnly});
+  const title = await screen.findByText(deviceOnly ? "이 기기에서 로그아웃했어요" : "로그아웃했어요");
+  const toast = within(title.closest('[role="status"]') as HTMLElement);
+  expect(toast.getByText(deviceOnly ? /알림 내용은 가려지지만/ : "푸시 알림은 다시 로그인하면 알림 설정에서 켤 수 있어요.")).toBeTruthy();
 });
 
 it.each([false,true])("waits for sign-out without repeating the withdrawal (device only %s)", async deviceOnly => {
