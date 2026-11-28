@@ -16,19 +16,21 @@ insert into incidents(app_id,feature_id,kind,status,opened_version,opened_at,clo
   select app_id,id,'failure','quiet','v1',t,t+interval '10 minutes' from features,anchor where name='places';
 insert into app_keys(app_id,kind,prefix,key_hash,expires_at)
   select id,'srv','test',repeat('a',64),t+interval '24 hours'-interval '10 minutes' from apps,anchor;
-insert into error_samples(app_id,feature_id,version,at,http_status,error_kind)
-  select app_id,id,'v1',t+interval '1 minute',s.status,s.kind
-  from features,anchor,(values(401,'HTTP_401'),(401,'HTTP_401'),(403,'HTTP_403'),(502,'LookupError'),(500,'LookupError')) s(status,kind)
+insert into error_samples(app_id,feature_id,version,at,http_status,error_kind,message)
+  select app_id,id,'v1',t+interval '1 minute',s.status,s.kind,s.class
+  from features,anchor,(values(401,null,null),(401,null,null),(403,null,null),
+    (502,'HTTP_502','LookupError'),(500,'HTTP_500','LookupError')) s(status,kind,class)
   where name='places';
 insert into attempts(app_id,feature_id,attempt_id,version,status,ended_at,step,error_kind)
-  select app_id,id,gen_random_uuid(),'v1','failure',t+interval '2 minutes','map','TimeoutError'
+  select app_id,id,gen_random_uuid(),'v1','failure',t+interval '2 minutes','database','TimeoutError'
   from features,anchor where name='places';
 
 create temp view report as select incident_prompt_context(id) ctx from incidents;
 select is((ctx->>'feature_rpm')::numeric,60::numeric,'feature requests per minute in complete incident buckets') from report;
 select ok((ctx->>'single_feature_spike')::bool and (ctx->>'client_spike')::bool,'single feature and client error rate spikes') from report;
 select ok((ctx->>'key_changed')::bool and (ctx->>'auth_spike')::bool,'rotation time and auth rate independently observed') from report;
-select ok((ctx->>'repeated_server_error')::bool and (ctx->>'timeout_step')::bool,'repeated named server errors and a bounded failed step') from report;
+select ok((ctx->>'repeated_server_error')::bool,'two status-labelled 5xx share an exception class') from report;
+select is((ctx->>'timeout_step')::bool,false,'one DB timeout cannot establish a repeated step') from report;
 insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,server_errors,duration_sum_ms,hist)
   select app_id,id,'v1',t,200,0,0,0,2000,array[200]||array_fill(0,array[15]) from features,anchor where name='trips';
 select is((ctx->>'single_feature_spike')::bool,false,'spike on a second route rules out a single-route surge') from report;
@@ -50,6 +52,10 @@ insert into feature_timing_5m(app_id,feature_id,version,bucket,db_ms_sum,db_ms_c
   where name='places';
 select ok((ctx->>'cpu_high')::bool and (ctx->>'memory_rising')::bool and (ctx->>'db_slow')::bool,'incident-scoped T54 CPU, memory trend and weighted DB timing') from report;
 select is(ctx->>'metrics_guide','CloudWatch Metrics','app metrics guide') from report;
+update feature_timing_5m set db_ms_sum=50,external_ms_sum=300 where bucket=(select t from anchor);
+select is((ctx->>'external_slow')::bool,false,'one external timing cannot establish an external incident') from report;
+update feature_timing_5m set external_ms_count=2,external_ms_sum=600 where bucket=(select t from anchor);
+select is((ctx->>'external_slow')::bool,true,'repeated external timings rose while DB timing held steady') from report;
 update server_minutes set resources='{"mem_used_pct":85}';
 select is((ctx->>'memory_rising')::bool,false,'one high level does not imply a rising trend') from report;
 select * from finish();

@@ -44,6 +44,10 @@ begin
   ), failed_steps as (
     select step,error_kind from public.attempts where app_id=issue.app_id and feature_id=issue.feature_id
       and version=issue.opened_version and ended_at between onset and until_at and status='failure'
+  ), server_errors as (
+    select coalesce(private.error_name(message),nullif(error_kind,'')) class
+    from public.error_samples where app_id=issue.app_id and feature_id=issue.feature_id
+      and version=issue.opened_version and at between onset and until_at and http_status between 500 and 599
   )
   select jsonb_build_object(
     'feature_rpm',case when first_bucket>=now()-interval '7 days' then r.rpm end,
@@ -54,16 +58,12 @@ begin
     -- Samples give a lower bound after onset. All baseline 4xx give an upper bound on baseline auth errors.
     'auth_spike',a.n>=3 and prior_minutes is not null and
       a.n/nullif(extract(epoch from until_at-onset)/60,0)>=greatest(0.1,r.usual_client)*3,
-    'repeated_server_error',exists(select from public.error_samples where app_id=issue.app_id
-      and feature_id=issue.feature_id and version=issue.opened_version and at between onset and until_at
-      and http_status between 500 and 599
-      group by coalesce(nullif(error_kind,''),message)
-      having coalesce(nullif(error_kind,''),message) ~ '[A-Za-z]' and
-        coalesce(nullif(error_kind,''),message) !~* '^(HTTP[._-]?)?[0-9]{3}$' and count(*)>=2),
+    'repeated_server_error',exists(select from server_errors where class ~ '[A-Za-z]'
+      and class !~* '^(HTTP[._-]?)?[0-9]{3}$' group by class having count(*)>=2),
     'key_changed',exists(select from public.app_keys where app_id=issue.app_id and
       (revoked_at between onset-interval '30 minutes' and onset or
        expires_at-interval '24 hours' between onset-interval '30 minutes' and onset)),
-    'timeout_step',(select count(*)=count(step) and count(distinct step)=1 and
+    'timeout_step',(select count(*)>=2 and count(*)=count(step) and count(distinct step)=1 and
       bool_and(coalesce(error_kind,'') ~* '(time[_. -]?out|timed[_. -]?out)') from failed_steps)
   ) into signals from auth_errors a left join rates r on r.feature_id=issue.feature_id;
   -- T54 may be deployed independently. These statements are planned only when the table exists.
@@ -89,7 +89,8 @@ begin
   if to_regclass('public.feature_timing_5m') is not null then
     with times as (
       select bucket>=first_bucket recent,sum(db_ms_sum)::numeric/nullif(sum(db_ms_count),0) ms,
-        sum(external_ms_sum)::numeric/nullif(sum(external_ms_count),0) external_ms
+        sum(external_ms_sum)::numeric/nullif(sum(external_ms_count),0) external_ms,
+        sum(external_ms_count) external_count
       from public.feature_timing_5m where app_id=issue.app_id and feature_id=issue.feature_id
         and bucket>=date_bin('5 minutes',onset,'epoch')-interval '30 minutes'
         and bucket<date_bin('5 minutes',until_at,'epoch')
@@ -97,7 +98,7 @@ begin
       group by 1
     )
     select jsonb_build_object('db_slow',r.ms>=b.ms*2 and r.ms>=b.ms+100,
-      'external_slow',r.external_ms>=b.external_ms*2 and r.external_ms>=b.external_ms+100
+      'external_slow',r.external_count>=2 and r.external_ms>=b.external_ms*2 and r.external_ms>=b.external_ms+100
         and r.ms<=b.ms+100)
     into extra from times r join times b on r.recent and not b.recent;
     signals := signals || coalesce(extra,'{}'::jsonb);

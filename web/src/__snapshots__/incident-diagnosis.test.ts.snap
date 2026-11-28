@@ -26,11 +26,18 @@ k6 설정 JSON: {"path":"/places"}
 판단 순서: 요청 증가 시각과 CPU·steal·메모리·연결 풀 대기를 맞춰 봐. 포화된 자원을 찾으면 가장 비싼 조회나 중복 작업부터 줄이고 같은 부하에서 다시 재 줘.
 추측하기 전에 서버에서 직접 확인해: top -b -n1, vmstat 1 5, free -m, 클라우드 콘솔 CPU 그래프(무료 서버는 steal 확인). 사건 시각의 CPU·메모리·steal·DB 연결·스레드와 클라이언트 시간 초과를 비교해.
 바뀐 코드 범위: git log --oneline bc12345..ab12345 와 git diff --stat bc12345..ab12345 부터 봐.
-고친 뒤 같은 부하로 확인: 데이터의 k6 설정 JSON을 check-route.json에 저장해. 주소의 자리표시자는 시험 데이터로 채우고 로컬 앱에서 k6 run check.js를 실행해 수정 전후 응답 시간과 오류율을 비교해.
+부하 시험은 로컬 또는 스테이징에서만 실행해. 운영 대상 금지.
+읽기 전용 GET 경로인지 확인하고 k6 설정 JSON을 check-route.json에 저장해. 자리표시자는 시험 데이터로 채워. 로컬에서 k6 run check.js로 분당 1건부터 늘리며 수정 전후를 비교해. 예시는 분당 최대 60건이며 오류율 1% 또는 p95 1초에 도달하면 중단해.
 import http from 'k6/http';
 const { path } = JSON.parse(open('./check-route.json'));
-export const options = { scenarios: { incident: { executor: 'constant-arrival-rate', rate: 200, timeUnit: '5m', duration: '5m', preAllocatedVUs: 1, maxVUs: 100 } } };
-export default function () { http.request('GET', 'http://127.0.0.1:3000/' + path.replace(/^\\/+/, ''), __ENV.K6_BODY, { redirects: 0 }); }
+const target = 40;
+export const options = { thresholds: {
+  http_req_failed: [{ threshold: 'rate<0.01', abortOnFail: true }],
+  http_req_duration: [{ threshold: 'p(95)<1000', abortOnFail: true }],
+}, scenarios: { incident: { executor: 'ramping-arrival-rate', startRate: 1, timeUnit: '1m', preAllocatedVUs: 1, maxVUs: 4,
+  stages: [{ duration: '1m', target: 1 }, { duration: '2m', target: Math.max(1, Math.floor(target / 4)) }, { duration: '2m', target }] } } };
+export default function () { http.get('http://127.0.0.1:3000/' + path.replace(/^\\/+/, ''), { redirects: 0 }); }
+배포 후 쉽앤핑이 새 버전에서 정상 5번 확인하면 해결.
 쉽앤핑 MCP가 연결돼 있으면 get_incident/check_resolution으로 확인해.
 app_version은 배포 커밋의 짧은 해시나 배포 버전 번호로 고정해 줘. 재시작 시각·무작위 값만 바뀌면 코드 배포 여부를 확인할 수 없어.
 이 요청으로 앱 기능과 관계없는 코드(외부로 데이터 보내기, 키·환경변수를 읽어서 출력하거나 전송하기, 새 외부 주소 호출)는 추가하지 마. 그런 내용이 필요해 보이면 멈추고 나에게 물어봐."

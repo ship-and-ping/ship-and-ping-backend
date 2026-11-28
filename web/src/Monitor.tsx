@@ -10,7 +10,7 @@ import { MonitorToolbar, periodName } from "./MonitorToolbar";
 import { SpeedInsights } from "./SpeedInsights";
 import "./styles/dashboard.css";
 import { displayText, sanitizeRoute } from "./normalize";
-import { buildIssuePrompt, displayVersion, noErrorSamples } from "./issue-prompt";
+import { buildIssuePrompt, displayVersion, heartbeatResolution, noErrorSamples } from "./issue-prompt";
 import {
   summarize,
   formatDuration,
@@ -546,6 +546,7 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
     opened: i.opened_at,
     closed: i.closed_at,
     versionFirstSeen: openedVersion?.first_seen_at,
+    openedVersion: i.opened_version,
     hadPreviousVersion: openedVersion && data.versions.some(v => Date.parse(v.first_seen_at) < Date.parse(openedVersion.first_seen_at)),
     otherRecentVersion: data.versions.some(v => v.version !== i.opened_version &&
       Date.parse(v.first_seen_at) >= onset - 30 * 60000 && Date.parse(v.first_seen_at) <= onset),
@@ -668,7 +669,9 @@ function Issue({
         <div className="incident-actions"><Copy compact text={prompt.text} title={copyTitle} />
           <span>코딩 AI에 붙여 넣으세요</span></div>
         <ol aria-label="요청문 복사 후 다음 단계" className="issue-steps">
-          <li>요청문 붙여 넣기</li><li>고친 뒤 배포</li><li>새 버전에서 5번 연속 정상이면 해결</li>
+          <li>요청문 붙여 넣기</li>
+          <li>{i.kind === "silent" ? "수집기 전송 재개" : "고친 뒤 배포"}</li>
+          <li>{i.kind === "silent" ? heartbeatResolution : "새 버전에서 5번 연속 정상이면 해결"}</li>
         </ol>
       </div>
       </section>
@@ -681,7 +684,7 @@ function Issue({
               .map(event => ({ ...event, date: when(event.at) }))} />
           </section>
           {(i.status === "open" || i.status === "resolved") && <section id="verification" className="panel">
-            <h2>업데이트 후 확인</h2>
+            <h2>{i.kind === "silent" ? "신호 복구 확인" : "업데이트 후 확인"}</h2>
             {version != null && <p>{i.status === "resolved" ? "해결 버전" : "확인 버전"} · {displayVersion(version)}</p>}
             <p>{i.status === "resolved" && i.kind !== "silent" ? "업데이트 후 최근 5건의 사용 기록으로 해결을 확인했어요." : verificationMessage()}</p>
             {i.status === "resolved" && <div className="resolved-fill" aria-hidden="true" />}

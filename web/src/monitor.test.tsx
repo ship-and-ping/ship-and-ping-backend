@@ -563,4 +563,5 @@ it("앱 단위 기록 끊김도 기능 ID 없이 열리고 판단 근거와 확�
   expect(region.getByRole("heading", { name: "기록 끊김으로 보여요" })).toBeTruthy();
   expect(region.getByText("확신: 높음")).toBeTruthy();
   expect(region.getAllByRole("listitem").map(li => li.textContent)).toEqual(["살아 있음 신호가 끊겼어요."]);
+  expect(within(screen.getByRole("list", { name: "요청문 복사 후 다음 단계" })).getByText("같은 버전의 살아 있음 신호가 1회 도착하면 해결")).toBeTruthy();
 });
