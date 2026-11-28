@@ -53,7 +53,30 @@ export interface Incident {
   metric_worst: Metric | null;
   notifications: { event: string; sent_at: string; ok: boolean }[];
 }
+export interface PromptContext {
+  slow_start: string | null;
+  usual_rpm: number | null;
+  incident_rpm: number | null;
+  client_errors: number | null;
+  server_errors: number | null;
+  client_partial?: boolean;
+  server_partial?: boolean;
+}
+
+export function concurrentIssues(issue: Incident, start: string, incidents: Incident[], features: Pick<Feature, "id" | "name">[]) {
+  const distance = (i: Incident) => Math.abs(Date.parse(i.opened_at) - Date.parse(start));
+  const candidates = incidents.filter(i => i.feature_id !== issue.feature_id && distance(i) <= 600_000)
+    .sort((a,b) => distance(a)-distance(b) || a.opened_at.localeCompare(b.opened_at) || a.id.localeCompare(b.id));
+  const seen = new Set<string>();
+  return candidates.flatMap(i => {
+    if (seen.has(i.feature_id)) return [];
+    seen.add(i.feature_id);
+    return [{ name: features.find(f => f.id === i.feature_id)?.name ?? "기능", kind: i.kind,
+      opening: i.metric_at_open, worst: i.metric_worst }];
+  }).slice(0,5);
+}
 export interface Monitor {
+  promptContext?: PromptContext;
   insights?: Insight[];
   verificationIncidentId?: string;
   verification?: {
@@ -67,7 +90,7 @@ export interface Monitor {
   incidents: Incident[];
   stats: Stat[];
   versions: { version: string; first_seen_at: string; last_seen_at: string }[];
-  samples: { at: string; error_kind: string | null; message: string | null }[];
+  samples: { at: string; error_kind: string | null; message: string | null; http_status?: number | null }[];
   errorKinds: Monitor["samples"];
   step?: string;
   now: number;
@@ -95,7 +118,7 @@ export async function loadMonitor(
   days = 1,
 ): Promise<Monitor> {
   const now = Date.now();
-  const [header, features, incidents, versions] = await Promise.all([
+  const [header, features, incidents, versions, context] = await Promise.all([
     client.from("apps").select("name").eq("id", app).single(),
     client
       .from("features")
@@ -126,7 +149,9 @@ export async function loadMonitor(
         .order("version")
         .range(a, b),
     ),
+    issueId ? client.rpc("incident_prompt_context", { incident_id: issueId }) : undefined,
   ]);
+  const promptContext = context ? read<PromptContext>(context) : undefined;
   const selected = issueId
     ? incidents.find((i) => i.id === issueId)?.feature_id
     : featureId;
@@ -186,11 +211,15 @@ export async function loadMonitor(
   const sampleQuery = selected
     ? client
         .from("error_samples")
-        .select("at,error_kind,message")
+        .select("at,error_kind,message,http_status")
         .eq("app_id", app)
         .eq("feature_id", selected)
+        .order("at", { ascending: false }).order("id")
     : null;
-  if (incident) sampleQuery?.gte("at", cutoff).lte("at", incident.closed_at ?? new Date(now).toISOString());
+  if (incident) {
+    const since = Date.parse(promptContext?.slow_start ?? incident.opened_at) - 600_000;
+    sampleQuery?.gte("at", new Date(since).toISOString()).lte("at", incident.closed_at ?? new Date(now).toISOString());
+  }
   const kindRows = featureId
     ? pages<Monitor["samples"][number]>((a, b) =>
         client
@@ -208,9 +237,10 @@ export async function loadMonitor(
     stats,
     attempts,
     kindRows,
-    sampleQuery
-      ? sampleQuery.order("at", { ascending: false }).order("id").limit(5)
-      : { data: [], error: null },
+    sampleQuery ? (incident
+      ? pages<Monitor["samples"][number]>((a,b) => sampleQuery.range(a,b))
+      : sampleQuery.limit(5).then(read<Monitor["samples"]>))
+      : [],
     selected && deep.length
       ? client
           .from("attempts")
@@ -251,6 +281,7 @@ export async function loadMonitor(
     });
   }
   return {
+    promptContext,
     name: read(header).name,
     insights: insights ? read<Insight[]>(insights) : [],
     verificationIncidentId: verificationIssue?.id,
@@ -260,7 +291,7 @@ export async function loadMonitor(
     versions,
     errorKinds,
     stats: visibleRows,
-    samples: read(samples),
+    samples,
     step: read(steps)[0]?.step,
     now,
   };
