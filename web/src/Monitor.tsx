@@ -512,13 +512,13 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
   );
   const streak = proof?.consecutive_successes ?? 0;
   const duration = proof?.latest_duration_ms;
-  const normal = f.method === "*" ? null : f.baselines;
   const metric = i.metric_worst ?? i.metric_at_open;
   const opening = i.metric_at_open ?? metric;
-  const p95 = (opening?.timing_basis ? opening.baseline_p95 : normal?.p95_ms) ?? Infinity;
-  const p50 = (opening?.timing_basis ? opening.baseline_p50 : normal?.p50_ms) ?? Infinity;
-  const threshold = opening?.slow_rule === "absolute" ? Math.min(f.slow_threshold_ms, opening.threshold ?? Infinity)
-    : Math.min(f.slow_threshold_ms, p95 + 500, Math.max(p95, p50 + 499));
+  const p95 = opening?.baseline_p95 ?? Infinity;
+  const p50 = opening?.baseline_p50 ?? Infinity;
+  const cap = opening?.threshold ?? f.slow_threshold_ms;
+  const threshold = opening?.slow_rule === "absolute" ? cap
+    : Math.min(cap, p95 + 500, Math.max(p95, p50 + 499));
   const slow = i.kind === "slow" && duration != null && duration > threshold;
   const again = (proof?.latest_success === false || slow) && i.status === "open";
   const versions = version != null

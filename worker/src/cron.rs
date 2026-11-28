@@ -12,6 +12,33 @@ fn scheduled_rpc(cron: &str) -> Option<&'static str> {
 }
 
 #[cfg(target_arch = "wasm32")]
+async fn run_evaluation(db: &Supabase, rpc: &str) {
+    use futures_util::future::{Either, select};
+    use std::time::Duration;
+
+    let evaluate = async {
+        match db.rpc(rpc, b"{}".to_vec()).await {
+            Ok(mut response) if rpc == "evaluate_all" => {
+                match response.json::<Vec<serde::de::IgnoredAny>>().await {
+                    Ok(events) if !events.is_empty() => {
+                        console_log!("Evaluation events: {}", events.len())
+                    }
+                    Ok(_) => (),
+                    Err(_) => console_error!("Invalid evaluation response"),
+                }
+            }
+            Ok(_) => (),
+            Err(_) => console_error!("Scheduled RPC {} failed", rpc),
+        }
+    };
+    // Allow the database its eight-second statement budget plus network time.
+    let deadline = Delay::from(Duration::from_secs(10));
+    if let Either::Right(_) = select(Box::pin(evaluate), Box::pin(deadline)).await {
+        console_error!("Scheduled RPC {} exceeded 10 seconds", rpc);
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
 #[event(scheduled)]
 pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     let Some(rpc) = scheduled_rpc(&event.cron()) else {
@@ -24,30 +51,20 @@ pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
         );
         return;
     };
-    match db.rpc(rpc, b"{}".to_vec()).await {
-        Ok(mut response) if rpc == "evaluate_all" => {
-            // The transaction has already queued delivery; log only the count.
-            match response.json::<Vec<serde::de::IgnoredAny>>().await {
-                Ok(events) if !events.is_empty() => {
-                    console_log!("Evaluation events: {}", events.len())
-                }
-                Ok(_) => (),
-                Err(_) => console_error!("Invalid evaluation response"),
+    if rpc == "evaluate_all" {
+        futures_util::join!(
+            run_evaluation(&db, rpc),
+            run_evaluation(&db, "evaluate_silence")
+        );
+        if crate::notify::deliver(&db, &env).await.is_err() {
+            console_error!("Notification delivery interrupted");
+        }
+    } else {
+        for daily in [rpc, "rollup_server_hours"] {
+            if db.rpc(daily, b"{}".to_vec()).await.is_err() {
+                console_error!("Scheduled RPC {} failed", daily);
             }
         }
-        Ok(_) => (),
-        Err(_) => console_error!("Scheduled RPC {} failed", rpc),
-    }
-    let server_rpc = if rpc == "evaluate_all" {
-        "evaluate_silence"
-    } else {
-        "rollup_server_hours"
-    };
-    if db.rpc(server_rpc, b"{}".to_vec()).await.is_err() {
-        console_error!("Scheduled RPC {} failed", server_rpc);
-    }
-    if rpc == "evaluate_all" && crate::notify::deliver(&db, &env).await.is_err() {
-        console_error!("Notification delivery interrupted");
     }
 }
 

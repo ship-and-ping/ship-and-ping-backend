@@ -123,6 +123,25 @@ select evaluate_all();
 select is((select status from incidents i join features f on f.id=i.feature_id where route='/recovery'),'resolved',
  'five healthy successes from the opening method verify the fix');
 
+select pg_temp.traffic('/transition','before',now()-interval '1 day',127,40,false);
+select pg_temp.traffic('/transition','before',now(),700,10,false);
+select evaluate_all();
+select results_eq($q$select metric_at_open->>'timing_basis',(metric_at_open->>'baseline_p95')::int
+ from incidents i join features f on f.id=i.feature_id where route='/transition'$q$,
+ $$select 'handler'::text,127$$,'opening before enrollment captures its handler baseline');
+update incidents set opened_at=now()-interval '1 second' where feature_id=(select id from features where route='/transition');
+select pg_temp.traffic('/transition','before',now(),727,1,true);
+select pg_temp.traffic('/transition','after',now(),700,5,false);
+select evaluate_all();
+select is((select b.p95_ms from baselines b join features f on f.id=b.feature_id where route='/transition'),
+ null::integer,'first inclusive success clears the public p95');
+select is((select status from incidents i join features f on f.id=i.feature_id where route='/transition'),'open',
+ 'enrolling after opening cannot resolve five equally slow handler results');
+select pg_temp.traffic('/transition','after',now(),127,5,false);
+select evaluate_all();
+select is((select status from incidents i join features f on f.id=i.feature_id where route='/transition'),'resolved',
+ 'healthy handler results still resolve after enrollment');
+
 select pg_temp.traffic('/combined','v1',now(),5100,3,false);
 select pg_temp.traffic('/combined','v1',now(),5200,3,true);
 select evaluate_all();

@@ -1,7 +1,8 @@
 begin;
 create extension if not exists pgtap with schema extensions;
+create extension if not exists dblink with schema extensions;
 set search_path=public,extensions;
-select plan(5);
+select plan(7);
 insert into auth.users(id) select gen_random_uuid() from generate_series(1,20);
 insert into apps(owner_id,name)
  select id,'load' from auth.users;
@@ -28,23 +29,48 @@ analyze private.request_flow_seconds;
 analyze private.evaluation_buckets;
 analyze features;
 analyze stats_5m;
+-- A committed feature lets a separate connection ingest into the same app
+-- that the cold evaluator will refresh. Keep its write locks until after evaluation.
+\getenv db_test_password PGPASSWORD
+select format('hostaddr=%s port=%s dbname=%L user=%L password=%L',inet_server_addr(),inet_server_port(),current_database(),current_user,:'db_test_password') as db_test_connection \gset
+select dblink_connect('load_writer',:'db_test_connection');
+select dblink_exec('load_writer',$$set lock_timeout='1s'$$);
+select gen_random_uuid() load_owner \gset
+select dblink_exec('load_writer',format('insert into auth.users(id) values (%L)',:'load_owner'));
+select dblink_exec('load_writer',format('insert into public.apps(id,owner_id,name) values (%1$L,%1$L,''overlap'')',:'load_owner'));
+select dblink_exec('load_writer',format('insert into public.features(app_id,kind,method,route,name) values (%L,''auto'',''GET'',''/overlap'',''overlap'')',:'load_owner'));
+select dblink_exec('load_writer',format('insert into public.app_keys(app_id,kind,prefix,key_hash) values (%L,''srv'',''load'',repeat(''a'',64))',:'load_owner'));
+select dblink_exec('load_writer','begin');
+select is((result->>'accepted')::int,1,'second session has an uncommitted ingest batch')
+ from dblink('load_writer',format('select public.ingest_batch(repeat(''a'',64),%L::jsonb)',jsonb_build_object(
+ 'batch_id',gen_random_uuid(),'app_version','v1','platform','server','stats',jsonb_build_array(jsonb_build_object(
+ 'method','GET','route','/overlap','bucket',date_bin('5 minutes',now(),'epoch'),'total',1,'failures',0,
+ 'client_errors',0,'duration_sum_ms',1,'hist',array[1]||array_fill(0,array[15])))))) as w(result jsonb);
 create function pg_temp.measure() returns numeric language plpgsql as $$
 declare started timestamptz := clock_timestamp();
 begin
  perform evaluate_all();
  return round(extract(epoch from clock_timestamp()-started)*1000,2);
 end $$;
-create temp table times as select pg_temp.measure() cold;
-select ok(cold<30000,'cold evaluation under 30 s') from times;
+create temp table times(cold numeric,warm numeric);
+set local statement_timeout='8s';
+set local lock_timeout='1s';
+insert into times(cold) select pg_temp.measure();
+select ok(cold<8000,'cold evaluation completes within the RPC deadline during ingest') from times;
+select ok(exists(select from baselines b join features f on f.id=b.feature_id where f.app_id=:'load_owner'),
+ 'cold evaluation refreshed the app held by the writer');
+select dblink_exec('load_writer','rollback');
+select dblink_disconnect('load_writer');
 select is((select count(*) from baselines where p50_ms is not null and sample_count=10065),300::bigint,'seven-day baselines exclude three current buckets');
-alter table times add column warm numeric;
 update private.latency_baselines set computed_at=now()-interval '1 minute' where n=0;
 update times set warm=pg_temp.measure();
 select is((select count(*) from private.latency_baselines where n=0 and computed_at=now()-interval '1 minute'),
  100::bigint,'absent handler-only cohorts skip the warm seven-day scan');
-select ok(warm<30000,'warm evaluation under 30 s') from times;
+select ok(warm<8000,'warm evaluation under the 8 s RPC deadline') from times;
 do $$ begin raise warning 'evaluate_all 300 features x 2016 buckets: cold % ms, warm % ms',
  (select cold from times),(select warm from times); end $$;
 select is((select count(*) from incidents),0::bigint,'healthy traffic stays quiet');
 select * from finish();
 rollback;
+-- The extension was installed inside the rolled-back test transaction.
+delete from auth.users where id=:'load_owner';

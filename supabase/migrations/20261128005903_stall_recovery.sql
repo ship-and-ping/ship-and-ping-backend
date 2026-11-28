@@ -69,17 +69,17 @@ language sql stable set search_path='' as $$
  select v.version,coalesce(array_position(proof.qualified,false)-1,cardinality(proof.qualified),0) as streak,
   proof.durations[1],proof.successes[1]
  from public.app_versions v join public.features f on f.id=issue.feature_id
- left join public.baselines b on b.feature_id=f.id and f.method is distinct from '*'
  cross join lateral (
-  select issue.metric_at_open->>'timing_basis' basis,
-    case when issue.metric_at_open ? 'timing_basis' then (issue.metric_at_open->>'baseline_p95')::bigint else b.p95_ms end upper_ms,
-    case when issue.metric_at_open ? 'timing_basis' then (issue.metric_at_open->>'baseline_p50')::bigint else b.p50_ms end usual_ms
+  select coalesce(issue.metric_at_open->>'timing_basis',case when f.kind='deep' then 'deep' else 'handler' end) basis,
+    (issue.metric_at_open->>'baseline_p95')::bigint upper_ms,
+    (issue.metric_at_open->>'baseline_p50')::bigint usual_ms,
+    coalesce((issue.metric_at_open->>'threshold')::int,f.slow_threshold_ms) threshold
  ) opening
  cross join lateral (
   -- A qualifying result must also be on the healthy side of the opening rule.
   select array_agg(success and (issue.kind<>'slow' or coalesce(
-    (opening.basis is null or opening.basis='mixed' or inclusive=(opening.basis='inclusive'))
-    and ms<=least(f.slow_threshold_ms,
+    (opening.basis in ('deep','mixed') or coalesce(inclusive,false)=(opening.basis='inclusive'))
+    and ms<=least(opening.threshold,
       case when issue.metric_at_open->>'slow_rule'='absolute' then (issue.metric_at_open->>'threshold')::int
         else least(opening.upper_ms+500,greatest(opening.upper_ms,opening.usual_ms+499)) end),false))
     order by rank) qualified,array_agg(ms order by rank) durations,array_agg(success order by rank) successes

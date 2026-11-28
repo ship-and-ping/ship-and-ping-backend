@@ -71,7 +71,10 @@ language sql stable set search_path='' as $$
    else m.missing::numeric/nullif(m.tried,0) end severity,
   case k.kind when 'failure' then jsonb_build_object('total',r.results,'failures',r.failures,'consecutive',r.consecutive)
    when 'slow' then jsonb_build_object('total',r.timed,'p50',r.p50,'baseline',b.p50_ms,'baseline_p50',b.p50_ms,
-    'baseline_p95',b.p95_ms,'window',coalesce(r.minutes,10),'slow',r.slow,'threshold',f.slow_threshold_ms)
+    'baseline_p95',b.p95_ms,'window',coalesce(r.minutes,10),'slow',r.slow,'threshold',f.slow_threshold_ms,
+    'timing_basis',case when f.kind='deep' then 'deep' else 'handler' end,
+    'slow_rule',case when r.successes>=5 and r.p50>b.p95_ms and r.p50>=b.p50_ms::bigint+500
+      then 'relative' else 'absolute' end)
    else jsonb_build_object('total',m.tried,'unconfirmed',m.missing) end metric,
   case when k.kind='unconfirmed' then m.version else r.version end version,
   case when k.kind='unconfirmed' then m.latest else r.latest end latest

@@ -30,7 +30,7 @@ export interface Stat {
   success_durations?: Record<string, number>;
 }
 interface Metric {
-  timing_basis?: "handler" | "inclusive" | "mixed";
+  timing_basis?: "handler" | "inclusive" | "mixed" | "deep";
   slow_rule?: "relative" | "absolute";
   queue_ms?: number;
   queue_pct?: number;
