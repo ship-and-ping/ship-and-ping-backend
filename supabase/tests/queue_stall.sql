@@ -9,7 +9,7 @@ insert into app_keys(app_id,kind,prefix,key_hash) select id,'srv','test',repeat(
 -- Replay aggregate batches through the same RPC as the Worker. Each normal
 -- second has four completions. The disturbance starts off the 10-second grid.
 create temporary table replay as
-with anchor as (select date_trunc('minute',now())-interval '23 seconds' stamp),
+with anchor as (select date_trunc('second',now())-interval '130 seconds' stamp),
 traffic as (
  select route, stamp+sec*interval '1 second' at_time,
    case when route='/quiet' then 1 else 4 end n,
@@ -29,7 +29,7 @@ select jsonb_build_object('batch_id',gen_random_uuid(),'app_version','3e66a68','
  'method','GET','route',route,'bucket',bucket,'total',n,'failures',case when interrupted then n else 0 end,
  'client_errors',0,'duration_sum_ms',n*ms,
  'hist',array(select case when i=private.duration_bin(ms,16) then n else 0 end from generate_series(1,16) i),
- 'timings',(select jsonb_agg(jsonb_build_array(i,ms,not interrupted)) from generate_series(1,n) i),
+ 'timings',(select jsonb_agg(jsonb_build_array(i,ms,not interrupted,route='/places' and ms=560)) from generate_series(1,n) i),
  'queue_ms_sum',case when route='/places' and ms=560 then 433*n else 0 end,
  'queue_total_ms',case when route='/places' and ms=560 then ms*n else 0 end,
  'queue_count',case when route='/places' and ms=560 then n else 0 end,
