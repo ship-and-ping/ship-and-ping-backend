@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState, type PointerEvent } from "react";
-import { approximateDuration, summarize, type Stat } from "./monitor-data";
+import { approximateDuration, formatDuration, summarize, type Stat } from "./monitor-data";
 import { periodName } from "./MonitorToolbar";
 import "./styles/chart.css";
 
@@ -24,7 +24,9 @@ function buckets(rows: Stat[], start: number, now: number, count: number, thresh
     const from = start + i * width;
     const until = from + width;
     const endLabel = weekday.format(from) === weekday.format(until) ? clockMinute : dateTime;
-    return { label: dateTime.format(from) + " ~ " + endLabel.format(until), ...summarize(group,thresholds) };
+    const startLabel = width >= day ? weekday : from % hour === 0 ? clock : clockMinute;
+    return { label: dateTime.format(from) + " ~ " + endLabel.format(until), startLabel:startLabel.format(from),
+      hasRecords:group.length > 0, ...summarize(group,thresholds) };
   });
 }
 type Bucket = ReturnType<typeof buckets>[number];
@@ -64,8 +66,8 @@ function lineSegments(values:(number|null)[], ordinate:(n:number) => number, bot
   return segments.filter(s => s.first !== s.last).map(s => ({line:s.line,area:s.line+" L"+s.last+" "+bottom+" L"+s.first+" "+bottom+" Z"}));
 }
 
-function verticalTicks(peak: number, duration: boolean) {
-  const required = Math.max(peak / 5, duration ? 10 : 1);
+function verticalTicks(peak: number, duration: boolean, divisions = 5) {
+  const required = Math.max(peak / divisions, duration ? 10 : 1);
   const power = 10 ** Math.floor(Math.log10(required));
   const step = [1, 2, 2.5, 5, 10].map(n => n * power)
     .find(n => n >= required && (duration || Number.isInteger(n)))!;
@@ -148,24 +150,40 @@ function PanelHelp({title,text}:{title:string; text:string}) {
     {open && <span id={id} role="tooltip">{text}</span>}</span>;
 }
 
-function StatPanel({title,help,value,series,selection,points,p95}:{title:string; help:string; value:string; series:(number|null)[];
-  selection:Selection; points:Bucket[]; p95:number|null}) {
+function StatPanel({title,help,value,series,unit,selection,points,p95}:{title:string; help:string; value:string; series:(number|null)[];
+  unit:"건"|"초"|"%"; selection:Selection; points:Bucket[]; p95:number|null}) {
   const active = selection.active?.index;
-  const peak = Math.max(1,...series.map(n => n ?? 0));
-  const pointY = (n:number) => 26-22*n/peak;
-  const runs = lineSegments(series,pointY,30);
+  const peak = Math.max(0,...series.map(n => plotTime(n ?? 0)));
+  const levels = unit === "%" ? [0,50,100] : verticalTicks(peak,unit === "초",3);
+  const max = levels[levels.length-1];
+  // Leave room for the selected dot at both ends of the value axis.
+  const pointY = (n:number) => 88 - 76 * plotTime(n) / max;
+  const runs = lineSegments(series,pointY,pointY(0));
+  function reading(index:number) {
+    const n = series[index];
+    const label = n === null ? "기록 없음" : unit === "초" ? formatDuration(n)
+      : Math.round(n).toLocaleString("ko-KR") + unit;
+    return points[index].startLabel + " · " + label;
+  }
   return <article className="stat-panel">
     <header><h3>{title}</h3><PanelHelp title={title} text={help}/></header>
     <strong className="stat-value">{value}</strong>
-    <div className="spark-plot"><svg viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
-      {runs.map(run => <g key={run.line}><path d={run.area} fill="currentColor" opacity=".12"/>
-        <path d={run.line} fill="none" stroke="currentColor" strokeWidth="1.6" vectorEffect="non-scaling-stroke"/></g>)}
+    <div className="spark-plot"><svg aria-hidden="true">
+      {levels.map(level => <line key={level} className={level === 0 ? "spark-zero" : undefined}
+        x1="0" x2="100%" y1={percent(pointY(level))} y2={percent(pointY(level))}
+        stroke="var(--sp-line-strong)" strokeDasharray={level === 0 ? undefined : "2 4"}/>)}
+      <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+        {runs.map(run => <g key={run.line}><path d={run.area} fill="currentColor" opacity=".12"/>
+          <path d={run.line} fill="none" stroke="currentColor" strokeWidth="1.6" vectorEffect="non-scaling-stroke"/></g>)}
+      </svg>
       {series.map((n,i) => n !== null && (series[i-1] == null && series[i+1] == null || i === active) &&
-        <circle key={i} cx={center(i,series.length)} cy={pointY(n)} r="1.5" fill="currentColor"/>)}
-      {active !== undefined && <line className="spark-cursor" x1={center(active,series.length)} x2={center(active,series.length)} y1="0" y2="30" vectorEffect="non-scaling-stroke"/>}
-    </svg><CursorTarget owner={title} points={points} selection={selection} p95={p95}/>
-      {selection.active?.owner === title && <CursorTip index={selection.active.index} points={points} p95={p95}/>}
+        <circle key={i} className={i === active ? "spark-active" : undefined}
+          cx={percent(center(i,series.length))} cy={percent(pointY(n))} r={i === active ? 4 : 2.5} fill="currentColor"/>)}
+    </svg><CursorTarget owner={title} points={points} selection={selection} p95={p95} reading={reading} crosshair/>
     </div>
+    {selection.active?.owner === title && <div className="spark-readout">
+      <div role="tooltip" className="flow-tip"><strong>{reading(selection.active.index)}</strong></div>
+    </div>}
   </article>;
 }
 
@@ -221,7 +239,7 @@ function Plot({ points, labels, duration = false, baseline, p95 = null, samples 
   </figure>;
 }
 
-function CursorTarget({owner,points,p95,selection,crosshair=false}:{owner:string; points:Bucket[]; p95:number|null; selection:Selection; crosshair?:boolean}) {
+function CursorTarget({owner,points,p95,selection,crosshair=false,reading}:{owner:string; points:Bucket[]; p95:number|null; selection:Selection; crosshair?:boolean; reading?:(index:number) => string}) {
   const active = selection.active?.index;
   const selected = active ?? selection.selected;
   function select(index:number) {
@@ -234,7 +252,7 @@ function CursorTarget({owner,points,p95,selection,crosshair=false}:{owner:string
   }
   return <>
     <div role="slider" tabIndex={0} className="flow-hit" aria-label={owner} aria-valuemin={1} aria-valuemax={points.length}
-      aria-valuenow={selected+1} aria-valuetext={description(points[selected],p95)}
+      aria-valuenow={selected+1} aria-valuetext={reading ? reading(selected) : description(points[selected],p95)}
       onFocus={() => select(selected)} onBlur={() => selection.focus(null)}
       onPointerEnter={e => {if (e.pointerType !== "touch") selection.hover({owner,index:pointAt(e)});}}
       onPointerDown={e => {
@@ -298,10 +316,10 @@ export function Chart({ rows, days, now, baseline, p95 = null, samples, learnsRa
   return <>
     <p className="flow-range">{dateTime.format(start)} ~ {dateTime.format(now)} · 한국 시간</p>
     <div className="stat-grid">
-      <StatPanel {...shared} title="사용 건수" help="선택한 기간의 전체 사용 횟수예요." value={period.total.toLocaleString("ko-KR")+"건"} series={points.map(p => p.total)}/>
-      <StatPanel {...shared} title="실패율" help="판정할 수 있는 요청 중 실패한 비율이에요." value={rate(period.eligible,period.failures)} series={points.map(p => p.eligible ? 100*p.failures/p.eligible : null)}/>
-      <StatPanel {...shared} title="보통 속도" help="성공 요청에 걸린 시간의 중앙값이에요." value={approximateDuration(period.median)} series={points.map(p => p.median === null ? null : plotTime(p.median))}/>
-      {!!thresholds?.size && <StatPanel {...shared} title="만족도" help="선택 기간 중 평소 상한 안에 끝난 성공 요청 비율이에요." value={period.satisfaction === null ? "기록 없음" : period.satisfaction+"%"} series={points.map(p => p.satisfaction)}/>}
+      <StatPanel {...shared} title="사용 건수" unit="건" help="선택한 기간의 전체 사용 횟수예요." value={period.total.toLocaleString("ko-KR")+"건"} series={points.map(p => p.hasRecords ? p.total : null)}/>
+      <StatPanel {...shared} title="실패율" unit="%" help="판정할 수 있는 요청 중 실패한 비율이에요." value={rate(period.eligible,period.failures)} series={points.map(p => p.eligible ? 100*p.failures/p.eligible : null)}/>
+      <StatPanel {...shared} title="보통 속도" unit="초" help="성공 요청에 걸린 시간의 중앙값이에요." value={approximateDuration(period.median)} series={points.map(p => p.median)}/>
+      {!!thresholds?.size && <StatPanel {...shared} title="만족도" unit="%" help="선택 기간 중 평소 상한 안에 끝난 성공 요청 비율이에요." value={period.satisfaction === null ? "기록 없음" : period.satisfaction+"%"} series={points.map(p => p.satisfaction)}/>}
     </div>
     {occupied <= 3 && <p className="flow-note">{occupied ? "아직 사용 기록이 적어요. 쌓이면 흐름이 보여요." : "이 기간에는 표시할 사용 기록이 없어요."}</p>}
     <div className="flow-plots"><Plot points={points} labels={labels} baseline={null} p95={p95} selection={selection}
