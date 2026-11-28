@@ -4,6 +4,16 @@ set search_path=public,extensions;
 set local timezone='UTC';
 select plan(4);
 
+-- Temporary mutation run. PostgreSQL rolls both changes back with this fixture.
+do $mutation$
+begin
+ execute replace(pg_get_functiondef('public.incident_prompt_context(uuid)'::regprocedure),
+  'select traffic_start since_at','select start_bucket since_at');
+ execute replace(pg_get_functiondef('private.first_failure_at(public.incidents)'::regprocedure),
+  'and a.result_received_at<issue.opened_at','');
+end
+$mutation$;
+
 -- Use yesterday's 23:00 UTC so that the recorded incident is always in retention.
 create temp table anchor as select date_trunc('day',now())-interval '1 hour' t;
 insert into auth.users(id) values ('00000000-0000-0000-0000-000000005202');

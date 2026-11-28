@@ -62,6 +62,7 @@ language sql stable set search_path='' as $$
   select a.ended_at,a.status,row_number() over(order by a.ended_at desc,a.attempt_id) position
   from public.attempts a,cutoff where a.app_id=issue.app_id and a.feature_id=issue.feature_id
    and a.ended_at between issue.opened_at-interval '30 minutes' and issue.opened_at
+   and a.result_received_at<issue.opened_at
    and a.ended_at>previous_close and a.status in ('success','failure')
  ), failures as (
   -- In the still-open detection bucket the aggregate mixes pre-failure requests
@@ -102,6 +103,7 @@ declare
  slow_start timestamptz;
  incident_start timestamptz;
  start_bucket timestamptz;
+ traffic_start timestamptz;
  stop_at timestamptz;
  sample_start timestamptz;
  result jsonb;
@@ -115,6 +117,11 @@ begin
  slow_start := issue.first_slow_bucket;
  incident_start := coalesce(slow_start,issue.first_failure_at,issue.opened_at);
  start_bucket := date_bin('5 minutes',incident_start,'epoch');
+ traffic_start := case when start_bucket=incident_start then start_bucket else start_bucket+interval '5 minutes' end;
+ if slow_start is not null and (issue.metric_at_open->>'window')::int=10 then
+  -- A deep sample can fall within the ten minutes while its traffic bucket starts outside them.
+  traffic_start := greatest(traffic_start,date_bin('5 minutes',issue.opened_at-interval '10 minutes','epoch')+interval '5 minutes');
+ end if;
  sample_start := incident_start-interval '10 minutes';
 
  with slots as (
@@ -139,7 +146,7 @@ begin
  ), traffic as (
   -- A closed partial bucket may already include later traffic. Use only its
   -- completed predecessors; for a live incident use elapsed minutes so far.
-  select case when start_bucket=incident_start then start_bucket else start_bucket+interval '5 minutes' end since_at,
+  select traffic_start since_at,
    case when issue.closed_at is null then stop_at else date_bin('5 minutes',stop_at,'epoch') end until_at
  ), current_rate as (
   select case when t.until_at>t.since_at then coalesce(sum(s.total),0)/(extract(epoch from (t.until_at-t.since_at))/60) end rpm
@@ -176,7 +183,7 @@ begin
   from scoped_features f left join counts c on c.feature_id=f.id
  )
  select jsonb_build_object('slow_start',slow_start,'incident_start',incident_start,'usual_rpm',case when start_bucket-interval '7 days'>=now()-interval '30 days' then usual.rpm end,
-  'incident_rpm',case when start_bucket>=now()-interval '7 days' then current_rate.rpm end,
+  'incident_rpm',case when traffic_start>=now()-interval '7 days' then current_rate.rpm end,
   'client_errors',case when feature_kind='auto' and sample_start>=now()-interval '7 days' then coalesce(counts.clients,0) end,
   'server_errors',case when feature_kind='auto' and sample_start>=now()-interval '7 days' then coalesce(counts.servers,0) end,
   'related_server_errors',case when sample_start>=now()-interval '7 days' then totals.all_servers end,
