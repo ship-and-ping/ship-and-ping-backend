@@ -89,5 +89,70 @@ select evaluate_all();
 select results_eq($q$select route from incidents i join features f on f.id=i.feature_id
  where route in ('/invalid','/independent') and i.kind='slow'$q$,$$select '/independent'::text$$,
  'one invalid signal rolls back only its incident and notification');
+-- The larger closed gap must not hide a later, smaller one.
+select pg_temp.traffic('/two-stalls','v1',now(),127,1,false);
+create temporary table windows as select date_trunc('second',now())-interval '350 seconds' older,
+ date_trunc('second',now())-interval '130 seconds' newer;
+select pg_temp.feed('/two-stalls',older) from windows;
+select pg_temp.feed('/two-stalls',newer) from windows;
+update private.request_flow_seconds set interrupted=123 where feature_id=(select id from features where route='/two-stalls')
+ and stamp=(select older+interval '5 seconds' from windows) and version='v2';
+insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version)
+ select app_id,id,'failure','resolved',older,older+interval '1 minute','v1' from features cross join windows where route='/two-stalls';
+select evaluate_all();
+select is((select (metric_at_open->>'interruptions')::int from incidents i join features f on f.id=i.feature_id
+ where route='/two-stalls' and i.status='open'),11,'smaller post-resolution stall reopens');
+
+select pg_temp.traffic('/recovery','v1',now()-interval '1 day',127,40,false);
+select pg_temp.traffic('/recovery','v1',now()-interval '1 day',900,40,true);
+select pg_temp.traffic('/recovery','v1',now(),700,10,false);
+select evaluate_all();
+select is((select metric_at_open->>'timing_basis' from incidents i join features f on f.id=i.feature_id
+ where route='/recovery'),'handler','handler baseline opens 700ms slowdown');
+update incidents set opened_at=now()-interval '1 second' where feature_id=(select id from features where route='/recovery');
+select pg_temp.traffic('/recovery','v2',now(),700,5,false);
+select evaluate_all();
+select is((select status from incidents i join features f on f.id=i.feature_id where route='/recovery'),'open',
+ 'five equally slow successes cannot resolve against a larger inclusive baseline');
+select pg_temp.traffic('/recovery','v2',now(),600,5,true);
+select evaluate_all();
+select is((select status from incidents i join features f on f.id=i.feature_id where route='/recovery'),'open',
+ 'five successes from the other measurement method cannot verify the fix');
+select pg_temp.traffic('/recovery','v2',now(),127,5,false);
+select evaluate_all();
+select is((select status from incidents i join features f on f.id=i.feature_id where route='/recovery'),'resolved',
+ 'five healthy successes from the opening method verify the fix');
+
+select pg_temp.traffic('/combined','v1',now(),5100,3,false);
+select pg_temp.traffic('/combined','v1',now(),5200,3,true);
+select evaluate_all();
+select results_eq($q$select (metric_at_open->>'total')::int,(metric_at_open->>'slow')::int from incidents i
+ join features f on f.id=i.feature_id where route='/combined' and i.kind='slow'$q$,
+ 'select 6,6','absolute cap uses all successes from both methods');
+
+-- Corrupt only the first app. The second app must refresh and open its incident
+-- whether the first one fails on historical data or when reading a recent signal.
+insert into auth.users(id) values ('00000000-0000-0000-0000-000000005902');
+insert into apps(id,owner_id,name) values ('00000000-0000-0000-0000-000000005902','00000000-0000-0000-0000-000000005902','independent app');
+insert into app_keys(app_id,kind,prefix,key_hash) values ('00000000-0000-0000-0000-000000005902','srv','test',repeat('8',64));
+insert into features(app_id,kind,method,route,name) select id,'auto','GET','/other','other' from apps where name='independent app';
+insert into app_versions(app_id,version) select id,'other-v1' from apps where name='independent app';
+insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist)
+ select app_id,id,'other-v1',date_bin('5 minutes',now(),timestamptz 'epoch'),6,6,0,60,array[6]||array_fill(0,array[15])
+ from features where route='/other';
+update private.queue_success_5m set counts='{"broken-key":1}' where feature_id=(select id from features where route='/basis')
+ and bucket<now()-interval '1 hour';
+delete from private.latency_baselines where feature_id=(select id from features where route='/basis');
+select lives_ok('select evaluate_all()','bad historical counts are isolated during baseline refresh');
+select is((select count(*) from incidents i join features f on f.id=i.feature_id where route='/other'),1::bigint,
+ 'independent app opens despite invalid historical counts');
+delete from incidents where feature_id=(select id from features where route='/other');
+update private.queue_success_5m set counts=null where counts ? 'broken-key';
+select private.refresh_baselines();
+update private.queue_success_5m set counts='{"broken-key":1}' where feature_id=(select id from features where route='/basis')
+ and bucket>=now()-interval '10 minutes';
+select lives_ok('select evaluate_all()','bad current counts are isolated during signal selection');
+select is((select count(*) from incidents i join features f on f.id=i.feature_id where route='/other'),1::bigint,
+ 'independent app opens despite invalid recent counts');
 select * from finish();
 rollback;

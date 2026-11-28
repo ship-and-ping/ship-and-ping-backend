@@ -407,6 +407,8 @@ try {
   const traffic = Array.from({length:760}, (_, i) => record(-190 + Math.floor(i / 4),
     i % 16 === 0 ? {duration_ms:1934} : {queue_ms:433}));
   await replay(traffic,"v1");
+  data(await admin.rpc("evaluate_all"));
+  assert.equal((await a.api.monitor(extra)).incidents.length,0,"healthy inclusive rollout opens no incident");
   await replay(Array.from({length:124},(_,i) => record(Math.floor(i * 10 / 124),
     {error_kind:"timeout",status:0,duration_ms:10001,timeout_ms:10000})),"v2");
   await replay([record(10, {})],"v1");
@@ -423,6 +425,31 @@ try {
   assert.match(prompt,/처리 전 대기 평균 0.4초\(전체의 77%\)/);
   assert.match(prompt,/응답 멈춤.*124건/);
   assert.match(prompt,/CPU·스레드 풀·인스턴스 크기부터/);
+  // Independently reproduce a queue-dominated slowdown with no lost response.
+  const timed = (ts, duration_ms, queue_ms) => ({type:"request",method:"GET",route:"/queued-search",
+    status:200,ts:new Date(ts).toISOString(),duration_ms,queue_ms});
+  await replay(Array.from({length:35},() => timed(Date.now()-3600000,560,433)),"v1");
+  await replay(Array.from({length:12},() => timed(Date.now(),1300,1000)),"v2");
+  const resources = await post("/v1/ingest",replayKey,{spec:"sp-1",batch_id:crypto.randomUUID(),
+    app_version:"v2",platform:"server",sent_at:new Date().toISOString(),records:[],
+    resources:{system_cpu_pct:96,steal_pct:73}});
+  assert.equal(resources.status,202);
+  data(await admin.rpc("evaluate_all"));
+  const queueReport = await a.api.monitor(extra);
+  const queueFeature = queueReport.features.find(f => f.route === "/queued-search");
+  const queueIssues = queueReport.incidents.filter(i => i.feature_id === queueFeature.id);
+  assert.deepEqual(queueIssues.map(i => i.kind),["slow"]);
+  const slow = queueIssues[0];
+  assert.equal(slow.metric_at_open.interruptions,undefined);
+  const queueDetail = await a.api.monitor(extra,undefined,slow.id);
+  const slowPrompt = buildIssuePrompt({feature:queueFeature.name,route:queueFeature.route,kind:"slow",
+    versions:[slow.opened_version],errors:queueDetail.samples,queueMs:slow.metric_at_open.queue_ms,
+    queuePct:slow.metric_at_open.queue_pct,cpuPct:queueDetail.serverContext?.peaks?.system_cpu_pct,
+    stealPct:queueDetail.serverContext?.peaks?.steal_pct}).text;
+  assert.match(slowPrompt,/CPU·스레드 풀·인스턴스 크기부터/);
+  assert.match(slowPrompt,/서버 CPU 최대 96%/);
+  assert.match(slowPrompt,/CPU steal 최대 73%/);
+  assert.doesNotMatch(slowPrompt,/응답 멈춤/);
   await a.api.editApp(extra, "바뀐 이름", "https://example.invalid");
   assert.equal((await a.api.snapshot(extra)).app.name, "바뀐 이름");
   const disposable = await a.api.issue(extra, "pub");
