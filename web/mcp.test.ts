@@ -62,6 +62,9 @@ it("negotiates both protocol eras over HTTP", async () => {
   const discover = await (await call("server/discover")).json();
   expect(discover.result.supportedVersions).toContain(current);
   expect(discover.result.resultType).toBe("complete");
+  const anonymousClient = await call("tools/list", { _meta: { "io.modelcontextprotocol/protocolVersion": current,
+    "io.modelcontextprotocol/clientCapabilities": {} } });
+  expect(anonymousClient.status).toBe(200);
   const hello = await (await call("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name:"test",version:"1" } }, {}, true)).json();
   expect(hello.result.protocolVersion).toBe("2025-11-25");
   const ready = await call("notifications/initialized", {}, {}, true);
@@ -100,4 +103,15 @@ it("validates headers, origin and app scope before tool execution", async () => 
     expect((await call("tools/list")).status).toBe(status);
   }
   storageStatus = 200;
+});
+it("caps the UTF-8 response size and withholds oversized content", async () => {
+  const original = example.list_apps.apps[0].name;
+  try {
+    example.list_apps.apps[0].name = "한".repeat(50000);
+    const response = await call("tools/call", {name:"list_apps"});
+    expect(response.status).toBe(500);
+    expect((await response.text()).length).toBeLessThan(256);
+  } finally {
+    example.list_apps.apps[0].name = original;
+  }
 });

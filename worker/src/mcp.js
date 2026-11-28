@@ -24,7 +24,12 @@ const tools = [
 
 const commonHeaders = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 function reply(body, status = 200, headers = {}) {
-  return Response.json(body, { status, headers: { ...commonHeaders, ...headers } });
+  const bytes = encoder.encode(JSON.stringify(body));
+  if (bytes.byteLength > 256 * 1024) {
+    return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32603, message: "Response too large" } },
+      { status: 500, headers: commonHeaders });
+  }
+  return new Response(bytes, { status, headers: { ...commonHeaders, "Content-Type": "application/json", ...headers } });
 }
 function rpcError(id, code, message, status = 400, data) {
   return reply({ jsonrpc: "2.0", ...(id == null ? {} : { id }), error: { code, message, data } }, status);
@@ -76,12 +81,14 @@ function planMessage(message, headers) {
   const version = meta?.["io.modelcontextprotocol/protocolVersion"];
   const modern = version !== undefined || header === current || method === "server/discover";
   if (modern) {
+    if (version === undefined) return { error: rpcError(id, -32602, "Missing protocol metadata") };
     if (typeof version !== "string" || header !== version || headers.get("Mcp-Method") !== method ||
-        (method === "tools/call" && decodedName(headers.get("Mcp-Name")) !== params.name)) {
+        (method === "tools/call" && (!headers.has("Mcp-Name") || decodedName(headers.get("Mcp-Name")) !== params.name))) {
       return { error: rpcError(id, -32020, "Header mismatch") };
     }
     const info = meta["io.modelcontextprotocol/clientInfo"];
-    if (!object(meta["io.modelcontextprotocol/clientCapabilities"]) || typeof info?.name !== "string" || typeof info?.version !== "string") {
+    if (!object(meta["io.modelcontextprotocol/clientCapabilities"]) ||
+        (info !== undefined && (typeof info?.name !== "string" || typeof info?.version !== "string"))) {
       return { error: rpcError(id, -32602, "Invalid client metadata") };
     }
   }
@@ -90,7 +97,9 @@ function planMessage(message, headers) {
       supported, requested: /^\d{4}-\d{2}-\d{2}$/.test(header ?? "") ? header : null,
     }) };
   }
-  const result = (value) => reply({ jsonrpc: "2.0", id, result: modern ? { resultType: "complete", ...value } : value });
+  const result = (value) => reply({ jsonrpc: "2.0", id, result: modern ? {
+    resultType: "complete", _meta: { "io.modelcontextprotocol/serverInfo": serverInfo }, ...value,
+  } : value });
   if (!modern && method === "initialize") {
     if (typeof params.protocolVersion !== "string" || !object(params.capabilities) || !object(params.clientInfo)) {
       return { error: rpcError(id, -32602, "Invalid initialize parameters") };
@@ -101,8 +110,7 @@ function planMessage(message, headers) {
   if (!modern && method === "notifications/initialized" && id === undefined) {
     return { audit: method, finish: () => new Response(null, { status: 202, headers: commonHeaders }) };
   }
-  if (method === "server/discover") return { audit: method, finish: () => result({ supportedVersions: supported, capabilities,
-    _meta: { "io.modelcontextprotocol/serverInfo": serverInfo }, instructions: notice }) };
+  if (method === "server/discover") return { audit: method, finish: () => result({ supportedVersions: supported, capabilities, instructions: notice }) };
   if (method === "ping") return { audit: method, finish: () => result({}) };
   if (method === "tools/list") return { audit: method, finish: () => result({ tools }) };
   if (method !== "tools/call") return { error: rpcError(id, -32601, "Method not found", modern ? 404 : 200) };
@@ -156,11 +164,7 @@ export async function serveMcp(request, env) {
     if (status === 401) return unauthorized();
     if (status === 429) return reply({ error: "Rate limit exceeded" }, 429, { "Retry-After": "60" });
     if (status !== 200 && status !== 404) throw Error();
-    const response = plan.error ?? plan.finish(data, status);
-    if (response.body && (await response.clone().arrayBuffer()).byteLength > 256 * 1024) {
-      return rpcError(null, -32603, "Response too large", 500);
-    }
-    return response;
+    return plan.error ?? plan.finish(data, status);
   } catch {
     return reply({ error: "Service unavailable" }, 503);
   }
