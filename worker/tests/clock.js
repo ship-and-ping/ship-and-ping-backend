@@ -12,6 +12,13 @@ export default class FixtureWorker extends worker {
       return this.env.NO_ORIGIN.fetch("https://worker.test/fixture/cron");
     }
     if (new URL(request.url).pathname === "/fixture/cron") {
+      if (this.env.NO_ORIGIN) {
+        const pair = await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);
+        const publicBytes = await crypto.subtle.exportKey("raw",pair.publicKey);
+        this.env.VAPID_PUBLIC_KEY = btoa(String.fromCharCode(...new Uint8Array(publicBytes)))
+          .replaceAll("+","-").replaceAll("/","_").replace(/=+$/,"");
+        this.env.VAPID_PRIVATE_KEY = (await crypto.subtle.exportKey("jwk",pair.privateKey)).d;
+      }
       await super.scheduled({cron:"* * * * *",scheduledTime:Date.now()});
       return fetch("https://rpc.test/fixture-report");
     }

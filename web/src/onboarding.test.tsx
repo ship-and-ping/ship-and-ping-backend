@@ -50,6 +50,9 @@ function fake(user: string | null = "member"): Gateway {
     deepCounts: vi.fn(),
     firstResult: vi.fn(),
     emailSetting: vi.fn(),
+    devices: vi.fn(async () => []), removeDevice: vi.fn(),
+    withPushRegistration: action => action({registerPush:vi.fn(),removeEndpoint:vi.fn()}),
+    pushEnabled: vi.fn(), testPush: vi.fn(),
     testSlack: vi.fn(),
     disconnectSlack: vi.fn(),
     slack: vi.fn(),
@@ -223,6 +226,39 @@ it("S11 lets the member log out after a failed withdrawal", async () => {
   fireEvent.click(screen.getByRole("button",{name:"로그아웃"}));
   await screen.findByText("로그아웃했어요");
 });
+it.each([false,true])("로그아웃 실패 시 계정 화면을 유지하고 선택한 방법으로 마친다 (기기만 %s)", async deviceOnly => {
+  const api = fake();
+  vi.mocked(api.logout).mockRejectedValueOnce(Error("offline"));
+  open("/account",api);
+  const account = within(await screen.findByRole("main"));
+  fireEvent.click(await account.findByRole("button",{name:"로그아웃"}));
+  await account.findByText("로그아웃을 끝내지 못했어요. 인터넷 연결 후 다시 시도해 주세요.");
+  expect(account.getByText("이 기기에서 알림 내용은 가려지지만, 다시 로그인하기 전까지 '쉽앤핑 알림이 있어요' 표시가 올 수 있어요.")).toBeTruthy();
+  expect(account.getByRole("heading",{name:"내 계정"})).toBeTruthy();
+  fireEvent.click(account.getByRole("button",{name:deviceOnly ? "그래도 이 기기에서 로그아웃" : "다시 시도"}));
+  await screen.findByRole("heading",{name:"로그인"});
+  expect(api.logout).toHaveBeenLastCalledWith({deviceOnly});
+});
+
+it.each([false,true])("waits for sign-out without repeating the withdrawal (device only %s)", async deviceOnly => {
+  const api = fake();
+  let finish!: () => void;
+  vi.mocked(api.logout).mockRejectedValueOnce(Error("sign-out unavailable"))
+    .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  open("/account",api);
+  fireEvent.click(await screen.findByRole("button",{name:"회원 탈퇴"}));
+  fireEvent.change(screen.getByLabelText("로그인 이메일 다시 입력"),{target:{value:"<me>@example.invalid"}});
+  fireEvent.click(screen.getByRole("button",{name:"모든 앱과 기록을 지우고 탈퇴"}));
+  await screen.findByText("로그아웃을 끝내지 못했어요. 인터넷 연결 후 다시 시도해 주세요.");
+  expect(screen.getByRole("heading",{name:"회원 탈퇴"})).toBeTruthy();
+  fireEvent.click(await screen.findByRole("button",{name:deviceOnly ? "그래도 이 기기에서 로그아웃" : "다시 시도"}));
+  expect(screen.queryByText("탈퇴를 마쳤어요")).toBeNull();
+  await act(async () => finish());
+  await screen.findByText("탈퇴를 마쳤어요");
+  expect(api.logout).toHaveBeenCalledTimes(2);
+  expect(api.logout).toHaveBeenLastCalledWith({accountDeleted:true,deviceOnly});
+  expect(api.withdraw).toHaveBeenCalledOnce();
+});
 it("S11 sends an invalid session after retry to the login notice", async () => {
   const api = fake();
   vi.mocked(api.withdraw).mockResolvedValueOnce("failed").mockResolvedValueOnce("unauthorized");
@@ -342,11 +378,10 @@ it("슬랙 연결을 시작할 수 없으면 알림 설정에 서버 안내를 �
   fireEvent.click(await screen.findByRole("button", { name: "Slack에 추가" }));
   expect(await screen.findByText(message)).toBeTruthy();
 });
-it("알림 설정은 푸시 예고, 이메일, 선택형 슬랙 순서로 읽는다", async () => {
+it("알림 설정은 앱 푸시, 이메일, 선택형 슬랙 순서로 읽는다", async () => {
   open("/apps/a/notifications", fake());
   const push = (await screen.findByRole("heading", {name:"앱 푸시"})).closest("section")!;
-  expect(push.textContent).toContain("곧 제공");
-  expect(push.querySelector("button, input, a")).toBeNull();
+  expect(push.textContent).toContain("홈 화면");
   expect(push.nextElementSibling?.querySelector("h2")?.textContent).toBe("이메일");
   expect(push.nextElementSibling?.nextElementSibling?.querySelector("h2")?.textContent).toBe("슬랙");
 });
