@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>T57 요약 카드 십자선 비교</title>
+  <link rel="stylesheet" href="../../../../web/src/styles/tokens.css">
+  <style>
+    * { box-sizing:border-box; }
+    body { max-width:1600px; margin:auto; padding:clamp(16px,3vw,48px); font:16px/1.6 var(--sp-font); background:var(--sp-bg); color:var(--sp-ink); }
+    section { border-top:1px solid var(--sp-line); padding-block:1rem; }
+    .comparison { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+    figure { margin:0; }
+    img { display:block; max-width:100%; height:auto; border:1px solid var(--sp-line); border-radius:var(--sp-radius-sm); }
+    figcaption { font-weight:700; margin-bottom:6px; }
+    a { color:var(--sp-ink); }
+    @media (max-width:760px) { .comparison { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <main><h1>요약 카드 십자선 비교</h1>
+    <p>모임 신청의 오전 3시 사용량은 28건이다. 같은 칸을 가리킨 수정 전후 화면에서 기준선, 선택점, 툴팁과 아래 그래프의 위치를 비교할 수 있다. 이미지를 누르면 원본 크기로 열린다.</p>
+    <section><h2>1440px · 밝게</h2>
+      <div class="comparison">
+        <figure><figcaption>Grafana Stat</figcaption><a href="../demo-insights/refs/stat-1440-light.png"><img src="../demo-insights/refs/stat-1440-light.png" alt="1440px 밝게 Grafana Stat 화면"></a></figure>
+        <figure><figcaption>수정 전</figcaption><a href="before-1440-light.png"><img src="before-1440-light.png" alt="1440px 밝게 수정 전 화면"></a></figure>
+        <figure><figcaption>수정 후</figcaption><a href="after-1440-light.png"><img src="after-1440-light.png" alt="1440px 밝게 수정 후 화면"></a></figure>
+      </div>
+      <p><a href="../demo-insights/refs/series-1440-light.png">Grafana 시계열 기준선 원본</a></p>
+    </section>
+    <section><h2>1440px · 어둡게</h2>
+      <div class="comparison">
+        <figure><figcaption>Grafana Stat</figcaption><a href="../demo-insights/refs/stat-1440-dark.png"><img src="../demo-insights/refs/stat-1440-dark.png" alt="1440px 어둡게 Grafana Stat 화면"></a></figure>
+        <figure><figcaption>수정 전</figcaption><a href="before-1440-dark.png"><img src="before-1440-dark.png" alt="1440px 어둡게 수정 전 화면"></a></figure>
+        <figure><figcaption>수정 후</figcaption><a href="after-1440-dark.png"><img src="after-1440-dark.png" alt="1440px 어둡게 수정 후 화면"></a></figure>
+      </div>
+      <p><a href="../demo-insights/refs/series-1440-dark.png">Grafana 시계열 기준선 원본</a></p>
+    </section>
+    <section><h2>390px · 밝게</h2>
+      <div class="comparison">
+        <figure><figcaption>Grafana Stat</figcaption><a href="../demo-insights/refs/stat-390-light.png"><img src="../demo-insights/refs/stat-390-light.png" alt="390px 밝게 Grafana Stat 화면"></a></figure>
+        <figure><figcaption>수정 전</figcaption><a href="before-390-light.png"><img src="before-390-light.png" alt="390px 밝게 수정 전 화면"></a></figure>
+        <figure><figcaption>수정 후</figcaption><a href="after-390-light.png"><img src="after-390-light.png" alt="390px 밝게 수정 후 화면"></a></figure>
+      </div>
+      <p><a href="../demo-insights/refs/series-390-light.png">Grafana 시계열 기준선 원본</a></p>
+    </section>
+    <section><h2>390px · 어둡게</h2>
+      <div class="comparison">
+        <figure><figcaption>Grafana Stat</figcaption><a href="../demo-insights/refs/stat-390-dark.png"><img src="../demo-insights/refs/stat-390-dark.png" alt="390px 어둡게 Grafana Stat 화면"></a></figure>
+        <figure><figcaption>수정 전</figcaption><a href="before-390-dark.png"><img src="before-390-dark.png" alt="390px 어둡게 수정 전 화면"></a></figure>
+        <figure><figcaption>수정 후</figcaption><a href="after-390-dark.png"><img src="after-390-dark.png" alt="390px 어둡게 수정 후 화면"></a></figure>
+      </div>
+      <p><a href="../demo-insights/refs/series-390-dark.png">Grafana 시계열 기준선 원본</a></p>
+    </section>
+  </main>
+</body>
+</html>
