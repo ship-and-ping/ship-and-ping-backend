@@ -6,12 +6,11 @@ use std::sync::LazyLock;
 
 fn encoded_text(s: &str) -> bool {
     s.len() >= 4
-        && STANDARD_NO_PAD
-            .decode(s)
-            .is_ok_and(|bytes| {
-                bytes.iter().all(|b| (32..=126).contains(b))
-                    && (bytes.len() > 3 || bytes.iter().filter(|b| b.is_ascii_alphanumeric()).count() >= 2)
-            })
+        && STANDARD_NO_PAD.decode(s).is_ok_and(|bytes| {
+            bytes.iter().all(|b| (32..=126).contains(b))
+                && (bytes.len() > 3
+                    || bytes.iter().filter(|b| b.is_ascii_alphanumeric()).count() >= 2)
+        })
 }
 
 fn label(value: &Value, max: usize) -> bool {
