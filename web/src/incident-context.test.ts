@@ -13,10 +13,11 @@ const issue = {
   closed_at: "2026-11-27T14:35:00Z", status: "quiet", resolved_version: null,
   metric_at_open: { baseline: 70, p50: 600 }, metric_worst: { p50: 1200 }, notifications: [],
 } satisfies Incident;
-const peers = [
+const peers: Incident[] = [
   { ...issue, id: "bookmark", feature_id: "bookmark", opened_at: "2026-11-27T14:10:00Z" },
   { ...issue, id: "trip", feature_id: "trip", opened_at: "2026-11-27T14:30:00Z" },
   { ...issue, id: "late", feature_id: "late", opened_at: "2026-11-27T14:30:01Z" },
+  { ...issue, id: "silent", feature_id: null, kind: "silent" },
 ];
 const names = [{ id: "bookmark", name: "북마크" }, { id: "trip", name: "여행" }];
 const base = { feature: "장소", route: "/place", versions: ["a12b3cd"], opened, kind: issue.kind,

@@ -7,6 +7,9 @@ use std::{borrow::Cow, collections::BTreeMap, sync::LazyLock};
 use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
+#[path = "telemetry.rs"]
+pub mod telemetry;
+
 pub const MAX_BYTES: usize = 65536;
 const BOUNDS: [u32; 29] = [
     50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 3300, 3600, 3900, 4200, 4500, 4800, 5000,
@@ -161,7 +164,15 @@ struct Batch {
     app_version: String,
     platform: String,
     sent_at: DateTime<Utc>,
-    records: Vec<Box<serde_json::value::RawValue>>,
+    #[serde(default, deserialize_with = "present_resources")]
+    resources: Option<Value>,
+    records: Option<Vec<Box<serde_json::value::RawValue>>>,
+}
+
+fn present_resources<'de, D: serde::Deserializer<'de>>(
+    input: D,
+) -> Result<Option<Value>, D::Error> {
+    Value::deserialize(input).map(Some)
 }
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -172,6 +183,8 @@ enum Data {
         method: String,
         status: u16,
         duration_ms: u32,
+        db_ms: Option<u32>,
+        external_ms: Option<u32>,
         error_kind: Option<String>,
         error_message: Option<String>,
     },
@@ -198,6 +211,10 @@ struct Stats {
     server_errors: u32,
     client_errors: u32,
     duration_sum_ms: u64,
+    db_ms_sum: u64,
+    db_ms_count: u32,
+    external_ms_sum: u64,
+    external_ms_count: u32,
     #[serde(rename = "hist_30", skip_serializing_if = "no_refined_samples")]
     hist: [u32; BOUNDS.len() + 1],
     // Transient inputs for DB-side aggregation with the feature's current threshold.
@@ -706,6 +723,8 @@ impl Aggregate {
                 method,
                 status,
                 duration_ms,
+                db_ms,
+                external_ms,
                 error_kind,
                 error_message,
             } => {
@@ -713,7 +732,9 @@ impl Aggregate {
                 require(
                     valid_method(&method)
                         && (status == 0 || (100..600).contains(&status))
-                        && duration_ms <= 600000,
+                        && duration_ms <= 600000
+                        && db_ms.is_none_or(|n| n <= 600000)
+                        && external_ms.is_none_or(|n| n <= 600000),
                 )?;
                 let client = (400..500).contains(&status);
                 let failed = !client && (status == 0 || status >= 500 || error_kind.is_some());
@@ -730,6 +751,14 @@ impl Aggregate {
                 row.server_errors += u32::from(status >= 500);
                 row.client_errors += u32::from(client);
                 row.duration_sum_ms += u64::from(duration_ms);
+                if let Some(ms) = db_ms {
+                    row.db_ms_sum += u64::from(ms);
+                    row.db_ms_count += 1;
+                }
+                if let Some(ms) = external_ms {
+                    row.external_ms_sum += u64::from(ms);
+                    row.external_ms_count += 1;
+                }
                 row.hist[BOUNDS.partition_point(|bound| *bound < duration_ms)] += 1;
                 row.timings
                     .push((position, duration_ms, (!client).then_some(!failed)));
@@ -823,7 +852,12 @@ pub fn prepare_ingest(
         return Err(ApiError::TooLarge);
     }
     let batch: Batch = serde_json::from_slice(body).map_err(|_| ApiError::Invalid)?;
-    if batch.records.len() > 100 {
+    let records = match batch.records {
+        Some(records) => records,
+        None if batch.resources.is_some() => Vec::new(),
+        None => return Err(ApiError::Invalid),
+    };
+    if records.len() > 100 {
         return Err(ApiError::TooLarge);
     }
     require(
@@ -833,8 +867,13 @@ pub fn prepare_ingest(
             && matches!(batch.platform.as_str(), "server" | "browser"),
     )?;
     let mut counters = Counts::default();
+    if let Some(resources) = &batch.resources {
+        require(batch.platform == "server" && key.starts_with("sp_srv_"))?;
+        telemetry::validate_resources(resources)?;
+        counters.accepted += 1;
+    }
     let mut aggregate = Aggregate::default();
-    for (position, value) in batch.records.into_iter().enumerate() {
+    for (position, value) in records.into_iter().enumerate() {
         if aggregate.add(&value, now_ms, key, position).is_ok() {
             counters.accepted += 1;
         } else {
@@ -859,10 +898,13 @@ pub fn prepare_ingest(
         .collect();
     // Retain the release label for display validation unless it contains private data.
     let version = mask_version(batch.app_version);
-    let rpc = json!({"app_key_hash":hash,"payload":{
+    let mut rpc = json!({"app_key_hash":hash,"payload":{
         "batch_id":batch.batch_id,"app_version":version,"platform":batch.platform,"sent_at":batch.sent_at,
         "stats":stats,"attempts":attempts,"error_samples":samples
     }});
+    if let Some(resources) = batch.resources {
+        rpc["payload"]["resources"] = resources;
+    }
     Ok((
         serde_json::to_vec(&rpc).map_err(|_| ApiError::Invalid)?,
         counters,

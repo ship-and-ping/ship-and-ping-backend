@@ -157,11 +157,13 @@ fn error(status: u16, message: &str) -> Result<Response> {
     Ok(Response::from_json(&json!({"error":message}))?.with_status(status))
 }
 async fn ingest(mut req: Request, env: Env) -> Result<Response> {
-    let feature_map = match req.path().as_str() {
-        "/v1/feature-map" => true,
-        "/v1/ingest" => false,
-        _ => return error(400, "unknown endpoint"),
-    };
+    let path = req.path();
+    if !matches!(
+        path.as_str(),
+        "/v1/feature-map" | "/v1/ingest" | "/v1/profile"
+    ) {
+        return error(400, "unknown endpoint");
+    }
     if req.method() == Method::Options {
         return Ok(Response::empty()?.with_status(204));
     }
@@ -172,7 +174,7 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
     let auth = headers.get("Authorization")?;
     let content_type = headers.get("Content-Type")?.unwrap_or_default();
     let mime = content_type.split(';').next().unwrap_or("").trim();
-    let beacon = !feature_map && mime.eq_ignore_ascii_case("text/plain");
+    let beacon = path == "/v1/ingest" && mime.eq_ignore_ascii_case("text/plain");
     if auth.as_ref().is_some_and(|v| credential(v).is_err()) || (auth.is_none() && !beacon) {
         return error(401, "invalid key format");
     }
@@ -242,11 +244,15 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
         },
         None => hash.clone(),
     };
-    let (rpc, counts) = match if feature_map {
-        prepare_map(&hash, &body)
-    } else {
-        prepare_ingest(key, &hash, &body, now)
-    } {
+    let (name, prepared) = match path.as_str() {
+        "/v1/feature-map" => ("suggest_feature_map", prepare_map(&hash, &body)),
+        "/v1/profile" => (
+            "write_app_profile",
+            crate::ingest::telemetry::profile(&hash, &body),
+        ),
+        _ => ("ingest_batch", prepare_ingest(key, &hash, &body, now)),
+    };
+    let (rpc, counts) = match prepared {
         Ok(out) => out,
         Err(ApiError::TooLarge) => return error(413, "batch too large"),
         Err(ApiError::Unauthorized) => return error(401, "invalid key format"),
@@ -263,11 +269,6 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
     }
     let mut result = counts;
     if let Some(db) = db {
-        let name = if feature_map {
-            "suggest_feature_map"
-        } else {
-            "ingest_batch"
-        };
         let mut response = match db.rpc(name, rpc).await {
             Ok(r) => r,
             Err(SinkError(status, msg)) => return error(status, msg),

@@ -45,6 +45,8 @@ fn sentence(n: &Notice) -> String {
     let count = |key: &str| n.metric[key].as_u64().unwrap_or(0);
     let mut line = match (n.event.as_str(), n.kind.as_deref()) {
         ("test", _) => "쉽앤핑 시험 알림이에요.".into(),
+        ("resolved", Some("silent")) => "앱 기록 전송이 재개됐어요.".into(),
+        (_, Some("silent")) => "평소 기록이 오던 시간에 10분 이상 기록이 끊겼어요.".into(),
         ("resolved", _) => format!("업데이트 후 {name} 문제가 해결됐어요."),
         (_, Some("failure")) => format!(
             "{name} 최근 30분 {}건 중 {}건이 실패했어요.",
@@ -106,6 +108,7 @@ fn event_title(n: &Notice) -> &'static str {
         ("worse", _) => "문제가 더 커졌어요",
         ("test", _) => "시험 알림이에요",
         (_, Some("failure")) => "실패가 늘었어요",
+        (_, Some("silent")) => "기록이 끊겼어요",
         (_, Some("slow")) => "느려졌어요",
         _ => "결과를 확인하지 못했어요",
     }
@@ -114,6 +117,8 @@ fn event_title(n: &Notice) -> &'static str {
 fn metric_summary(n: &Notice) -> String {
     let count = |key: &str| n.metric[key].as_u64().unwrap_or(0);
     match (n.event.as_str(), n.kind.as_deref()) {
+        ("resolved", Some("silent")) => "앱 기록이 다시 도착했어요".into(),
+        (_, Some("silent")) => "10분 이상 기록이 도착하지 않았어요".into(),
         ("resolved", _) => "새 버전에서 5번 연속 성공했어요".into(),
         ("test", _) => "쉽앤핑 시험 알림이에요.".into(),
         (_, Some("failure")) => format!(
@@ -171,7 +176,9 @@ fn metric_summary(n: &Notice) -> String {
 
 fn context(n: &Notice) -> String {
     let feature = feature_name(n);
-    let label = if n.is_overflow {
+    let label = if n.kind.as_deref() == Some("silent") {
+        "앱 전체"
+    } else if n.is_overflow {
         "기타 (따로 지켜보지 않는 기능 묶음)"
     } else {
         &feature
@@ -250,6 +257,9 @@ fn single_notice(n: &Notice, origin: Option<&str>) -> MailContent {
         Some(app) => format!("[쉽앤핑] {app} · {title}"),
     };
     let advice = match n.event.as_str() {
+        "open" if n.kind.as_deref() == Some("silent") => {
+            "앱의 서버와 기록 전송 상태를 확인해 주세요."
+        }
         "open" | "worse" => "자세히 보기에서 AI에게 고쳐 달라고 할 요청문을 복사할 수 있어요.",
         "resolved" => "따로 하실 일은 없어요.",
         _ => "",

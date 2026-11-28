@@ -1,7 +1,8 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CurrentAppName } from "./Layout";
 import { Copy } from "./Connect";
+import { ProfileSettings } from "./ProfileSettings";
 import { AiConnection } from "./AiConnection";
 import { useToast } from "./Toast";
 import { displayText, sanitizeRoute } from "./normalize";
@@ -30,10 +31,11 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
   const [deletion, setDeletion] = useState<"ready" | "pending" | "failed">("ready");
   const retryDelete = useRef<HTMLButtonElement>(null);
   const feedback = useRef<HTMLParagraphElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (busy) return;
     if (deletion === "failed") retryDelete.current?.focus();
     else if (error) feedback.current?.focus();
-  }, [deletion, error]);
+  }, [busy, deletion, error]);
   const [issued, setIssued] = useState<Partial<Record<KeySummary["kind"], {
     raw: string;
     copied: boolean;
@@ -271,6 +273,7 @@ function Settings({ api, id }: { api: Gateway; id: string }) {
               </section>
             );
           })}
+          <ProfileSettings id={id} access={api.profiles} />
           {api.aiKeys && <AiConnection app={id} api={api.aiKeys} />}
           <section className="panel">
             <h2>앱 삭제</h2>

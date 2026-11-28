@@ -10,7 +10,17 @@ app_version에는 배포한 git 커밋 짧은 해시(없으면 배포 버전 번
 4. 이름·전화·이메일 같은 입력값, 사용자 계정 ID, 요청·응답 본문, 쿠키·토큰·쿼리 문자열은 보내지 마. 주소 안의 실제 값은 :id로 바꾸고 오류에서 개인정보를 지워.
 5. 쉽앤핑 주소로 가는 요청은 기록하지 말고 전송 오류가 앱 동작을 막지 않게 해. 묶음은 64KB·100건 이내로 나눠. 페이지를 떠날 때도 인증 헤더를 유지해 남은 기록을 보내.
 6. 앱 코드를 읽고 주소별 한국어 기능 이름을 만들어 수집 키로 POST "https://127.0.0.1:58781/v1/feature-map" 에 한 번 보내. 형식은 [{"route":"/meetings/:id","method":"GET","name":"모임 보기"}], 최대 200개야.
-7. 배포 후 앱을 한 번 써 보고 기록 전송 응답이 202인지 확인하는 방법을 알려 줘.
+7. 앱 코드를 보고 같은 쉽앤핑 수집 주소의 POST /v1/profile에 기존 앱 키 인증 헤더로 JSON을 보내 줘. 연결할 때 한 번, 값이 바뀔 때만 전체 프로필을 덮어써. 알 수 없는 값은 생략해.
+예시 {"language":"Java","framework":"Spring","hosting":"Render","plan":"free","cpu_cores":1,"memory_gb":0.5,"database":"postgres","services":[{"feature":"결제","kind":"payment","name":"Stripe"}],"deploy":"Git push","rollback":"이전 릴리스 다시 배포","metrics":"호스팅 대시보드의 서버 지표 확인"}
+plan은 free/paid/unknown, database는 postgres/mysql/sqlite/mongo/none/other, 서비스 kind는 map/payment/ai/mail/storage/other야. 이름은 40자, rollback은 80자, metrics는 120자 이내 한 줄로 작성해. 서비스는 40개까지야. 한글·영문·숫자·공백 위주의 표시 이름만 써. 비밀값, 키, 토큰, 연결 문자열, URL, 이메일, IP, 사용자 ID를 프로필에 넣지 마. 호스팅 정보는 확인할 수 있는 값만 보내고 유료 서비스를 추가하지 마.
+서버가 있으면 1분마다 기존 sp-1 배치의 최상위에 resources 객체를 넣어. 요청이 없는 분에도 records: []와 resources를 보낸다. 기존 batch_id·버전·platform: "server"·sent_at 규칙과 서버 키를 그대로 써. 브라우저에서는 서버 지표나 살아 있음 신호를 만들지 마. 지속 실행할 서버가 없으면 해당 단계를 생략해.
+숫자만 전송해. process_cpu_pct, system_cpu_pct, steal_pct, mem_used_pct는 0~100, gc_pause_ms는 지난 1분 정지 시간 합계, event_loop_lag_ms는 지연(ms), busy_threads와 db_pool_in_use/db_pool_max는 실제 개수야. 측정할 수 없는 필드는 생략하고 값이 없으면 {}로 살아 있음만 알려 줘. 요청의 DB·외부 호출 시간을 잴 수 있으면 request에 db_ms와 external_ms를 누적 ms 정수(0~600000)로 넣어. 대상 이름·주소·쿼리·본문은 보내지 마.
+아래 예시에서 sendResources는 기존 앱 배치 전송 함수를 뜻해. 서버 시작 때 스케줄러 한 개만 등록하고 전송 오류가 사용자 요청을 막지 않게 해.
+Node — import {totalmem, freemem} from "node:os"; setInterval(() => sendResources({mem_used_pct: 100 * (1 - freemem()/totalmem())}), 60000)
+Java/Spring — @Scheduled(fixedRate=60000) void sample() { var os = ManagementFactory.getPlatformMXBean(com.sun.management.OperatingSystemMXBean.class); double cpu = os.getProcessCpuLoad(); sendResources(cpu >= 0 ? Map.of("process_cpu_pct", 100*cpu) : Map.of()); } (스케줄링 활성화 여부 확인)
+Python — 백그라운드 루프에서 cpu, wall = time.process_time(), time.monotonic(); time.sleep(60); send_resources({"process_cpu_pct": min(100, 100*(time.process_time()-cpu)/(time.monotonic()-wall)/(os.cpu_count() or 1))})
+Go — var m runtime.MemStats; runtime.ReadMemStats(&m); prev := m.PauseTotalNs; ticker := time.NewTicker(time.Minute); defer ticker.Stop(); for range ticker.C { runtime.ReadMemStats(&m); sendResources(map[string]float64{"gc_pause_ms": float64(m.PauseTotalNs-prev)/1e6}); prev = m.PauseTotalNs }
+8. 배포 후 앱을 한 번 써 보고 프로필과 기록 전송 응답이 202인지 확인하는 방법을 알려 줘.
 
 쉽앤핑 MCP를 연결하면 문제 조사 때 직접 조회할 수 있어요. 앱 설정의 ‘AI 연결’에서 AI 조회 키를 발급하고 사용자 환경 변수에 저장한 뒤, 사용하는 코딩 AI의 설정 예시대로 연결하세요.
 

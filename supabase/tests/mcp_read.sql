@@ -90,10 +90,14 @@ select is(pg_temp.read_tool('get_server_metrics','{"range":"1h"}')#>>'{data,avai
 -- T54 may be installed before or after T56. Exercise the same optional schema in both cases.
 create table if not exists public.server_minutes(app_id uuid,bucket timestamptz,last_received timestamptz,version text,resources jsonb);
 insert into public.server_minutes(app_id,bucket,last_received,version,resources)
- values(current_setting('test.app')::uuid,now(),now(),'v1.0.0','{"busy_threads":3,"hostname":"private"}'),
+ values(current_setting('test.app')::uuid,now(),now(),'private-fixture-version','{"busy_threads":3}'),
  (current_setting('test.other')::uuid,now(),now(),'v1.0.0','{"busy_threads":15}');
-select is(pg_temp.read_tool('get_server_metrics','{"range":"5m"}')#>'{data,samples,0,resources}','{"busy_threads":3}'::jsonb,
- 'only numeric T54 allowlist for this app');
+select throws_ok('update public.server_minutes set resources=jsonb_build_object(''hostname'',''private'')
+ where app_id=current_setting(''test.app'')::uuid','23514',null,'T54 rejects private host metadata')
+ where exists (select from pg_constraint where conrelid='public.server_minutes'::regclass and conname='server_minutes_resources_check');
+select is(pg_temp.read_tool('get_server_metrics','{"range":"5m"}')#>'{data,samples,0}',
+ jsonb_build_object('bucket',now(),'last_received',now(),'resources','{"busy_threads":3}'::jsonb),
+ 'only the timestamps and numeric metrics are exposed; version and app ID stay private');
 select is(jsonb_array_length(pg_temp.read_tool('get_server_metrics','{"range":"1h"}')#>'{data,samples}'),1,'server rows scoped');
 insert into public.server_minutes(app_id,bucket,last_received,version,resources)
  select current_setting('test.app')::uuid,minute,minute+interval '45 seconds','v1.0.0','{}'

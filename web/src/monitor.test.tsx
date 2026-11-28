@@ -392,6 +392,8 @@ function setup(
     })),
     attempts: [],
     demo_insights: [],
+    server_series: [],
+    incident_server_context: {peaks:null},
     incident_prompt_context: { slow_start: null, usual_rpm: 1, incident_rpm: 10, server_errors: null, client_errors: 0 },
     incident_verification: { version, consecutive_successes: 0, latest_duration_ms: 100, latest_success: false },
   };
@@ -622,9 +624,11 @@ it("버전 목록에서 빠져도 서버에 기록된 해결 버전을 보여 �
 it("앱 단위 기록 끊김도 기능 ID 없이 열리고 판단 근거와 확신을 표시한다", async () => {
   setup("/apps/a/issues/i", [], rows => {
     Object.assign((rows.incidents as object[])[0], { kind: "silent", feature_id: null });
+    rows.incident_server_context = {peaks:{process_cpu_pct:62}};
   });
   const region = within(await screen.findByRole("region", { name: "문제 종류" }));
   expect(region.getByRole("heading", { name: "기록 끊김으로 보여요" })).toBeTruthy();
+  expect(screen.getByText("62%")).toBeTruthy();
   expect(region.getByText("확신: 높음")).toBeTruthy();
   expect(region.getAllByRole("listitem").map(li => li.textContent)).toEqual(["살아 있음 신호가 끊겼어요."]);
   expect(within(screen.getByRole("list", { name: "요청문 복사 후 다음 단계" })).getByText("같은 버전의 살아 있음 신호가 1회 도착하면 해결")).toBeTruthy();

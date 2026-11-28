@@ -6,6 +6,7 @@ import { status, StatusBadge, Timeline, IssueListItem } from "./IncidentSummary"
 import type { Gateway } from "./data";
 import { Hero, CurrentAppName } from "./Layout";
 import { Chart } from "./Chart";
+import { IncidentServerSummary } from "./ServerIncident";
 import { MonitorToolbar, periodName } from "./MonitorToolbar";
 import { SpeedInsights } from "./SpeedInsights";
 import "./styles/dashboard.css";
@@ -350,7 +351,7 @@ function DashboardPanels({data,days,feature}: {data:Monitor; days:number; featur
       <select aria-label="그래프에 표시할 기능" value={filter} onChange={e => setFilter(e.target.value)}>
         <option value="">모든 기능</option>{visible.map(f => <option key={f.id} value={f.id}>{displayText(f.name)}</option>)}
       </select>}</header>
-    <Chart key={days + "/" + (selected?.id ?? "")} rows={rows} days={days} now={data.now}
+    <Chart key={days + "/" + (selected?.id ?? "")} rows={rows} days={days} now={data.now} resources={data.serverSeries?.[days]}
       baseline={selected?.baselines?.p50_ms ?? null} p95={selected?.baselines?.p95_ms ?? null}
       thresholds={thresholds} aggregate={!selected && visible.length > 1} learnsRange={selected?.method !== "*"}
       samples={selected?.baselines?.sample_count ?? summarize(rows).successes}/>
@@ -676,6 +677,7 @@ function Issue({
       </div>
       </section>
       {f.kind === "deep" && <section><h2>문제 감지 구간부터의 결과</h2><Outcomes stats={summarize(data.stats.filter(r => r.feature_id === f.id && Date.parse(r.bucket) <= Date.parse(i.closed_at ?? new Date(data.now).toISOString())))} /></section>}
+      <IncidentServerSummary context={data.serverContext}/>
       <div className="issue-columns">
         <div className="issue-history">
           <section>

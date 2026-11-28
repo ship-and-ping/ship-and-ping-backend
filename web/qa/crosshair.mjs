@@ -54,6 +54,18 @@ async function checkWeeklyTooltip(page, board, width) {
     });
   }
 }
+async function checkServerReadout(board) {
+  const grid = board.getByRole("region",{name:"서버 상태"}).locator(".stat-grid");
+  const slider = grid.getByRole("slider",{name:"프로세스 CPU"});
+  await slider.focus();
+  for (const key of ["Home","End"]) {
+    await slider.press(key);
+    const tip = await grid.getByRole("tooltip").boundingBox();
+    const card = await grid.locator(".stat-panel").last().boundingBox();
+    assert.ok(tip.y >= card.y + card.height, "Weekly server tooltip covers the last card");
+    assert.match(await grid.getByRole("tooltip").textContent(),key === "Home" ? /28%$/ : /기록 없음$/);
+  }
+}
 async function checkWeeklyAxes(board) {
   for (const axis of await board.locator(".flow-x").all()) {
     const labels = await axis.locator("span:visible").evaluateAll(spans => spans.map(span => {
@@ -104,14 +116,14 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
     await page.screenshot({path:fileURLToPath(new URL([stage,width,colorScheme].join("-")+".png",output))});
     if (stage === "after") {
-      assert.equal(await board.locator(".flow-selection").count(),6);
+      assert.equal(await board.locator(".flow-selection").count(),9);
       assert.equal(await slider.getAttribute("aria-valuenow"),"13");
       const tip = await board.getByRole("tooltip").boundingBox();
       const card = await board.locator(".stat-panel").first().boundingBox();
       assert.equal((await plots.boundingBox()).y,beforeHover.y,"Hover moved the charts");
       assert.ok(tip.x >= 0 && tip.x + tip.width <= width);
       if (width === 390) {
-        const cards = await board.locator(".stat-panel").all();
+        const cards = await board.locator(".stat-grid").first().locator(".stat-panel").all();
         for (const panel of cards) {
           const bounds = await panel.boundingBox();
           assert.ok(tip.y >= bounds.y + bounds.height);
@@ -140,7 +152,7 @@ try {
         await checkWeeklyTooltip(page,board,1440);
         await checkWeeklyTooltip(page,board,800);
         if (colorScheme === "light") {
-          await board.locator(".stat-grid").evaluate(el => el.scrollIntoView({block:"center"}));
+          await board.locator(".stat-grid").first().evaluate(el => el.scrollIntoView({block:"center"}));
           await page.screenshot({path:fileURLToPath(new URL("week-end-800.png",output))});
         }
       }
@@ -153,6 +165,7 @@ try {
         const tickFont = () => board.locator(".flow-x span:visible").first()
           .evaluate(el => parseFloat(getComputedStyle(el).fontSize));
         const normalSize = await tickFont();
+        await checkServerReadout(board);
         if (colorScheme === "dark") {
           await slider.focus();
           await slider.press("End");
@@ -163,6 +176,7 @@ try {
         assert.equal(await tickFont(),2*normalSize,"Weekly axis text must visibly scale with the root font");
         await checkWeeklyAxes(board);
         await checkWidth(page,"feature detail 200%");
+        await checkServerReadout(board);
         for (const name of ["사용 건수","사용과 실패","걸린 시간"]) {
           await board.getByRole("slider",{name}).focus();
           await checkWidth(page,name+" 200%");
@@ -172,7 +186,7 @@ try {
         await slider.focus();
         await slider.press("End");
         const weekTip = await board.getByRole("tooltip").boundingBox();
-        const lastCard = await board.locator(".stat-panel").last().boundingBox();
+        const lastCard = await board.locator(".stat-grid").first().locator(".stat-panel").last().boundingBox();
         assert.ok(weekTip.y >= lastCard.y + lastCard.height,"Weekly tooltip covers another card");
         assert.equal(await top(),weekTop,"Weekly selection moved the charts");
         await checkWidth(page,"weekly selection 200%");

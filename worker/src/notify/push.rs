@@ -106,6 +106,8 @@ pub(super) fn payload(n: &Notice) -> String {
     let app = app_name(n).unwrap_or_else(|| "내 앱".into());
     let title = if n.event == "test" {
         format!("[쉽앤핑] {app} · 시험 알림이에요")
+    } else if n.kind.as_deref() == Some("silent") {
+        format!("[쉽앤핑] {app} · {}", event_title(n))
     } else {
         let feature: String = feature_name(n)
             .split_whitespace()

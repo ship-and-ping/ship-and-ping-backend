@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type RefObject } from "react";
 import { approximateDuration, formatDuration, summarize, type Stat } from "./monitor-data";
 import { periodName } from "./MonitorToolbar";
+import {formatMetric, serverMetrics, type ServerSlot} from "./server-data";
 import "./styles/chart.css";
 
 const hour = 3600000;
@@ -190,8 +191,8 @@ function SparkReadout({plot,x,text}:{plot:RefObject<HTMLDivElement|null>; x:numb
   </div>;
 }
 
-function StatPanel({title,help,value,series,unit,selection,points,p95}:{title:string; help:string; value:string; series:(number|null)[];
-  unit:"건"|"초"|"%"; selection:Selection; points:Bucket[]; p95:number|null}) {
+function StatPanel({title,help,value,series,unit,serverMetric=false,selection,points,p95}:{title:string; help:string; value:string; series:(number|null)[];
+  unit:"건"|"초"|"%"|"ms"|"개"; serverMetric?:boolean; selection:Selection; points:Bucket[]; p95:number|null}) {
   const active = selection.active?.index;
   const plot = useRef<HTMLDivElement>(null);
   const peak = Math.max(0,...series.map(n => plotTime(n ?? 0)));
@@ -200,15 +201,16 @@ function StatPanel({title,help,value,series,unit,selection,points,p95}:{title:st
   // Leave room for the selected dot at both ends of the value axis.
   const pointY = (n:number) => 88 - 76 * plotTime(n) / max;
   const runs = lineSegments(series,pointY,pointY(0));
-  function reading(index:number) {
+  function valueAt(index:number) {
     const n = series[index];
-    const label = n === null ? "기록 없음" : unit === "초" ? formatDuration(n)
-      : Math.round(n).toLocaleString("ko-KR") + unit;
-    return points[index].startLabel + " · " + label;
+    if (n === null) return "기록 없음";
+    if (serverMetric) return formatMetric(n,unit);
+    return unit === "초" ? formatDuration(n) : Math.round(n).toLocaleString("ko-KR") + unit;
   }
+  const reading = (index:number) => points[index].startLabel + " · " + valueAt(index);
   return <article className="stat-panel">
     <header><h3>{title}</h3><PanelHelp title={title} text={help}/></header>
-    <strong className="stat-value">{value}</strong>
+    <strong className="stat-value">{serverMetric && active !== undefined ? valueAt(active) : value}</strong>
     <div ref={plot} className="spark-plot"><svg aria-hidden="true">
       {levels.map(level => <line key={level} className={level === 0 ? "spark-zero" : undefined}
         x1="0" x2="100%" y1={percent(pointY(level))} y2={percent(pointY(level))}
@@ -322,16 +324,17 @@ function CursorTarget({owner,points,p95,selection,crosshair=false,reading}:{owne
   </>;
 }
 
-function CursorTip({index,points,p95}:{index:number; points:Bucket[]; p95:number|null}) {
+function CursorTip({index,points,p95,metric}:{index:number; points:Bucket[]; p95:number|null; metric?:string}) {
   const x = center(index,points.length);
   return <div role="tooltip" className="flow-tip"
     style={x < 50 ? {left:`min(calc(${x}% + 8px), 100% - var(--tip-width))`} :
       {right:`min(calc(${100-x}% + 8px), 100% - var(--tip-width))`}}>
-    <strong>{points[index].label}</strong>{values(points[index],p95).map(([name,value]) =>
+    <strong>{points[index].label}</strong>{metric ?? values(points[index],p95).map(([name,value]) =>
       <span key={name}><span className="tip-label">{" · "+name+" "}</span><em>{value}</em></span>)}</div>;
 }
 
-export function Chart({ rows, days, now, baseline, p95 = null, samples, learnsRange = true, thresholds, aggregate }: {
+export function Chart({ rows, days, now, baseline, p95 = null, samples, learnsRange = true, thresholds, aggregate, resources = [] }: {
+  resources?:ServerSlot[];
   rows: Stat[]; days: number; now: number; baseline: number | null; p95?: number | null; samples?: number;
   learnsRange?: boolean;
   thresholds?:ReadonlyMap<string,number>; aggregate?:boolean;
@@ -369,6 +372,17 @@ export function Chart({ rows, days, now, baseline, p95 = null, samples, learnsRa
       <StatPanel {...shared} title="보통 속도" unit="초" help="성공 요청에 걸린 시간의 중앙값이에요." value={approximateDuration(period.median)} series={points.map(p => p.median)}/>
       {!!thresholds?.size && <StatPanel {...shared} title="만족도" unit="%" help="선택 기간 중 평소 상한 안에 끝난 성공 요청 비율이에요." value={period.satisfaction === null ? "기록 없음" : period.satisfaction+"%"} series={points.map(p => p.satisfaction)}/>}
     </div>
+    <section aria-label="서버 상태"><h3>서버 상태</h3>
+      {resources.some(row => serverMetrics.some(([key]) => row.peaks[key] != null)) ? <div className="stat-grid"
+        data-readout-size={longestTime+" · "+formatMetric(1_000_000,"개")}>
+        {serverMetrics.map(([key,title,unit]) => {
+          const series = points.map((_,i) => resources.find(row => row.slot === i)?.peaks[key] ?? null);
+          const measured = series.filter(n => n !== null);
+          return measured.length ? <StatPanel {...shared} key={key} title={title} unit={unit} serverMetric
+            help={"앱 서버 전체의 구간별 최댓값이에요."} value={formatMetric(Math.max(...measured),unit)} series={series}/> : null;
+        })}
+      </div> : <p>추가 연결 요청문으로 서버 상태도 볼 수 있어요</p>}
+    </section>
     {occupied <= 3 && <p className="flow-note">{occupied ? "아직 사용 기록이 적어요. 쌓이면 흐름이 보여요." : "이 기간에는 표시할 사용 기록이 없어요."}</p>}
     <div className="flow-plots"><Plot points={points} labels={labels} baseline={null} p95={p95} selection={selection}
       summary={worst.failures ? worst.label + " 구간에 실패 " + worst.failures + "건이 있었어요." : undefined} />

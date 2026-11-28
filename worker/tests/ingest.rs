@@ -20,6 +20,40 @@ fn run(input: Value) -> Result<Value, ApiError> {
     Ok(serde_json::from_slice(&rpc).unwrap())
 }
 #[test]
+fn server_heartbeat_requires_a_server_source_and_no_request_records() {
+    let mut input = batch(vec![]);
+    input.as_object_mut().unwrap().remove("records");
+    input["platform"] = json!("server");
+    input["resources"] = json!({"mem_used_pct":0});
+    assert_eq!(run(input.clone()).unwrap_err(), ApiError::Invalid);
+    let (rpc, counts) = prepare(
+        "Bearer sp_srv_fixture",
+        &serde_json::to_vec(&input).unwrap(),
+        NOW,
+    )
+    .unwrap();
+    assert_eq!(counts.accepted, 1);
+    let rpc: Value = serde_json::from_slice(&rpc).unwrap();
+    assert_eq!(rpc["payload"]["resources"], input["resources"]);
+}
+
+#[test]
+fn aggregates_only_measured_request_timings() {
+    let mut measured = request();
+    measured["db_ms"] = json!(0);
+    measured["external_ms"] = json!(15);
+    let mut invalid = request();
+    invalid["db_ms"] = json!(600001);
+    let rpc = run(batch(vec![request(), measured, invalid])).unwrap();
+    let stats = &rpc["payload"]["stats"][0];
+    assert_eq!(stats["total"], 2);
+    assert_eq!(stats["db_ms_count"], 1);
+    assert_eq!(stats["db_ms_sum"], 0);
+    assert_eq!(stats["external_ms_count"], 1);
+    assert_eq!(stats["external_ms_sum"], 15);
+}
+
+#[test]
 fn app_version_preserves_build_times_and_masks_key_prefixes() {
     for (version, expected) in [
         ("2026.11.26.1530", "2026.11.26.1530"),
