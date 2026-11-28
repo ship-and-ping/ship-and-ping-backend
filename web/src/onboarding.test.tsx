@@ -465,9 +465,9 @@ it.each([false, true])("이메일 설정(%s)을 바꾼 뒤 재조회가 실패�
   expect(api.emailSetting).toHaveBeenCalledWith("a", !email);
 });
 it.each([
-  [true, "시험 알림을 예약했어요. 잠시 뒤 슬랙에서 확인해 주세요."],
+  [true, "잠시 뒤 슬랙에서 확인해 주세요."],
   [false, "잠시 뒤 다시 시도해 주세요. 시험 알림은 분당 한 번 보낼 수 있어요."],
-] as const)("시험 알림 예약 결과(%s)는 재조회 중과 실패 뒤에도 버튼 옆에 남는다", async (reserved, result) => {
+] as const)("시험 슬랙 예약 성공(%s)은 토스트에 표시하고 재조회 실패와 구분한다", async (reserved, result) => {
   const api = fake();
   const settings = {email:false, connected:true, broken:false, channel:"#모임"};
   let finish!: (reserved: boolean) => void;
@@ -483,10 +483,12 @@ it.each([
   expect(panel.getByRole<HTMLButtonElement>("button", {name:"시험 알림 요청 중"}).disabled).toBe(true);
   await act(async () => finish(reserved));
   expect(panel.getByRole("button", {name:"시험 알림 보내기"})).toBeTruthy();
-  expect(panel.getByRole("status").textContent).toBe(result);
+  const feedback = reserved ? within(screen.getByRole("article")) : panel;
+  expect(feedback.getByText(result)).toBeTruthy();
+  if (!reserved) expect(screen.queryByRole("article")).toBeNull();
   await act(async () => failRefresh(new Error("offline")));
   await screen.findByText(/최신 상태를 불러오지 못했어요/);
-  expect(panel.getByRole("status").textContent).toBe(result);
+  expect(feedback.getByText(result)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", {name:"다시 불러오기"}));
   await waitFor(() => expect(api.settings).toHaveBeenCalledTimes(3));
   expect(api.testSlack).toHaveBeenCalledTimes(1);

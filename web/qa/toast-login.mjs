@@ -7,7 +7,7 @@ import { createServer } from "vite";
 import { mockPage } from "./fixtures.mjs";
 
 const phase = process.argv[2];
-assert(["before", "auth-before", "after"].includes(phase), "Pass before, auth-before or after");
+assert(["before", "auth-before", "stack-before", "after"].includes(phase), "Unknown capture phase");
 const dir = resolve("../docs/design/qa/toast-login");
 await mkdir(dir, { recursive: true });
 const server = await createServer({
@@ -23,7 +23,7 @@ await server.listen();
 let browser;
 try {
   browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : "chrome" });
-  for (const width of phase === "auth-before" ? [] : [1440, 390]) {
+  for (const width of ["before", "after"].includes(phase) ? [1440, 390] : []) {
     for (const colorScheme of ["light", "dark"]) {
       const context = await browser.newContext({
         viewport: { width, height: width === 390 ? 844 : 900 },
@@ -61,7 +61,7 @@ try {
       await context.close();
     }
   }
-  if (phase !== "before") {
+  if (["auth-before", "after"].includes(phase)) {
     const issue = "/apps/10000000-0000-0000-0000-000000000001/issues/20000000-0000-0000-0000-000000000002";
     for (const [name, path] of [["login", issue], ["signup", "/signup"], ["forgot", "/forgot-password"], ["device-200", "/account"]]) {
       const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
@@ -101,6 +101,42 @@ try {
       await context.close();
     }
   }
+  if (["stack-before", "after"].includes(phase)) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await mockPage(page, "normal", true, origin);
+    await page.route("**/rpc/confirm_feature_names", route => route.fulfill({json: []}));
+    await page.goto(origin + "/apps/demo/settings");
+    await page.getByLabel("앱 이름", {exact: true}).fill("모임모아");
+    const save = page.getByRole("button", { name: "앱 정보 저장" });
+    await save.click();
+    const appToast = page.locator(".toast").filter({hasText:"앱 정보를 저장했어요."});
+    await appToast.waitFor();
+    if (phase === "after") {
+      const entry = await appToast.evaluateHandle(el => el.parentElement.getAnimations()[0]);
+      assertFade(await entry.evaluate(animation => animation.effect.getKeyframes()), "entry");
+      await save.click();
+      await save.waitFor({state:"visible"});
+      await page.waitForFunction(() => !document.querySelector("fieldset").disabled);
+      assert(await appToast.evaluate((el, animation) => animation === el.parentElement.getAnimations()[0], entry));
+    }
+    await page.getByLabel(/기능 이름$/).fill("참가 신청");
+    await page.getByRole("button", {name:"이름 저장"}).click();
+    await page.getByText("기능 이름표를 저장했어요.", {exact:true}).waitFor();
+    await page.waitForTimeout(220);
+    await page.screenshot({path: resolve(dir, phase + "-settings.png")});
+    if (phase === "after") {
+      assert.equal(await page.locator(".toast").count(), 2);
+      const frames = await appToast.evaluate(async el => {
+        el.querySelector("button").click();
+        await new Promise(requestAnimationFrame);
+        return el.getAnimations()[0].effect.getKeyframes();
+      });
+      assertFade(frames, "exit");
+      await appToast.waitFor({state:"detached"});
+    }
+    await context.close();
+  }
   if (phase === "after") {
     const gallery = await browser.newPage();
     await gallery.goto(pathToFileURL(resolve(dir, "index.html")).href);
@@ -115,4 +151,10 @@ try {
 } finally {
   await browser?.close();
   await server.close();
+}
+
+function assertFade(frames, phase) {
+  const transparentEnd = phase === "entry" ? 0 : 1;
+  assert(frames.some(frame => frame.computedOffset === transparentEnd && frame.opacity === "0"), phase + " fades");
+  assert(frames.every(frame => !frame.transform || frame.transform === "none"), phase + " has no translation");
 }

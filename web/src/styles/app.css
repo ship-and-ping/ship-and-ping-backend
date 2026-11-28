@@ -915,6 +915,8 @@ h1[tabindex="-1"]:focus { outline: none; }
 .key-notice { border-inline-start: 3px solid var(--sp-line-strong); }
 .toast-region {
   position: fixed;
+  display: grid;
+  gap: var(--sp-space-2);
   container-type: inline-size;
   z-index: 100;
   inset-inline-end: max(var(--sp-space-6), env(safe-area-inset-right));
@@ -922,6 +924,11 @@ h1[tabindex="-1"]:focus { outline: none; }
   width: min(25rem, calc(100% - var(--sp-space-4)));
   pointer-events: none;
 }
+.toast-region:has(.toast-entry:nth-child(2)) {
+  max-height: calc(100dvh - var(--sp-space-10));
+  overflow-y: auto;
+}
+.toast-entry { animation: toast-in var(--sp-dur-swap) var(--sp-ease-out) both; }
 .toast {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -936,7 +943,6 @@ h1[tabindex="-1"]:focus { outline: none; }
   pointer-events: auto;
   touch-action: pan-y pinch-zoom;
   overflow-wrap: anywhere;
-  animation: toast-in var(--sp-dur-swap) var(--sp-ease-out) both;
 }
 .toast[data-closing="true"] { animation: toast-out var(--sp-dur-press) ease-in both; }
 .toast-icon {
@@ -1017,7 +1023,7 @@ h1[tabindex="-1"]:focus { outline: none; }
   .login-page .even > .panel { animation: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .toast { animation: toast-fade-in var(--sp-dur-swap) ease-out both !important; }
+  .toast-entry { animation: toast-fade-in var(--sp-dur-swap) ease-out both !important; }
   .toast[data-closing="true"] { animation: toast-fade-out var(--sp-dur-press) ease-in both !important; }
 }
 #server-key [aria-pressed="true"] {

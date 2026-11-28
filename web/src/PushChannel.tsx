@@ -94,7 +94,13 @@ export function PushChannel({api, app, settings, reload}: Props) {
         notifyPushChange();
       }
     }
-    showToast({ kind: "success", title: "알림 기기를 삭제했어요", detail: "이 기기에서 받던 모든 앱의 푸시가 꺼졌어요." });
+    showToast({ kind: "success", title: "알림 기기를 삭제했어요", detail: device.id === current?.id
+      ? "이 기기에서 받던 모든 앱의 푸시가 꺼졌어요." : "삭제한 기기에서 받던 모든 앱의 푸시가 꺼졌어요." });
+  }
+  async function testPush(device: PushDevice) {
+    if (await api.testPush(app, device.id)) {
+      showToast({ kind: "success", title: "시험 푸시를 예약했어요", detail: "잠시 뒤 이 기기의 알림을 확인해 주세요." });
+    } else setMessage("시험 푸시는 분당 한 번 보낼 수 있어요.");
   }
   return <section className="panel push-channel">
     <header><h2>앱 푸시</h2><small>{stale ? "다시 켜기 필요" : settings.push && current ? "켜짐" : "홈 화면 앱"}</small></header>
@@ -110,8 +116,7 @@ export function PushChannel({api, app, settings, reload}: Props) {
           <button disabled={pending} onClick={() => act(enable)}>푸시 다시 켜기</button></>
         : current && settings.push ? <>
           <p>이 기기로 {type === "PC" ? "데스크톱" : "홈 화면"} 알림을 받아요.</p>
-          <button disabled={pending} onClick={() => act(async () => setMessage(await api.testPush(app,current.id)
-            ? "시험 푸시를 예약했어요. 잠시 뒤 알림을 확인해 주세요." : "시험 푸시는 분당 한 번 보낼 수 있어요."))}>시험 푸시 보내기</button>
+          <button disabled={pending} onClick={() => act(() => testPush(current))}>시험 푸시 보내기</button>
         </> : <button disabled={pending} onClick={() => act(enable)}>푸시 켜기</button>
         : <p>이 브라우저에서는 푸시를 사용할 수 없어요.</p>}
     </>}

@@ -157,6 +157,11 @@ function Settings({ app, api, origin }: Props & { app: string }) {
     await api.disconnectSlack(app);
     setSettings(current => current && { ...current, connected: false, broken: false, channel: null });
   }
+  async function testSlack() {
+    if (await api.testSlack(app)) {
+      showToast({ kind: "success", title: "시험 슬랙 알림을 예약했어요", detail: "잠시 뒤 슬랙에서 확인해 주세요." });
+    } else setMessage("잠시 뒤 다시 시도해 주세요. 시험 알림은 분당 한 번 보낼 수 있어요.");
+  }
   async function connect() {
     const result = await api.slack("install", origin, { app });
     if (
@@ -211,15 +216,7 @@ function Settings({ app, api, origin }: Props & { app: string }) {
                   <div className="actions">
                     <button
                       disabled={busy}
-                      onClick={() =>
-                        act("test", async () =>
-                          setMessage(
-                            (await api.testSlack(app))
-                              ? "시험 알림을 예약했어요. 잠시 뒤 슬랙에서 확인해 주세요."
-                              : "잠시 뒤 다시 시도해 주세요. 시험 알림은 분당 한 번 보낼 수 있어요.",
-                          ),
-                        )
-                      }
+                      onClick={() => act("test", testSlack)}
                     >
                       {pending === "test" ? "시험 알림 요청 중" : "시험 알림 보내기"}
                     </button>
