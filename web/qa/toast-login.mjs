@@ -177,9 +177,24 @@ async function checkApprovalTabs(browser) {
     await request.getByRole("heading", {name:"메일을 확인해 주세요"}).waitFor();
 
     const approval = await desktop.newPage();
-    await mockPage(approval, "normal", true, origin);
-    await approval.goto(link);
+    const duplicate = await desktop.newPage();
+    const decisions = [];
+    for (const tab of [approval, duplicate]) {
+      await mockPage(tab, "normal", true, origin);
+      await tab.route("**/v1/login-requests/qa-request/approve", async route => {
+        assert.equal(route.request().postDataJSON().action, "local");
+        decisions.push({route, tab});
+        if (decisions.length !== 2) return;
+        for (const pending of decisions) {
+          await pending.route.fulfill({json: pending.tab === approval
+            ? {status:"used",local_consumed:true} : {status:"used"}});
+        }
+      });
+    }
+    await Promise.all([approval.goto(link), duplicate.goto(link)]);
     await approval.waitForURL(origin + issue);
+    await duplicate.getByText("이미 처리한 요청이에요.").waitFor();
+    assert.equal(new URL(duplicate.url()).pathname, "/login/approve");
     assert.equal(await approval.evaluate(() => localStorage.getItem("ship-ping-login-request")), null);
 
     const remote = await phone.newPage();
@@ -187,8 +202,11 @@ async function checkApprovalTabs(browser) {
     await remote.goto(origin + "/login/approve?req=remote-request&proof=fixture");
     await remote.getByLabel("PC 확인 숫자 두 자리").fill("07");
     await remote.getByRole("button", {name:"이 PC 로그인 승인"}).click();
-    await remote.getByText("로그인을 요청한 PC에서 계속해 주세요.").waitFor();
-    console.log("Approval: new tab returned to the issue; separate browser context completed number matching.");
+    await remote.waitForURL(origin + "/login/complete");
+    await remote.getByText("로그인을 요청한 기기에서 이어서 보세요.").waitFor();
+    await remote.getByRole("link", {name:"내 앱으로 가기"}).click();
+    await remote.waitForURL(origin + "/apps");
+    console.log("Only the consuming tab returned to the issue. The other device opened its app list from the completion page.");
   } finally {
     await phone.close();
     await desktop.close();

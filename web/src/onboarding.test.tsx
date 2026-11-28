@@ -169,7 +169,8 @@ it("메일 로그인을 요청한 브라우저의 새 탭에서 승인하면 원
   sessionStorage.removeItem("ship-ping-login-issue"); // A new tab shares localStorage only.
   const member = fake();
   vi.mocked(member.monitor).mockRejectedValue(Error("not available"));
-  member.requests = {create:vi.fn(), poll:vi.fn(), decide:vi.fn().mockResolvedValue({status:"used"})};
+  member.requests = {create:vi.fn(), poll:vi.fn(), decide:vi.fn()
+    .mockResolvedValueOnce({status:"used", local_consumed:true}).mockResolvedValue({status:"used"})};
   const approvalTab = openWithPath(approvalUrl, member);
   await waitFor(() => expect(screen.getByTestId("path").textContent).toBe(issuePath));
   expect(member.requests.decide).toHaveBeenCalledWith("sample","local","fixture",undefined,"fixture");
@@ -188,16 +189,39 @@ it("다른 기기의 승인 탭은 숫자를 확인한 뒤 요청 PC에서 계�
   const code = await screen.findByRole("textbox", {name:"PC 확인 숫자 두 자리"});
   fireEvent.change(code, {target:{value:"07"}});
   fireEvent.click(screen.getByRole("button", {name:"이 PC 로그인 승인"}));
-  await screen.findByText("로그인을 요청한 PC에서 계속해 주세요.");
+  await screen.findByRole("heading", {name:"승인했어요."});
+  expect(screen.getByText("로그인을 요청한 기기에서 이어서 보세요.")).toBeTruthy();
   expect(member.requests.decide).toHaveBeenCalledWith("sample","approve","fixture","07");
-  expect(screen.getByTestId("path").textContent).toBe("/login/approve");
+  expect(screen.getByTestId("path").textContent).toBe("/login/complete");
+  fireEvent.click(screen.getByRole("link", {name:"내 앱으로 가기"}));
+  await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/apps"));
+});
+
+it("동시에 두 승인 탭이 used를 받아도 요청을 소비한 탭만 원래 문제로 간다", async () => {
+  localStorage.setItem("ship-ping-login-request", JSON.stringify({...pendingRequest(), issuePath}));
+  const member = fake();
+  vi.mocked(member.monitor).mockRejectedValue(Error("not available"));
+  const replies: ((result: {status:string; local_consumed?:boolean}) => void)[] = [];
+  const decide = vi.fn(() => new Promise<{status:string; local_consumed?:boolean}>(resolve => replies.push(resolve)));
+  member.requests = {create:vi.fn(), poll:vi.fn(), decide};
+  const winner = openWithPath(approvalUrl, member);
+  const duplicate = openWithPath(approvalUrl, member);
+  await waitFor(() => expect(decide).toHaveBeenCalledTimes(2));
+  await act(async () => replies[1]({status:"used"}));
+  expect(within(duplicate.container).getByText("이미 처리한 요청이에요.")).toBeTruthy();
+  expect(localStorage.getItem("ship-ping-login-request")).toBeTruthy();
+  await act(async () => replies[0]({status:"used",local_consumed:true}));
+  expect(within(winner.container).getByTestId("path").textContent).toBe(issuePath);
+  expect(within(duplicate.container).getByTestId("path").textContent).toBe("/login/approve");
+  expect(localStorage.getItem("ship-ping-login-request")).toBeNull();
+  expect(member.monitor).toHaveBeenCalledTimes(1);
 });
 
 it.each(["//outside.invalid", "https://outside.invalid", issuePath.replace("/issues/", "\\issues/"), encodeURIComponent(issuePath), issuePath + "?extra=1"])(
   "새 탭은 승인 요청에 저장된 잘못된 복귀 경로 %s를 버린다", async issue => {
     localStorage.setItem("ship-ping-login-request", JSON.stringify({...pendingRequest(), issuePath:issue}));
     const member = fake();
-    member.requests = {create:vi.fn(), poll:vi.fn(), decide:vi.fn().mockResolvedValue({status:"used"})};
+    member.requests = {create:vi.fn(), poll:vi.fn(), decide:vi.fn().mockResolvedValue({status:"used",local_consumed:true})};
     openWithPath(approvalUrl, member);
     await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/apps"));
     expect(localStorage.getItem("ship-ping-login-request")).toBeNull();
@@ -959,7 +983,7 @@ it("재인증 번호 오류와 만료 후 재전송하고, 재조회 실패에�
   fireEvent.click(save);
   await screen.findByText("비밀번호를 저장했어요.");
   expect(api.updatePassword).toHaveBeenLastCalledWith("example phrase","456456");
-  expect(api.account).toHaveBeenCalledTimes(2);
+  await waitFor(() => expect(api.account).toHaveBeenCalledTimes(2));
   expect(document.activeElement).toBe(screen.getByRole("button",{name:"비밀번호 바꾸기"}));
 });
 it("메일 링크 회원이 비밀번호를 만들면 방법과 변경 단추가 갱신된다", async () => {

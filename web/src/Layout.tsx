@@ -61,16 +61,16 @@ function Brand() {
     </Link>
   );
 }
-export function PublicBar() {
+export function PublicBar({ showMenu = true }: { showMenu?: boolean } = {}) {
   const login = useMatch("/login");
   return (
     <header className="bar">
       <Brand />
-      <nav aria-label="시작 메뉴">
+      {showMenu && <nav aria-label="시작 메뉴">
         {login
           ? <Link to="/signup">회원 가입</Link>
           : <Link to="/login">로그인</Link>}
-      </nav>
+      </nav>}
     </header>
   );
 }

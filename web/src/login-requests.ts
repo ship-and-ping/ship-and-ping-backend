@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface LoginRequest { request_id: string; poll_secret: string; match_code: string; expires_at: string }
-export interface Decision { status: string; created_at?: string; client_info?: {browser:string; place:string} }
+export interface Decision { status: string; local_consumed?: boolean; created_at?: string; client_info?: {browser:string; place:string} }
 
 export function loginRequests(client: SupabaseClient, origin: string, send = fetch) {
   const base = origin + "/v1/login-requests";
@@ -51,4 +51,9 @@ export function remembered(): (LoginRequest & {issuePath?: string}) | undefined 
 export function remember(request: LoginRequest, issuePath?: string | null) {
   localStorage.setItem(storageKey, JSON.stringify({ ...request, issuePath: notificationIssuePath(issuePath) ?? undefined }));
 }
-export function forget(id: string) { if (remembered()?.request_id===id) localStorage.removeItem(storageKey); }
+export function takeRememberedRequest(id: string) {
+  const saved = remembered();
+  if (saved?.request_id !== id) return;
+  localStorage.removeItem(storageKey);
+  return saved;
+}

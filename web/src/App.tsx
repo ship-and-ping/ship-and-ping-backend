@@ -13,7 +13,7 @@ import { appAddressHelp, appAddressLabel, validateApp } from "./domain";
 import { displayText } from "./normalize";
 import { Hero, Landing, LoadingRows, Shell } from "./Layout";
 import { AuthPage } from "./AuthPage";
-import { LoginApproval } from "./LoginApproval";
+import { ApprovalComplete, LoginApproval } from "./LoginApproval";
 import { notificationIssuePath } from "./login-requests";
 import { MonitorRoute } from "./Monitor";
 import { DeepPage } from "./DeepPage";
@@ -301,7 +301,7 @@ function AppRoutes({ api, ingest }: { api: Gateway; ingest: string }) {
   const issued = useRef<{ id: string; owner: string; key?: string } | null>(
     null,
   );
-  const { pathname } = useLocation();
+  const { pathname, state } = useLocation();
   const prev = useRef(pathname);
   const navigate = useNavigate();
   const [loginIssue, setLoginIssue] = useState(readLoginIssue);
@@ -393,6 +393,8 @@ function AppRoutes({ api, ingest }: { api: Gateway; ingest: string }) {
       <Route path="/phone-setup" element={!user ? <Navigate replace to="/login"/> :
         finishedSetup(user) ? <Navigate replace to="/apps"/> : <PushSetup key={user} api={api} member={user}/>}/>
       <Route path="/login/approve" element={<LoginApproval api={api} user={user ?? null}/>}/>
+      <Route path="/login/complete" element={user && state?.approvalComplete === true
+        ? <ApprovalComplete/> : <Navigate replace to={user ? "/apps" : "/login"}/>}/>
       <Route path="/signup" element={user ? afterLogin : <AuthPage api={api} mode="signup" issuePath={loginIssue}/>}/>
       <Route path="/forgot-password" element={<AuthPage api={api} mode="forgot"/>}/>
       <Route path="/reset-password" element={<AuthPage api={api} mode="reset" issuePath={loginIssue} expired={() => setRecoveryUser(null)} recovery={!!user && recoveryUser === user}/>}/>
