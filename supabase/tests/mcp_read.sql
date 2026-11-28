@@ -92,8 +92,8 @@ create table if not exists public.server_minutes(app_id uuid,bucket timestamptz,
 insert into public.server_minutes(app_id,bucket,last_received,version,resources)
  values(current_setting('test.app')::uuid,now(),now(),'private-fixture-version','{"busy_threads":3}'),
  (current_setting('test.other')::uuid,now(),now(),'v1.0.0','{"busy_threads":15}');
-select throws_ok( public.server_minutes set resources=resources||'{"hostname":"private"}'::jsonb
- where app_id=current_setting('test.app')::uuid$,'23514',null,'T54 rejects private host metadata')
+select throws_ok('update public.server_minutes set resources=jsonb_build_object(''hostname'',''private'')
+ where app_id=current_setting(''test.app'')::uuid','23514',null,'T54 rejects private host metadata')
  where exists (select from pg_constraint where conrelid='public.server_minutes'::regclass and conname='server_minutes_resources_check');
 select is(pg_temp.read_tool('get_server_metrics','{"range":"5m"}')#>'{data,samples,0}',
  jsonb_build_object('bucket',now(),'last_received',now(),'resources','{"busy_threads":3}'::jsonb),
