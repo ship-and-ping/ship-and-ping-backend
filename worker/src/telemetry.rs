@@ -17,26 +17,11 @@ fn label(value: &Value, max: usize) -> bool {
     };
     // Keep these word and credential rules in sync with private.profile_label.
     static WORD: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"^(?:[가-힣]{1,16}|(?:[A-Z]?[a-z]{1,14}|[A-Z]{1,6})[0-9]{0,2}|[0-9]{1,2})$")
-            .unwrap()
-    });
-    static KNOWN: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(concat!(
-            r"^(?:Node\.js|Next\.js|Nuxt\.js|Vue\.js|\.NET|ASP\.NET|C\+\+|C#|JavaScript|TypeScript|",
-            r"FastAPI|SQLAlchemy|PostgreSQL|MySQL|MongoDB|SQLite|GitHub|GitLab|Cloudflare|Kubernetes|",
-            r"Spring|Boot|Framework|Actions|[가-힣]{1,16}|(?i-u:check|view|open|use|the|in|on|to|",
-            r"from|previous|release|deploy|redeploy|rollback|version|server|hosting|dashboard|metrics|logs|console))$"
-        ))
-        .unwrap()
+        Regex::new(r"^(?:[가-힣]{1,16}|[A-Za-z][A-Za-z0-9]{0,14}|[0-9]{1,2}|C[+][+]|C#|[.]NET|[A-Za-z][A-Za-z0-9]{0,14}(?:[.][A-Za-z][A-Za-z0-9]{0,14})+)$").unwrap()
     });
     static CREDENTIAL: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(concat!(
-            r"(?i-u)^(?:bearer|basic|[spr]k(?:$|[- ]|live|test)|glpat|xox[baprs]|githubpat|",
-            r"gh[pousr](?:$|[- ])|spsrv|sppub|sbsecret|apikey|accesstoken|password|akia|asia[0-9]|aiza|eyj)"
-        ))
-        .unwrap()
+        Regex::new(r"(?i-u)^(?:(?:bearer|basic)[- ]?[a-z0-9]{3}|[spr]k(?:-|live|test)[- ]?[a-z0-9]{4}|(?:glpat|xox[baprs]|githubpat|gh[pousr]|spsrv|sppub|sbsecret|apikey|accesstoken|password|akia|asia|aiza|eyj)[- ]?[a-z0-9]{8})").unwrap()
     });
-    static LONG: LazyLock<Regex> = LazyLock::new(|| Regex::new("[A-Za-z0-9]{16}").unwrap());
     if s.is_empty() || s.chars().count() > max {
         return false;
     }
@@ -44,15 +29,25 @@ fn label(value: &Value, max: usize) -> bool {
     if mask(s) != s || mask(&compact) != compact || encoded_text(&compact) {
         return false;
     }
-    let mut known_only = true;
     let mut offset = 0;
+    let mut short_run = 0;
     for word in s.split([' ', '-']) {
         let suffix = &s[offset..];
-        if CREDENTIAL.is_match(suffix) || CREDENTIAL.is_match(&suffix.replace(' ', "")) {
+        if !WORD.is_match(word)
+            || CREDENTIAL.is_match(&suffix.replace(' ', ""))
+            || encoded_text(word)
+        {
             return false;
         }
-        // Check short Base64 fragments even when surrounded by display words.
-        // The compact length rule below covers longer opaque runs.
+        // Consecutive small groups can be a single opaque token split for display.
+        if word.len() <= 4 && word.bytes().all(|b| b.is_ascii_alphanumeric()) {
+            short_run += word.len();
+            if short_run >= 16 {
+                return false;
+            }
+        } else {
+            short_run = 0;
+        }
         let mut candidate = String::new();
         for fragment in suffix.split(' ') {
             if candidate.len() + fragment.len() >= 16
@@ -65,15 +60,9 @@ fn label(value: &Value, max: usize) -> bool {
                 return false;
             }
         }
-        if !KNOWN.is_match(word) {
-            if !WORD.is_match(word) || encoded_text(word) {
-                return false;
-            }
-            known_only = false;
-        }
         offset += word.len() + 1;
     }
-    known_only || !LONG.is_match(&compact.replace('-', ""))
+    true
 }
 
 fn range(value: &Value, min: f64, max: f64) -> bool {
@@ -210,6 +199,74 @@ mod tests {
         for good in [
             "Flask-SQLAlchemy",
             "flask-login",
+            "PyTorch",
+            "TensorFlow",
+            "NestJS",
+            "Socket.IO",
+            "spring-boot-starter-web",
+            "google-cloud-storage",
+            "Django REST framework",
+            "React",
+            "React Native",
+            "Angular",
+            "Express",
+            "Koa",
+            "Fastify",
+            "Hapi",
+            "Svelte",
+            "SvelteKit",
+            "Astro",
+            "Nuxt.js",
+            "Vue.js",
+            "Node.js",
+            "ASP.NET",
+            ".NET",
+            "C#",
+            "Laravel",
+            "Symfony",
+            "CakePHP",
+            "Ruby on Rails",
+            "Sinatra",
+            "Hanami",
+            "Spring Boot",
+            "Micronaut",
+            "Quarkus",
+            "Hibernate",
+            "MyBatis",
+            "JUnit",
+            "Mockito",
+            "Log4j",
+            "FastAPI",
+            "Flask",
+            "Pydantic",
+            "SQLAlchemy",
+            "Celery",
+            "NumPy",
+            "SciPy",
+            "pandas",
+            "Matplotlib",
+            "scikit-learn",
+            "Starlette",
+            "Tornado",
+            "Gin",
+            "Echo",
+            "Fiber",
+            "Gorilla Mux",
+            "Actix Web",
+            "Axum",
+            "Tokio",
+            "Serde",
+            "Diesel",
+            "Prisma",
+            "Sequelize",
+            "TypeORM",
+            "Jest",
+            "Vitest",
+            "Playwright",
+            "Cypress",
+            "Rollup",
+            "Webpack",
+            "Vite",
             "C++",
             "Next.js",
             "Spring 8",
