@@ -19,6 +19,8 @@ struct Notice {
     channel: String,
     kind: Option<String>,
     feature: Option<String>,
+    #[serde(skip)]
+    version_label: Option<String>,
     #[serde(default)]
     is_overflow: bool,
     metric: Value,
@@ -174,7 +176,12 @@ fn context(n: &Notice) -> String {
     } else {
         &feature
     };
-    app_name(n).map_or_else(|| label.to_owned(), |app| format!("{app} · {label}"))
+    let mut context =
+        app_name(n).map_or_else(|| label.to_owned(), |app| format!("{app} · {label}"));
+    if let Some(version) = &n.version_label {
+        context.push_str(&format!(" · 버전 {version}"));
+    }
+    context
 }
 
 fn web_origin(origin: Option<&str>) -> Option<String> {
@@ -220,6 +227,9 @@ struct MailContent {
 
 fn text_notice(n: &Notice, origin: Option<&str>) -> String {
     let mut line = sentence(n);
+    if let Some(version) = &n.version_label {
+        line.push_str(&format!("\n버전 {version}"));
+    }
     if let Some(name) = app_name(n) {
         line = format!("{name} · {line}");
     }

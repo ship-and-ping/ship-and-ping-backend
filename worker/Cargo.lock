@@ -873,6 +873,7 @@ dependencies = [
  "unicode-normalization",
  "url",
  "uuid",
+ "wasm-bindgen",
  "worker",
 ]
 

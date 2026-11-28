@@ -4,7 +4,8 @@
 
 1. 서버가 있으면 API 요청마다, 없으면 브라우저의 저장·조회 요청마다 주소 형태, method, status, 걸린 시간(ms)을 기록해. error_kind에는 오류 종류 코드만 넣어. error_message에는 오류 클래스 이름만 보내.
 2. 30초마다 또는 50건이 모이면 POST "https://127.0.0.1:58781/v1/ingest" 로 비동기 전송해. Content-Type은 application/json, Authorization은 Bearer 인증이야. 위 키를 지정한 환경 변수에서 읽어.
-3. 묶음 예시의 자리표시자를 실제 UUID·현재 ISO 시각·배포마다 바뀌는 커밋 해시 또는 빌드 시각으로 채워. 서버에서 보내면 platform을 server로 바꿔.
+3. 묶음마다 batch_id에는 새 UUID를, sent_at에는 현재 ISO 시각을 넣어. 서버에서 보내면 platform을 server로 바꿔.
+app_version에는 배포한 git 커밋 짧은 해시(없으면 배포 버전 번호)를 넣고, 서버 시작 시각이나 무작위 값은 쓰지 마세요 — 재시작만으로 새 버전이 되면 '해결' 판정이 틀어져요.
 {"spec":"sp-1","batch_id":"<UUID>","app_version":"<빌드 버전>","platform":"browser","sent_at":"<ISO 시각>","records":[{"type":"request","route":"/meetings/:id","method":"GET","status":200,"duration_ms":80,"ts":"<ISO 시각>"}]}
 4. 이름·전화·이메일 같은 입력값, 사용자 계정 ID, 요청·응답 본문, 쿠키·토큰·쿼리 문자열은 보내지 마. 주소 안의 실제 값은 :id로 바꾸고 오류에서 개인정보를 지워.
 5. 쉽앤핑 주소로 가는 요청은 기록하지 말고 전송 오류가 앱 동작을 막지 않게 해. 묶음은 64KB·100건 이내로 나눠. 페이지를 떠날 때도 인증 헤더를 유지해 남은 기록을 보내.

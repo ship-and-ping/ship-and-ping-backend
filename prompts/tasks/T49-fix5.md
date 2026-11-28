@@ -10,3 +10,7 @@
 
 ## 마무리
 비밀값 검사 후 push, `gh pr checks 46` 통과, PR 본문 갱신. 머지 금지. **끝나면 반드시 worker_done**.
+
+## 추가 지시
+
+PR #47(T51)이 main에 병합됐다. 수정이 끝나면 origin/main을 feat/T49-pwa-push에 병합해 충돌을 정리하고(허용) 전체 CI를 통과시켜라. main 합치기 금지.

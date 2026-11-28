@@ -19,7 +19,10 @@ select dblink_exec('evaluator','rollback');
 select dblink_disconnect('evaluator');
 select is(evaluate_all()->0->>'kind','failure','4xx excluded from denominator');
 select results_eq('select channel from notifications order by channel',$$values ('email'),('slack')$$,'one pending delivery per enabled channel');
-create temp table first_claim as select * from claim_notifications(1);
+create temp table first_claim as
+ select (notice->>'id')::uuid id, (notice->>'claim_token')::uuid claim_token, notice
+ from claim_notification_payloads(1) notice;
+select is((select notice->>'app_version' from first_claim),'v1','claim includes the incident deployment');
 select is((select count(*) from first_claim),1::bigint,'claim limit');
 select is((select count(*) from claim_notifications(5)),1::bigint,'active lease excluded');
 update notifications set claimed_at=now()-interval '20 minutes' where id in (select id from first_claim);
@@ -46,6 +49,6 @@ select cleanup_daily();
 select is((select count(*) from notifications),0::bigint,'expired pending and completed deleted');
 select ok(bool_and(has_function_privilege('service_role',fn,'execute') and not has_function_privilege('anon',fn,'execute')
  and not has_function_privilege('authenticated',fn,'execute')),'delivery RPCs restricted')
- from unnest(array['claim_notifications(integer)','complete_notification(uuid,uuid,boolean,text)','connect_slack(uuid,text,text,text)','reserve_mail(uuid)']) fn;
+ from unnest(array['claim_notifications(integer)','claim_notification_payloads(integer)','complete_notification(uuid,uuid,boolean,text)','connect_slack(uuid,text,text,text)','reserve_mail(uuid)']) fn;
 select * from finish();
 rollback;

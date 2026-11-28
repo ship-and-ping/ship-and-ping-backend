@@ -5,6 +5,19 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use worker::*;
 
+#[wasm_bindgen::prelude::wasm_bindgen(module = "/src/version.js")]
+extern "C" {
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name = versionLabel)]
+    fn version_label(raw: &str) -> String;
+}
+
+#[derive(serde::Deserialize)]
+struct ClaimedNotice {
+    #[serde(flatten)]
+    notice: Notice,
+    app_version: Option<String>,
+}
+
 pub fn setting(env: &Env, name: &str) -> Option<String> {
     env.var(name)
         .ok()
@@ -156,12 +169,16 @@ async fn current_push_target(db: &Supabase, notice: &Notice) -> Result<Option<Ta
 
 pub async fn deliver(db: &Supabase, env: &Env) -> Result<()> {
     // Ten rows leave room for one provider request, reservation and completion per row.
-    let rows: Vec<Notice> = rpc(db, "claim_notifications", json!({"limit":10}))
+    let rows: Vec<ClaimedNotice> = rpc(db, "claim_notification_payloads", json!({"limit":10}))
         .await?
         .json()
         .await?;
     let mut groups = BTreeMap::<(bool, String, String), Vec<Notice>>::new();
-    for row in rows {
+    for claimed in rows {
+        let mut row = claimed.notice;
+        if row.channel == "email" {
+            row.version_label = claimed.app_version.as_deref().map(version_label);
+        }
         let target = if row.channel == "slack" {
             row.hook
                 .as_ref()
