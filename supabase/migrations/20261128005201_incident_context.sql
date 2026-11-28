@@ -52,7 +52,7 @@ language sql stable set search_path='' as $$
   select min(bucket) from abnormal;
 $$;
 
-create function private.first_failure_at(issue public.incidents) returns timestamptz
+create function private.first_failure_at(issue public.incidents, at_detection boolean default false) returns timestamptz
 language sql stable set search_path='' as $$
  with cutoff as (
   select coalesce(max(closed_at),'-infinity'::timestamptz) previous_close from public.incidents
@@ -75,16 +75,19 @@ language sql stable set search_path='' as $$
    ((issue.metric_at_open->>'total')::int>=5 and (issue.metric_at_open->>'failures')::bigint*5>=(issue.metric_at_open->>'total')::int
     or (issue.metric_at_open->>'consecutive')::boolean and position<=3)
  )
- select min(at) from failures
+ -- Auto opening metrics contain counts without per-bucket receipt times.
+ select case when not at_detection and exists (
+  select from public.features f where f.id=issue.feature_id and f.kind='auto'
+ ) then issue.opened_at else (select min(at) from failures) end
 $$;
 
 create function private.snapshot_incident_start() returns trigger language plpgsql security definer set search_path='' as $$
 begin
  if new.kind='slow' then new.first_slow_bucket := private.first_slow_bucket(new);
- else new.first_failure_at := private.first_failure_at(new); end if;
+ else new.first_failure_at := private.first_failure_at(new, at_detection => true); end if;
  return new;
 end $$;
-revoke all on function private.first_slow_bucket(public.incidents),private.first_failure_at(public.incidents),private.snapshot_incident_start()
+revoke all on function private.first_slow_bucket(public.incidents),private.first_failure_at(public.incidents,boolean),private.snapshot_incident_start()
  from public,anon,authenticated,service_role;
 create trigger snapshot_incident_start before insert on public.incidents for each row when (new.kind in ('slow','failure'))
  execute function private.snapshot_incident_start();
