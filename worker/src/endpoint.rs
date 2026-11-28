@@ -281,9 +281,12 @@ async fn ingest(mut req: Request, env: Env) -> Result<Response> {
     Ok(Response::from_json(&result)?.with_status(202))
 }
 #[event(fetch)]
-pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    if req.path() == "/v1/install-mail" {
-        return install_mail::route(req, &env).await;
+pub async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
+    if matches!(
+        req.path().as_str(),
+        "/v1/install-mail" | "/v1/install-code" | "/v1/install-code/verify"
+    ) {
+        return install_mail::route(req, &env, ctx).await;
     }
     if req.path() == "/v1/push-config" && req.method() == Method::Get {
         let origin = crate::notify::setting(&env, "WEB_ORIGIN");

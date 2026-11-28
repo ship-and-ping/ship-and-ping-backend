@@ -4,6 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { type Gateway } from "./data";
 import { canInstall, install } from "./push";
 import { installDevice } from "./install-device";
+import { useToast } from "./Toast";
 import "./styles/install.css";
 
 const guideUrl = () => location.origin + "/install";
@@ -36,13 +37,15 @@ export function InstallBanner({app,api}: {app:string;api:Gateway}) {
   }}>닫기</button></aside>;
 }
 export function PhoneHandoff({api}: {api:Gateway}) {
+  const showToast = useToast();
   const [busy,setBusy] = useState(false);
   const [message,setMessage] = useState("");
   async function send() {
     setBusy(true);
     try {
-      setMessage(await api.sendInstallMail() === "sent" ? "가입한 이메일로 설치 안내를 보냈어요." :
-        "지금은 더 보낼 수 없어요. 10분에 한 번, 하루 최대 5회까지 받을 수 있어요. QR 코드로도 열 수 있어요.");
+      setMessage("");
+      if (await api.sendInstallMail() === "sent") showToast({kind:"success",title:"가입한 이메일로 설치 안내를 보냈어요."});
+      else setMessage("지금은 더 보낼 수 없어요. 10분에 한 번, 하루 최대 5회까지 받을 수 있어요. QR 코드로도 열 수 있어요.");
     } catch {setMessage("메일을 보내지 못했어요. QR 코드로 열거나 잠시 뒤 다시 시도해 주세요.");}
     finally {setBusy(false);}
   }

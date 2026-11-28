@@ -32,7 +32,8 @@ export async function recordFlow(browser, origin, directory, userAgent, mail) {
     },session);
     await page.route("**/v1/install-mail",r=>r.fulfill({status:204}));
     await page.route("**/v1/push-config",r=>r.fulfill({json:{public_key:"BA"}}));
-    await page.route("**/auth/v1/otp**",r=>r.fulfill({json:{}}));
+    await page.route("**/v1/install-code",r=>r.fulfill({status:202}));
+    await page.route("**/v1/install-code/verify",r=>r.fulfill({json:{token_hash:"fixture-login"}}));
     await page.route("**/auth/v1/verify**",r=>r.fulfill({json:session}));
     await page.route("**/rpc/register_push",r=>r.fulfill({json:"qa-device"}));
     await page.route("**/rpc/list_push_devices",r=>r.fulfill({json:[{id:"qa-device",endpoint:"https://web.push.apple.com/fixture",current_session:true}]}));

@@ -122,6 +122,15 @@ function value<T>(result: { data: T | null; error: unknown }): NonNullable<T> {
 }
 export function gateway(client: SupabaseClient, origin?: string): Gateway {
   const requests = origin ? loginRequests(client,origin) : undefined;
+  async function installCodeRequest(path:string, body:{email:string;code?:string}) {
+    if (!origin) throw Error("코드 로그인 설정이 필요해요.");
+    const response = await fetch(origin+"/v1/install-code"+path, {
+      method:"POST",credentials:"omit",redirect:"error",cache:"no-store",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(body),
+    });
+    if (!response.ok) throw Object.assign(Error("코드를 확인하지 못했어요."),{status:response.status});
+    return response;
+  }
   const columns = "id,name,url,created_at,first_record_at";
   let withdrawalToken: string | undefined;
   // A fast Auth redirect can finish before React mounts the route listener.
@@ -494,13 +503,12 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       return "sent";
     },
     async requestLoginCode(email) {
-      const {error} = await client.auth.signInWithOtp({email, options:{
-        shouldCreateUser:false, emailRedirectTo:location.origin + "/install",
-      }});
-      if (error) throw error;
+      await installCodeRequest("",{email});
     },
     async verifyLoginCode(email, code) {
-      const {error} = await client.auth.verifyOtp({email,token:code,type:"email"});
+      const response = await installCodeRequest("/verify",{email,code});
+      const {token_hash} = await response.json();
+      const {error} = await client.auth.verifyOtp({token_hash,type:"email"});
       if (error) throw error;
     },
     async login(email) {

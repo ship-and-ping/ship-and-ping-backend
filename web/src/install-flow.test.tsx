@@ -5,16 +5,31 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { gateway, type Gateway } from "./data";
 import { OtpLogin } from "./OtpLogin";
 import { PushSetup } from "./PushSetup";
+import { InstallBanner } from "./InstallGuide";
 import * as push from "./push";
 
 afterEach(() => {cleanup(); vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals();});
 it("requests an existing member's code and verifies it in the home screen session", async () => {
-  const auth = {signInWithOtp:vi.fn().mockResolvedValue({}),verifyOtp:vi.fn().mockResolvedValue({})};
-  const api = gateway({auth} as unknown as SupabaseClient);
+  const auth = {verifyOtp:vi.fn().mockResolvedValue({})};
+  const send = vi.fn().mockResolvedValueOnce(new Response(null,{status:202})).mockResolvedValueOnce(Response.json({token_hash:"fixture-hash"}));
+  vi.stubGlobal("fetch",send);
+  const api = gateway({auth} as unknown as SupabaseClient,"https://worker.example.invalid");
   await api.requestLoginCode("member@example.invalid");
-  expect(auth.signInWithOtp).toHaveBeenCalledWith({email:"member@example.invalid",options:{shouldCreateUser:false,emailRedirectTo:location.origin+"/install"}});
+  expect(send.mock.calls[0][0]).toBe("https://worker.example.invalid/v1/install-code");
   await api.verifyLoginCode("member@example.invalid","001234");
-  expect(auth.verifyOtp).toHaveBeenCalledWith({type:"email",email:"member@example.invalid",token:"001234"});
+  expect(auth.verifyOtp).toHaveBeenCalledWith({type:"email",token_hash:"fixture-hash"});
+});
+it("keeps the dismissed banner closed when returning to the app home", async () => {
+  sessionStorage.clear();
+  const settings = vi.fn().mockResolvedValue({subscribed:false});
+  const page = () => <MemoryRouter><InstallBanner api={{settings} as unknown as Gateway} app="demo"/></MemoryRouter>;
+  const view = render(page());
+  fireEvent.click(await screen.findByRole("button",{name:"닫기"}));
+  view.unmount();
+  render(page());
+  expect(settings).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("link",{name:"휴대폰으로 알림 받기"})).toBeNull();
+  sessionStorage.clear();
 });
 it("lets the member correct a bad code and explains a server-side attempt limit", async () => {
   const api = {requestLoginCode:vi.fn(),verifyLoginCode:vi.fn()

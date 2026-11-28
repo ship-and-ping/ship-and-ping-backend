@@ -127,6 +127,17 @@ it("로그인은 기본 제출이고 메일 링크는 구분선 다음 보조 �
 
 const issuePath = "/apps/10000000-0000-0000-0000-000000000001/issues/20000000-0000-0000-0000-000000000002";
 const issueHint = "알림에서 온 문제를 열려면 로그인해 주세요.";
+it("홈 화면 앱에서도 알림에서 들어온 문제를 설치 안내보다 먼저 연다", async () => {
+  const push = await import("./push");
+  const home = vi.spyOn(push,"standalone").mockReturnValue(true);
+  try {
+    sessionStorage.setItem("ship-ping-login-issue",issuePath);
+    const member = fake();
+    vi.mocked(member.monitor).mockRejectedValue(Error("not available"));
+    openWithPath("/login",member);
+    await waitFor(()=>expect(screen.getByTestId("path").textContent).toBe(issuePath));
+  } finally { home.mockRestore(); sessionStorage.removeItem("ship-ping-login-issue"); }
+});
 function LocationProbe() {
   return <span data-testid="path">{useLocation().pathname}</span>;
 }

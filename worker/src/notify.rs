@@ -217,6 +217,20 @@ impl Mail {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn login_code_mail(code: u32) -> Mail {
+    let text = format!(
+        "홈 화면의 쉽앤핑에서 {code:06}을 입력해 주세요. 코드는 10분 동안 유효하고 다섯 번 틀리면 새 코드가 필요해요."
+    );
+    Mail {
+        subject: "쉽앤핑 홈 화면 앱 로그인 코드".into(),
+        html: format!(
+            "<html lang=\"ko\"><h1>홈 화면 앱 로그인</h1><p>홈 화면의 쉽앤핑에 아래 숫자를 입력해 주세요.</p><strong style=\"font-size:32px\">{code:06}</strong><p>10분 안에 입력해 주세요. 다섯 번 틀리면 새 코드를 받아 주세요.</p></html>"
+        ),
+        text,
+    }
+}
+
 pub(crate) fn install_mail(origin: &str) -> Option<Mail> {
     let link = format!("{}/install", web_origin(Some(origin))?);
     Some(Mail {

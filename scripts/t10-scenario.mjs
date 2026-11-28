@@ -73,6 +73,9 @@ async function post(path, key, body) {
 }
 const messages = [];
 let hookStatus = 200;
+let mailStatus = 200;
+let releaseCodeMail;
+let heldCodeMail;
 const receiver = createServer(async (req, res) => {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -92,8 +95,9 @@ const receiver = createServer(async (req, res) => {
   if (!["/services/test-local", "/emails"].includes(req.url))
     return res.writeHead(404).end();
   messages.push({ path: req.url, payload: JSON.parse(body) });
+  if (heldCodeMail && req.url === "/emails") await heldCodeMail;
   res
-    .writeHead(req.url === "/emails" ? 200 : hookStatus)
+    .writeHead(req.url === "/emails" ? mailStatus : hookStatus)
     .end(req.url === "/emails" ? "{}" : "ok");
 });
 const tick = async () =>
@@ -125,6 +129,67 @@ try {
   for (const name of ["with-server", "browser-only"])
     owners.push(await owner(name));
   const [a, b] = owners;
+  // Real Worker, PostgREST and GoTrue. Only the external mail provider is local.
+  async function mobile(path, payload, token) {
+    return fetch(endpoint+path,{method:"POST",headers:{
+      Origin:"https://web.test","Content-Type":"application/json",
+      ...(token ? {Authorization:"Bearer "+token} : {}),
+    },body:JSON.stringify(payload),signal:AbortSignal.timeout(5000)});
+  }
+  const guide = () => mobile("/v1/install-mail",{email:b.email},a.token);
+  assert.equal((await mobile("/v1/install-mail",{})).status,401);
+  assert.ok((await a.session.rpc("reserve_install_mail",{p_member:a.user.id})).error);
+  const quota = () => Number(sql("select coalesce(sum(used),0) from private.mail_quota"));
+  const beforeMail = quota();
+  mailStatus = 422;
+  assert.equal((await guide()).status,503);
+  assert.equal(quota(),beforeMail);
+  mailStatus = 200;
+  assert.equal((await guide()).status,204);
+  assert.deepEqual(messages.at(-1).payload.to,[a.email]);
+  assert.equal((await guide()).status,429);
+  const requestCode = email => mobile("/v1/install-code",{email});
+  const verifyCode = code => mobile("/v1/install-code/verify",{email:a.email,code});
+  async function getCode() {
+    for (let i=0;i<100;i++) {
+      const mail=messages.find(m=>m.payload.subject==="쉽앤핑 홈 화면 앱 로그인 코드");
+      if (mail) return mail.payload.text.match(/\b[0-9]{6}/)[0];
+      await wait(50);
+    }
+    throw Error("Test code mail did not arrive");
+  }
+  messages.length=0;
+  heldCodeMail = new Promise(resolve=>{releaseCodeMail=resolve;});
+  let code;
+  try {
+    const absent=await requestCode("absent@example.invalid");
+    const member=await requestCode(a.email);
+    assert.equal(absent.status,202);
+    assert.equal(member.status,202);
+    assert.equal(await absent.text(),await member.text());
+    code=await getCode(); // response returned while Resend was still blocked
+    assert.deepEqual(messages.map(m=>m.payload.to),[[a.email]]);
+  } finally {releaseCodeMail();heldCodeMail=undefined;}
+  const wrong=String((Number(code)+1)%1_000_000).padStart(6,"0");
+  for (let i=0;i<5;i++) assert.equal((await verifyCode(wrong)).status,403);
+  assert.equal((await verifyCode(code)).status,403);
+  async function freshCode() {
+    sql("update private.install_mail_events set sent_at=now()-interval '2 minutes' where kind='code'");
+    messages.length=0;
+    assert.equal((await requestCode(a.email)).status,202);
+    return getCode();
+  }
+  code=await freshCode();
+  sql("update private.install_login_codes set expires_at=now()-interval '1 second'");
+  assert.equal((await verifyCode(code)).status,403);
+  code=await freshCode();
+  const verified=await verifyCode(code);
+  assert.equal(verified.status,200);
+  const {token_hash}=await verified.json();
+  const signedIn=data(await client(keys.PUBLISHABLE_KEY).auth.verifyOtp({type:"email",token_hash}));
+  assert.equal(signedIn.user.id,a.user.id);
+  assert.equal((await verifyCode(code)).status,403);
+  messages.length=0;
   const version = execFileSync(
     "git",
     ["-C", root, "rev-parse", "--short", "HEAD"],
