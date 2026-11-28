@@ -66,6 +66,7 @@ date: 2026-11-24
 | app_id, feature_id, version, bucket | PK | bucket = 5분 단위 시각 |
 | total | int | 결과 건수 |
 | failures | int | 5xx·예외 |
+| server_errors | int null | HTTP 5xx. 과거 집계에 실패가 있지만 HTTP 상태가 없으면 NULL |
 | client_errors | int | 4xx |
 | duration_sum_ms | bigint | |
 | hist | int[] | 기존 16칸, 3~7.5초 사이를 최대 300ms로 나눈 30칸, 또는 두 형식을 합산한 32칸. |
@@ -101,6 +102,7 @@ stats_1h와 같은 집계 열·기본 키·조회 인덱스를 쓴다. 30일이 
 | 열 | 형식 |
 |---|---|
 | id, app_id, feature_id, version, at, error_kind, message(맨 앞 오류 클래스 이름만, ≤60자, 그 외 NULL) | |
+| http_status | int null. 요청 예시에서 확인한 상태(0 또는 100~599). 과거 예시와 깊게 보기 시도는 NULL |
 
 ### baselines — 평소 속도
 | 열 | 형식 | 설명 |
@@ -120,6 +122,7 @@ stats_1h와 같은 집계 열·기본 키·조회 인덱스를 쓴다. 30일이 
 | kind | text (`failure`/`slow`/`unconfirmed`) | |
 | status | text (`open`/`resolved`/`quiet`/`dismissed`) | |
 | opened_at, closed_at | timestamptz | |
+| first_slow_bucket | timestamptz null | 개설 시 판정 창에서 처음 느림이 확인된 5분 구간. 자료가 없으면 NULL |
 | opened_version | text | 문제 시작 때 버전 |
 | resolved_version | text null | |
 | metric_at_open, metric_worst | jsonb | 실패 판정은 total·failures·consecutive를 저장한다. 개설 당시 최근 3건이 연속 실패했는지는 metric_at_open.consecutive로 확인한다. 느림 판정에는 p50·baseline 등이 들어간다. |
