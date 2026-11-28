@@ -23,7 +23,8 @@ import {
 } from "./monitor-data";
 
 const day = 86400000;
-const kindName = { failure: "실패", slow: "느림", unconfirmed: "결과 미확인" };
+const kindName = { failure: "실패", slow: "느림", unconfirmed: "결과 미확인", silent: "기록 끊김" };
+const heartbeat: Feature = { id: "", name: "앱", method: null, route: null, slow_threshold_ms: 0, baselines: null };
 const when = (s: string) => new Date(s).toLocaleString("ko-KR", { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Seoul" });
 const time = (ms: number | string | null) =>
   typeof ms === "string" ? displayText(ms) : formatDuration(ms);
@@ -37,12 +38,14 @@ const title = (f: Feature | undefined, i: Incident) =>
     slow: "이 느려졌어요",
     failure: i.metric_at_open?.consecutive ? "에서 3건 연속 실패했어요" : "에서 실패가 늘었어요",
     unconfirmed: "의 기록 전송이 끊겼을 수 있어요",
+    silent: "의 살아 있음 신호가 끊겼어요",
   }[i.kind];
 const route = (f: Feature) =>
   displayText(
     [f.method, sanitizeRoute(f.route ?? "")].filter(Boolean).join(" "),
   );
 function details(i: Incident, m: Incident["metric_at_open"], f?: Feature) {
+  if (i.kind === "silent") return "살아 있음 신호를 기다리고 있어요 · " + when(i.opened_at) + " 감지";
   if (!m) return when(i.opened_at) + "부터";
   if (i.kind === "unconfirmed")
     return "사용 결과를 확인하지 못했어요 · " + when(i.opened_at) + "부터";
@@ -170,7 +173,7 @@ function MonitorPage({
   async function loadPrompt(issueId: string) {
     const detail = await api.monitor(id, undefined, issueId);
     const incident = detail.incidents.find(item => item.id === issueId);
-    const feature = detail.features.find(item => item.id === incident?.feature_id);
+    const feature = incident?.kind === "silent" ? heartbeat : detail.features.find(item => item.id === incident?.feature_id);
     if (!incident || !feature) throw Error("문제 기록을 찾지 못했어요");
     return buildIssuePrompt(issueContext(detail, feature, incident).input).text;
   }
@@ -185,7 +188,7 @@ function MonitorPage({
     );
   if (!data) return <section role="status" aria-busy="true" className="monitor-loading"><h1>기록을 불러오는 중</h1><div aria-hidden="true" /><div aria-hidden="true" /></section>;
   const incident = data.incidents.find((i) => i.id === issue);
-  const selected = data.features.find(
+  const selected = incident?.kind === "silent" ? heartbeat : data.features.find(
     (f) => f.id === (feature ?? incident?.feature_id),
   );
   const toolbar = <MonitorToolbar days={days} interval={interval} onInterval={setIntervalSeconds}
@@ -231,7 +234,7 @@ function Home({ data, base, days, toolbar, loadPrompt }: { data: Monitor; base: 
   const [showSpeed, setShowSpeed] = useState(false);
   const open = data.incidents.filter((i) => i.status === "open");
   const find = (i: Incident) =>
-    data.features.find((f) => f.id === i.feature_id);
+    i.kind === "silent" ? heartbeat : data.features.find((f) => f.id === i.feature_id);
   const problems = new Set(open.map((i) => i.feature_id));
   const rows = data.features.filter((f) => !f.hidden)
     .map((f) => ({
@@ -529,9 +532,12 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
       ];
   const metric = i.metric_worst ?? i.metric_at_open;
   const opening = i.metric_at_open ?? metric;
+  const openedVersion = data.versions.find(v => v.version === i.opened_version);
+  const onset = Date.parse(data.promptContext?.incident_start ?? data.promptContext?.slow_start ?? i.opened_at);
   const input = {
     feature: f.name,
     route: f.route ?? "",
+    method: f.method,
     versions,
     step: data.step,
     kind: i.kind,
@@ -539,7 +545,10 @@ function issueContext(data: Monitor, f: Feature, i: Incident) {
     unconfirmed: opening?.unconfirmed,
     opened: i.opened_at,
     closed: i.closed_at,
-    versionFirstSeen: data.versions.find(v => v.version === i.opened_version)?.first_seen_at,
+    versionFirstSeen: openedVersion?.first_seen_at,
+    hadPreviousVersion: openedVersion && data.versions.some(v => Date.parse(v.first_seen_at) < Date.parse(openedVersion.first_seen_at)),
+    otherRecentVersion: data.versions.some(v => v.version !== i.opened_version &&
+      Date.parse(v.first_seen_at) >= onset - 30 * 60000 && Date.parse(v.first_seen_at) <= onset),
     now: data.now,
     context: data.promptContext,
     related: concurrentIssues(i, data.promptContext?.incident_start ?? data.promptContext?.slow_start ?? i.opened_at, data.incidents, data.features),
@@ -575,6 +584,7 @@ function Issue({
     [dismissed, setDismissed] = useState(false);
   const { proof, version, fresh, after, streak, duration, slow, again, metric, input } = issueContext(data, f, i);
   function verificationMessage() {
+    if (i.kind === "silent") return i.status === "resolved" ? "살아 있음 신호가 다시 도착했어요." : "다음 살아 있음 신호를 기다리고 있어요.";
     if (i.status === "resolved") {
       const result = i.kind === "slow" ? "평소 속도로 끝났어요." : "성공했어요.";
       return "업데이트 후 " + displayText(f.name) + " 최근 5건이 모두 " + result;
@@ -648,6 +658,12 @@ function Issue({
       <Hero showSheep={false} badge={<StatusBadge state={i.status} />}
         mood={i.status === "open" ? "worried" : "relieved"} arrived={i.status === "resolved"}
         title={summaryTitle()} detail={summaryDetail()} />
+      <section aria-label="문제 종류">
+        <h2>{prompt.diagnosis.title}</h2>
+        <p>확신: {prompt.diagnosis.confidence}</p>
+        <p>근거</p>
+        <ul>{prompt.diagnosis.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
+      </section>
       <div className="issue-copy">
         <div className="incident-actions"><Copy compact text={prompt.text} title={copyTitle} />
           <span>코딩 AI에 붙여 넣으세요</span></div>
@@ -667,7 +683,7 @@ function Issue({
           {(i.status === "open" || i.status === "resolved") && <section id="verification" className="panel">
             <h2>업데이트 후 확인</h2>
             {version != null && <p>{i.status === "resolved" ? "해결 버전" : "확인 버전"} · {displayVersion(version)}</p>}
-            <p>{i.status === "resolved" ? "업데이트 후 최근 5건의 사용 기록으로 해결을 확인했어요." : verificationMessage()}</p>
+            <p>{i.status === "resolved" && i.kind !== "silent" ? "업데이트 후 최근 5건의 사용 기록으로 해결을 확인했어요." : verificationMessage()}</p>
             {i.status === "resolved" && <div className="resolved-fill" aria-hidden="true" />}
           </section>}
         </div>

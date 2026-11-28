@@ -53,7 +53,8 @@ it("문제 상단에서 현재 옵션으로 요청문을 복사한다", async ()
   setup("/apps/a/issues/i");
   const summary = await screen.findByRole("region", {name:"문제 상태"});
   expect(within(summary).getByText("코딩 AI에 붙여 넣으세요")).toBeTruthy();
-  expect(within(summary).getAllByRole("listitem").map(item => item.textContent)).toEqual([
+  const steps = within(summary).getByRole("list", { name: "요청문 복사 후 다음 단계" });
+  expect(within(steps).getAllByRole("listitem").map(item => item.textContent)).toEqual([
     "요청문 붙여 넣기", "고친 뒤 배포", "새 버전에서 5번 연속 정상이면 해결",
   ]);
   fireEvent.click(within(summary).getByRole("button", {name:/요청문 복사/}));
@@ -552,4 +553,14 @@ it("버전 목록에서 빠져도 서버에 기록된 해결 버전을 보여 �
   });
   await screen.findByText("해결 버전 · v0.0.1");
   expect(container.querySelector("pre")?.textContent).toContain("v0.0.1");
+});
+
+it("앱 단위 기록 끊김도 기능 ID 없이 열리고 판단 근거와 확신을 표시한다", async () => {
+  setup("/apps/a/issues/i", [], rows => {
+    Object.assign((rows.incidents as object[])[0], { kind: "silent", feature_id: null });
+  });
+  const region = within(await screen.findByRole("region", { name: "문제 종류" }));
+  expect(region.getByRole("heading", { name: "기록 끊김으로 보여요" })).toBeTruthy();
+  expect(region.getByText("확신: 높음")).toBeTruthy();
+  expect(region.getAllByRole("listitem").map(li => li.textContent)).toEqual(["살아 있음 신호가 끊겼어요."]);
 });
