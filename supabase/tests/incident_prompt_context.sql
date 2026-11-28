@@ -107,6 +107,8 @@ insert into attempts(app_id,attempt_id,feature_id,version,status,ended_at)
  select app_id,gen_random_uuid(),id,'v1',case when n>=27 or n=0 then 'failure' else 'success' end,
   t+interval '10 minutes 10 seconds'+n*interval '1 minute'
  from features,anchor,generate_series(0,29) n where name='save';
+-- The receipt trigger uses the wall clock. Replay receipts on the fixture's timeline.
+update attempts set result_received_at=ended_at where feature_id=(select id from features where name='save');
 insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version,metric_at_open)
  select app_id,id,'failure','quiet',t+interval '40 minutes',t+interval '45 minutes','v1',
   '{"total":30,"failures":4,"consecutive":true}' from features,anchor where name='save';
