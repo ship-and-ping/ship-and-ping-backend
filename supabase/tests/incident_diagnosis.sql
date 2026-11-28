@@ -17,7 +17,7 @@ insert into incidents(app_id,feature_id,kind,status,opened_version,opened_at,clo
 insert into app_keys(app_id,kind,prefix,key_hash,expires_at)
   select id,'srv','test',repeat('a',64),t+interval '24 hours'-interval '10 minutes' from apps,anchor;
 insert into error_samples(app_id,feature_id,version,at,http_status,error_kind)
-  select app_id,id,'v1',t+interval '1 minute',status,kind
+  select app_id,id,'v1',t+interval '1 minute',s.status,s.kind
   from features,anchor,(values(401,'HTTP_401'),(401,'HTTP_401'),(403,'HTTP_403'),(502,'LookupError'),(500,'LookupError')) s(status,kind)
   where name='places';
 insert into attempts(app_id,feature_id,attempt_id,version,status,ended_at,step,error_kind)
