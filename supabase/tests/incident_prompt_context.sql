@@ -23,10 +23,16 @@ insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_v
  from features,anchor,(values ('quiet',-20,-15),('open',-5,null::int)) prior(status,beg,stop) where name='bookmark';
 insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version,metric_at_open)
  select app_id,id,'slow','quiet',t+interval '65 seconds',t+interval '15 minutes 20 seconds','v1',
- '{"baseline":80,"baseline_p50":80,"baseline_p95":100,"window":10,"threshold":5000}'
+ '{"baseline":80,"baseline_p50":80,"baseline_p95":100,"window":10,"threshold":5000,"p50":600,"total":3000,"slow":0}'
  from features,anchor where name='place';
 select set_config('test.issue',(select id::text from incidents where kind='slow'),true);
 select set_config('test.start',(select t::text from anchor),true);
+-- A 503 on a peer is in scope. Even two incidents on the peer count it once.
+update stats_5m set failures=1,server_errors=1 where feature_id=(select id from features where name='bookmark') and bucket=(select t from anchor);
+insert into error_samples(app_id,feature_id,version,at,http_status,error_kind)
+ select app_id,id,'v1',t+interval '1 minute',503,'HTTP_503' from features,anchor where name='bookmark';
+insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version)
+ select app_id,id,'slow','quiet',t+interval '1 minute',t+interval '3 minutes','v1' from features,anchor where name='bookmark';
 select ok(not has_function_privilege('anon','incident_prompt_context(uuid)','execute'),'anonymous access denied');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000053',true);
@@ -38,6 +44,47 @@ select is((ctx->>'usual_rpm')::numeric,1::numeric,'quiet minutes count; closed a
 select is((ctx->>'incident_rpm')::numeric,1000::numeric,'all routes contribute over the elapsed complete buckets') from report;
 select is((ctx->>'client_errors')::int,1,'401 after closure in the same bucket excluded') from report;
 select is((ctx->>'server_errors')::int,0,'confirmed zero 5xx') from report;
+select is((ctx->>'related_server_errors')::int,1,'peer 503 counted exactly once') from report;
 select ok(not (ctx->>'client_partial')::boolean and not (ctx->>'server_partial')::boolean,'counts fully determined') from report;
+reset role;
+-- Opening in the middle of a bucket, without earlier abnormal observations.
+-- Only the next five complete minutes are measurable (5000 requests).
+update stats_5m set total=6000,hist=array[0,0,0,0,0,6000]||array_fill(0,array[10]),duration_sum_ms=3600000
+ where feature_id=(select id from features where name='place') and bucket=(select t from anchor);
+insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version)
+ select app_id,id,'failure','quiet',t+interval '4 minutes',t+interval '10 minutes','v1'
+ from features,anchor where name='place';
+select is((incident_prompt_context(id)->>'incident_rpm')::numeric,1000::numeric,'23:24 to 23:30 excludes 23:20-24 traffic')
+ from incidents where feature_id=(select id from features where name='place') and kind='failure';
+-- A failure in the bucket of the preceding closure cannot anchor the rate.
+update stats_5m set failures=2,server_errors=2 where feature_id=(select id from features where name='place') and bucket=(select t+interval '10 minutes' from anchor);
+insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version,metric_at_open)
+ select app_id,id,'failure','quiet',t+interval '17 minutes',t+interval '20 minutes','v1','{"total":10,"failures":2}'
+ from features,anchor where name='place';
+-- Preceding closure was at +10m, so the detector cannot reuse its +10m bucket.
+select is((incident_prompt_context(id)->>'incident_rpm')::numeric,null::numeric,'no complete traffic bucket after detection')
+ from incidents where kind='failure' and opened_at=(select t+interval '17 minutes' from anchor);
+insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist)
+ select app_id,id,'v1',t+delta*interval '1 minute',n,fail,0,n*80,array[0,n]||array_fill(0,array[14])
+ from features,anchor,(values(25,100,50),(30,50,0)) v(delta,n,fail) where name='place';
+insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version,metric_at_open)
+ select app_id,id,'failure','quiet',t+interval '32 minutes',t+interval '35 minutes','v1','{"total":150,"failures":50}'
+ from features,anchor where name='place';
+select is((incident_prompt_context(id)->>'incident_rpm')::numeric,15::numeric,'earlier abnormal failure bucket begins the rate window')
+ from incidents where kind='failure' and opened_at=(select t+interval '32 minutes' from anchor);
+-- Independent feature, with a 25-minute-old sample above the cap but below baseline p95.
+insert into features(app_id,kind,name,method,route)
+ select id,'auto','baseline','GET','/baseline' from apps;
+insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist)
+ select app_id,id,'v1',t+delta*interval '1 minute',n,0,0,n*ms,
+ case when delta=-25 then array[0,0,0,0,0,1]||array_fill(0,array[10])
+ else array[0,0,0,0,0,0,0,5]||array_fill(0,array[8]) end
+ from features,anchor,(values(-25,1,600),(-10,5,1200)) v(delta,n,ms) where name='baseline';
+insert into incidents(app_id,feature_id,kind,status,opened_at,closed_at,opened_version,metric_at_open)
+ select app_id,id,'slow','quiet',t,t+interval '1 minute','v1',
+ '{"baseline_p50":300,"baseline_p95":900,"window":30,"threshold":500,"p50":1200,"total":6,"slow":6}'
+ from features,anchor where name='baseline';
+select is(first_slow_bucket,(select t-interval '10 minutes' from anchor),'30-minute baseline excludes an isolated fixed-cap breach')
+ from incidents where feature_id=(select id from features where name='baseline');
 select * from finish();
 rollback;

@@ -6,7 +6,7 @@ const started = "2026-11-27T14:20:00Z";
 const opened = "2026-11-27T14:21:05Z";
 const context = {
   slow_start: started, usual_rpm: 1, incident_rpm: 1000,
-  client_errors: 1, server_errors: 0,
+  client_errors: 1, server_errors: 0, related_server_errors: 3,
 };
 const issue = {
   id: "place", feature_id: "place", kind: "slow", opened_at: opened, opened_version: "v1.0.0",
@@ -38,7 +38,7 @@ it("트루바의 두 시각·분당 부하·동시 장애·HTTP 근거가 복사
     "동시 장애 (시작 ±10분, 다른 기능):",
     "- 북마크 · 느림 · 평소 0.07초 → 감지 0.6초 · 최악 1.2초",
     "- 여행 · 느림 · 평소 0.07초 → 감지 0.6초 · 최악 1.2초",
-    "5xx 0건",
+    "이 기능 5xx 0건 · 같이 느려진 기능 포함 5xx 3건",
     "관련 없을 가능성 높은 4xx 1건",
     "판단 순서: 여러 기능이 함께 영향을 받았다. 요청량 급증과 5xx 부재가 겹치는지 보고 서버 자원 한계를 먼저 확인해 줘. 캐시·무거운 조회·연결 풀·스레드 풀을 점검하고, 자원 한계로 설명되지 않으면 공통 코드를 봐 줘. 배포 후 같은 부하로 다시 측정해 줘.",
   ]);
