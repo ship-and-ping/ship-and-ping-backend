@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AuthForm } from "./AuthPage";
+import { LogoutButton } from "./LogoutButton";
 import type { Gateway } from "./data";
 import { displayText } from "./normalize";
 
@@ -30,8 +31,8 @@ export function Account({
 }: {
   api: Gateway;
   origin: string;
-  logout: () => Promise<void>;
-  done: (result?: "unauthorized" | "login_required") => Promise<void>;
+  logout: (deviceOnly?: boolean) => Promise<void>;
+  done: (result?: "unauthorized" | "login_required", deviceOnly?: boolean) => Promise<void>;
   pending: (active: boolean) => void;
 }) {
   const [info, setInfo] = useState<Awaited<ReturnType<typeof loadAccount>>>();
@@ -41,7 +42,6 @@ export function Account({
   const [passwordSaved, setPasswordSaved] = useState(false);
   const passwordButton = useRef<HTMLButtonElement>(null);
   const [error, setError] = useState(false);
-  const [logoutError, setLogoutError] = useState(false);
   const exitResult = useRef<"unauthorized" | "login_required" | undefined>(undefined);
   const [attempt, retry] = useState(0);
   const title = useRef<HTMLHeadingElement>(null);
@@ -49,7 +49,7 @@ export function Account({
   const progress = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (stage === "confirm" || stage === "account") title.current?.focus();
-    if (stage === "failed" || stage === "limited" || stage === "offline" || stage === "signout_failed") retryButton.current?.focus();
+    if (stage === "failed" || stage === "limited" || stage === "offline") retryButton.current?.focus();
     if (stage === "checking" || stage === "deleting") progress.current?.focus();
   }, [stage]);
   useEffect(() => {
@@ -197,12 +197,7 @@ export function Account({
             {!count && <p>등록한 앱이 없어요.</p>}
           </section>
           <div className="actions">
-            <button
-              className="secondary"
-              onClick={() => logout().catch(() => setLogoutError(true))}
-            >
-              로그아웃
-            </button>
+            <LogoutButton logout={logout} />
             <button
               className="secondary danger"
               onClick={() => setStage("confirm")}
@@ -210,9 +205,6 @@ export function Account({
               회원 탈퇴
             </button>
           </div>
-          {logoutError && (
-            <p role="alert">로그아웃하지 못했어요. 다시 시도해 주세요.</p>
-          )}
         </>
       ) : (
         <section className="panel">
@@ -292,13 +284,7 @@ export function Account({
               <button ref={retryButton} onClick={remove}>다시 시도</button>
             </>
           )}
-          {stage === "signout_failed" && <div role="alert">
-            이 기기의 로그아웃을 마치지 못했어요. 다시 시도해 주세요.
-            <button ref={retryButton} onClick={() => {
-              setStage("deleting");
-              void done(exitResult.current).catch(() => setStage("signout_failed"));
-            }}>로그아웃 다시 시도</button>
-          </div>}
+          {stage === "signout_failed" && <LogoutButton failed logout={deviceOnly => done(exitResult.current,deviceOnly)} />}
         </section>
       )}
     </div>

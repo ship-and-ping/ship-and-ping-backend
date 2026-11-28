@@ -79,7 +79,7 @@ export interface Gateway {
   requestReset(email: string): Promise<void>;
   reauthenticate(): Promise<void>;
   updatePassword(password: string, nonce?: string): Promise<void>;
-  logout(accountDeleted?: boolean): Promise<void>;
+  logout(options?: { accountDeleted?: boolean; deviceOnly?: boolean }): Promise<void>;
   firstVisit(): Promise<boolean>;
   apps(): Promise<AppSummary[]>;
   create(name: string, url: string): Promise<string>;
@@ -463,11 +463,27 @@ export function gateway(client: SupabaseClient, origin?: string): Gateway {
       if (result.error) throw result.error;
       return request;
     },
-    async logout(accountDeleted) {
-      const previous = observedMember ?? read(lastMemberKey,null) ?? (await client.auth.getSession()).data.session?.user.id ?? null;
+    async logout({accountDeleted, deviceOnly} = {}) {
+      const {data, error: sessionError} = await client.auth.getSession();
+      const previous = observedMember ?? read(lastMemberKey,null) ?? data.session?.user.id ?? null;
       await cleanFor(previous,null,accountDeleted);
+      if (!deviceOnly) {
+        if (sessionError) throw sessionError;
+        const token = data.session?.access_token ?? withdrawalToken;
+        if (token) {
+          // This sends POST /logout?scope=local with the user's JWT, without
+          // changing SDK storage or notifying other tabs.
+          const {error} = await client.auth.admin.signOut(token,"local");
+          if (error && error.code !== "session_not_found" && error.code !== "user_not_found") throw error;
+        }
+      }
+      // auth-js clears local storage before its own (possibly redundant) POST.
       const { error } = await client.auth.signOut({ scope: "local" });
-      if (error) throw error;
+      if (error) {
+        const remaining = await client.auth.getSession();
+        if (remaining.error || remaining.data.session) throw error;
+      }
+      withdrawalToken = undefined;
     },
     async firstVisit() {
       const { data, error } = await client.auth.getUser();

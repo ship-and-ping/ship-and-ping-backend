@@ -226,7 +226,21 @@ it("S11 lets the member log out after a failed withdrawal", async () => {
   fireEvent.click(screen.getByRole("button",{name:"로그아웃"}));
   await screen.findByText("로그아웃했어요");
 });
-it("waits for local sign-out and retries it without repeating the withdrawal", async () => {
+it.each([false,true])("로그아웃 실패 시 계정 화면을 유지하고 선택한 방법으로 마친다 (기기만 %s)", async deviceOnly => {
+  const api = fake();
+  vi.mocked(api.logout).mockRejectedValueOnce(Error("offline"));
+  open("/account",api);
+  const account = within(await screen.findByRole("main"));
+  fireEvent.click(await account.findByRole("button",{name:"로그아웃"}));
+  await account.findByText("로그아웃을 끝내지 못했어요. 인터넷 연결 후 다시 시도해 주세요.");
+  expect(account.getByText("다시 연결되기 전까지 이 기기로 알림이 올 수 있어요.")).toBeTruthy();
+  expect(account.getByRole("heading",{name:"내 계정"})).toBeTruthy();
+  fireEvent.click(account.getByRole("button",{name:deviceOnly ? "그래도 이 기기에서 로그아웃" : "다시 시도"}));
+  await screen.findByRole("heading",{name:"로그인"});
+  expect(api.logout).toHaveBeenLastCalledWith({deviceOnly});
+});
+
+it.each([false,true])("waits for sign-out without repeating the withdrawal (device only %s)", async deviceOnly => {
   const api = fake();
   let finish!: () => void;
   vi.mocked(api.logout).mockRejectedValueOnce(Error("sign-out unavailable"))
@@ -235,12 +249,14 @@ it("waits for local sign-out and retries it without repeating the withdrawal", a
   fireEvent.click(await screen.findByRole("button",{name:"회원 탈퇴"}));
   fireEvent.change(screen.getByLabelText("로그인 이메일 다시 입력"),{target:{value:"<me>@example.invalid"}});
   fireEvent.click(screen.getByRole("button",{name:"모든 앱과 기록을 지우고 탈퇴"}));
-  fireEvent.click(await screen.findByRole("button",{name:"로그아웃 다시 시도"}));
+  await screen.findByText("로그아웃을 끝내지 못했어요. 인터넷 연결 후 다시 시도해 주세요.");
+  expect(screen.getByRole("heading",{name:"회원 탈퇴"})).toBeTruthy();
+  fireEvent.click(await screen.findByRole("button",{name:deviceOnly ? "그래도 이 기기에서 로그아웃" : "다시 시도"}));
   expect(screen.queryByText("탈퇴를 마쳤어요")).toBeNull();
   await act(async () => finish());
   await screen.findByText("탈퇴를 마쳤어요");
   expect(api.logout).toHaveBeenCalledTimes(2);
-  expect(api.logout).toHaveBeenLastCalledWith(true);
+  expect(api.logout).toHaveBeenLastCalledWith({accountDeleted:true,deviceOnly});
   expect(api.withdraw).toHaveBeenCalledOnce();
 });
 it("S11 sends an invalid session after retry to the login notice", async () => {

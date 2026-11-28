@@ -9,6 +9,10 @@ export default defineConfig(({mode}) => ({
     enforce: "pre",
     apply: "serve",
     transform(source, id) {
+      if (mode === "skip-server-logout") {
+        if (id.endsWith("/src/data.ts")) return source.replace("if (!deviceOnly) {", "if (false) {");
+        return;
+      }
       if (mode === "skip-push-lock") {
         if (id.endsWith("/src/push-lock.ts")) return source.replace("navigator.locks.request(name, action)", "action()");
         return;

@@ -263,29 +263,92 @@ function pushFixture() {
   const abortSignal = vi.fn().mockResolvedValue({data:"owned",error:null});
   const rpc = vi.fn<(name:string,params:Record<string,unknown>) => {abortSignal:typeof abortSignal,data:string}>()
     .mockReturnValue({abortSignal,data:"device"});
-  const signOut = vi.fn(async () => ({error:null}));
+  const signOut = vi.fn().mockResolvedValue({error:null});
+  const revoke = vi.fn().mockResolvedValue({error:null});
   type Listener = (event:string,session:{user:{id:string}} | null)=>void;
   const onAuthStateChange = vi.fn<(fn:Listener) => {data:{subscription:{unsubscribe:()=>void}}}>()
     .mockReturnValue({data:{subscription:{unsubscribe:vi.fn()}}});
-  const getSession = async () => ({data:{session:{user:{id:"former"}}}});
-  const reload = () => gateway({rpc,auth:{onAuthStateChange,signOut,getSession}} as unknown as SupabaseClient);
+  const getSession = vi.fn().mockResolvedValue({data:{session:{user:{id:"former"},access_token:"fixture"}}});
+  const reload = () => gateway({rpc,auth:{onAuthStateChange,signOut,getSession,admin:{signOut:revoke}}} as unknown as SupabaseClient);
   const restartLocks = () => { queue = Promise.resolve(); };
   const proof = hash("sha256",[endpoint,keys.p256dh,keys.auth].join("\n"));
-  return {api:reload(),reload,restartLocks,request,sub,registration,abortSignal,rpc,close,signOut,onAuthStateChange,proof};
+  return {api:reload(),reload,restartLocks,request,sub,registration,abortSignal,rpc,close,signOut,revoke,getSession,onAuthStateChange,proof};
 }
 
 it.each(["success","server offline","browser failure","both offline","deleted account"])("ends the local session after push cleanup (%s)", async reason => {
-  const {api,sub,proof,rpc,abortSignal,close,signOut} = pushFixture();
+  const {api,sub,proof,rpc,abortSignal,close,signOut,revoke} = pushFixture();
   if (reason === "server offline" || reason === "both offline") abortSignal.mockResolvedValueOnce({data:"owned"}).mockRejectedValue(Error("offline"));
   if (reason === "browser failure" || reason === "both offline") sub.unsubscribe.mockRejectedValue(Error("browser unavailable"));
   if (reason === "deleted account") abortSignal.mockResolvedValue({data:"missing"});
   try {
-    await api.logout(reason === "deleted account" || undefined);
+    await api.logout({accountDeleted:reason === "deleted account"});
     expect(rpc).toHaveBeenCalledWith("cleanup_push_target",{p_member:"former",p_endpoint:sub.endpoint,proof,p_remove:false});
     expect(sub.unsubscribe).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
     expect(signOut).toHaveBeenCalledExactlyOnceWith({scope:"local"});
-    expect(signOut.mock.invocationCallOrder[0]).toBeGreaterThan(sub.unsubscribe.mock.invocationCallOrder[0]);
+    expect(revoke).toHaveBeenCalledExactlyOnceWith("fixture","local");
+    expect(revoke.mock.invocationCallOrder[0]).toBeGreaterThan(sub.unsubscribe.mock.invocationCallOrder[0]);
+    expect(signOut.mock.invocationCallOrder[0]).toBeGreaterThan(revoke.mock.invocationCallOrder[0]);
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it.each([false,true])("server revocation failure preserves the local session (withdrawal %s)", async accountDeleted => {
+  const {api,abortSignal,revoke,signOut} = pushFixture();
+  abortSignal.mockRejectedValue(Error("offline"));
+  revoke.mockResolvedValueOnce({error:{code:"bad_jwt"}});
+  try {
+    await expect(api.logout({accountDeleted})).rejects.toMatchObject({code:"bad_jwt"});
+    expect(signOut).not.toHaveBeenCalled();
+    await api.logout({accountDeleted});
+    expect(revoke).toHaveBeenCalledTimes(2);
+    expect(signOut).toHaveBeenCalledOnce();
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it("auth-js emits SIGNED_OUT only after a successful logout response on retry", async () => {
+  const storageKey = "test-logout-session";
+  localStorage.setItem(storageKey,JSON.stringify({
+    access_token:"fixture", refresh_token:"fixture-refresh", expires_at:Math.floor(Date.now()/1000)+3600,
+    user:{id:"former"},
+  }));
+  let available = false;
+  const events: string[] = [];
+  const client = createClient("https://auth.example.invalid","publishable-fixture",{
+    auth:{storageKey,storage:localStorage,autoRefreshToken:false,detectSessionInUrl:false},
+    global:{fetch:async (input,init) => {
+      expect(String(input)).toBe("https://auth.example.invalid/auth/v1/logout?scope=local");
+      expect(init?.method).toBe("POST");
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer fixture");
+      events.push(available ? "revoked" : "failed");
+      return available ? new Response(null,{status:204}) : new Response("{}",{status:503});
+    }},
+  });
+  const api = gateway(client);
+  const {data} = client.auth.onAuthStateChange(event => { if (event === "SIGNED_OUT") events.push(event); });
+  try {
+    await expect(api.logout()).rejects.toBeTruthy();
+    expect(events).toEqual(["failed"]);
+    expect(await api.session()).toBe("former");
+    available = true;
+    await api.logout();
+    expect(events.indexOf("SIGNED_OUT")).toBeGreaterThan(events.indexOf("revoked"));
+    expect(await api.session()).toBeNull();
+  } finally {
+    data.subscription.unsubscribe();
+    localStorage.removeItem(storageKey);
+  }
+});
+
+it("explicit device logout succeeds offline after the SDK clears local storage", async () => {
+  const {api,revoke,signOut,getSession} = pushFixture();
+  signOut.mockImplementationOnce(async () => {
+    getSession.mockResolvedValue({data:{session:null}});
+    return {error:Error("offline")};
+  });
+  try {
+    await api.logout({deviceOnly:true});
+    expect(revoke).not.toHaveBeenCalled();
+    expect(signOut).toHaveBeenCalledExactlyOnceWith({scope:"local"});
   } finally { vi.unstubAllGlobals(); }
 });
 

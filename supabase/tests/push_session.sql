@@ -29,6 +29,18 @@ select is(pg_temp.enable('live'),current_setting('test.live')::uuid,'repeat regi
 select pg_temp.login('10000000-0000-0000-0000-000000000049',3600);
 select ok((select current_session from list_push_devices()),'a refreshed JWT sees the original device enabled');
 
+create function pg_temp.subscribed() returns boolean language sql as $$
+ select (notification_settings(current_setting('test.app')::uuid)->>'subscribed')::boolean
+$$;
+select ok(pg_temp.subscribed(),'enabled app has a deliverable device');
+select set_push_enabled(current_setting('test.app')::uuid,false);
+select is(pg_temp.subscribed(),false,'disabled app has no deliverable device despite a live session');
+select set_push_enabled(current_setting('test.app')::uuid,true);
+update auth.sessions set not_after=now()-interval '1 second';
+select is(pg_temp.subscribed(),false,'only device has expired');
+select is((select current_session from list_push_devices()),false,'expired device must opt in again');
+update auth.sessions set not_after=null;
+
 -- Simulate client cleanup leaving both the endpoint and DB row intact. End only
 -- the affected Auth session, either before the new job or after its claim.
 create function pg_temp.blocks_delivery(after_claim boolean, expired boolean) returns boolean language plpgsql as $$
@@ -75,6 +87,7 @@ insert into auth.sessions(id,user_id) values
 select pg_temp.login('20000000-0000-0000-0000-000000000049',1);
 select pg_temp.enable('ended');
 delete from auth.sessions where id='20000000-0000-0000-0000-000000000049';
+select ok(pg_temp.subscribed(),'another active device still receives pushes for this app');
 insert into app_versions(app_id,version) select id,'v1' from apps;
 insert into features(app_id,kind,method,route,name) select id,'auto','GET','/','example' from apps;
 insert into stats_5m(app_id,feature_id,version,bucket,total,failures,client_errors,duration_sum_ms,hist)
@@ -95,6 +108,7 @@ select is((select prepare_push_delivery(id,claim_token,app)->>'endpoint' from li
 
 -- Existing rows have no session. A new opt-in invalidates old notification IDs.
 update push_subscriptions set session_id=null where id=current_setting('test.live')::uuid;
+select is(pg_temp.subscribed(),false,'legacy row alone does not enable push');
 select pg_temp.login('10000000-0000-0000-0000-000000000049',7200);
 select is((select current_session from list_push_devices()),false,'legacy device needs explicit opt-in');
 select isnt(pg_temp.enable('live'),current_setting('test.live')::uuid,'explicit re-enable gives the device a fresh id');
@@ -114,10 +128,15 @@ select ok(not has_column_privilege('authenticated','push_subscriptions','session
 
 -- Transaction-local mutation control. Run the same probes against the old
 -- account-only rule. The other active login must not keep this device alive.
+select pg_temp.enable('orphan-settings');
+delete from auth.sessions where id=(auth.jwt()->>'session_id')::uuid;
+insert into auth.sessions(id,user_id) values(gen_random_uuid(),current_setting('test.member')::uuid);
+select is(pg_temp.subscribed(),false,'another login cannot make the only orphaned device deliverable');
 create or replace function private.push_session_active(member uuid, login uuid)
 returns boolean language sql stable security definer set search_path='' as $$
  select exists(select from auth.sessions s where s.user_id=member)
 $$;
+select ok(pg_temp.subscribed(),'member-only mutation incorrectly counts the same orphan device');
 select ok(not pg_temp.blocks_delivery(false,false),'claim regression detects member-only mutation');
 select ok(not pg_temp.blocks_delivery(true,false),'last-moment regression detects member-only mutation');
 

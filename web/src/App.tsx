@@ -314,16 +314,16 @@ export function App({ api, ingest }: { api: Gateway; ingest: string }) {
     };
   }, [api]);
   const markPending = useCallback((active: boolean) => { deleting.current = active; }, []);
-  async function logout() {
-    await api.logout();
+  async function logout(deviceOnly = false) {
+    await api.logout({deviceOnly});
     deleting.current = false;
     issued.current = null;
     setUser(null);
-    setNotice("로그아웃했어요");
+    setNotice(deviceOnly ? "이 기기에서 로그아웃했어요. 다시 연결되기 전까지 이 기기로 알림이 올 수 있어요." : "로그아웃했어요");
     navigate("/login",{replace:true});
   }
-  const finishWithdrawal = useCallback(async (result: "done" | "unauthorized" | "login_required" = "done") => {
-    await api.logout(result === "done");
+  const finishWithdrawal = useCallback(async (result: "done" | "unauthorized" | "login_required" = "done", deviceOnly = false) => {
+    await api.logout({accountDeleted: result === "done", deviceOnly});
     deleting.current=false; issued.current=null;
     setNotice({
       done: "탈퇴를 마쳤어요",
