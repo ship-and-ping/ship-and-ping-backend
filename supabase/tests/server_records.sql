@@ -28,7 +28,17 @@ cross join lateral (values (jsonb_build_object('rollback',label)),
 select results_eq('select profile,history from app_profiles','select profile,history from saved_profile',
   'rejected writes preserve both the current profile and history');
 select ok(private.valid_profile(jsonb_build_object('metrics',label)),'accept profile text: '||label)
-from unnest(array['Flask-SQLAlchemy','flask-login','C++','Next.js','Spring 8','이전 릴리스 다시 배포','Check the server dashboard']) label;
+from unnest(array['Flask-SQLAlchemy','flask-login','C++','Next.js','Spring 8','이전 릴리스 다시 배포','Check the server dashboard',
+  'PyTorch','TensorFlow','NestJS','Socket.IO','spring-boot-starter-web','google-cloud-storage','Django REST framework',
+  'React','React Native','Angular','Express','Koa','Fastify','Hapi',
+  'Svelte','SvelteKit','Astro','Nuxt.js','Vue.js','Node.js','ASP.NET',
+  '.NET','C#','Laravel','Symfony','CakePHP','Ruby on Rails','Sinatra',
+  'Hanami','Spring Boot','Micronaut','Quarkus','Hibernate','MyBatis','JUnit',
+  'Mockito','Log4j','FastAPI','Flask','Pydantic','SQLAlchemy','Celery',
+  'NumPy','SciPy','pandas','Matplotlib','scikit-learn','Starlette','Tornado',
+  'Gin','Echo','Fiber','Gorilla Mux','Actix Web','Axum','Tokio',
+  'Serde','Diesel','Prisma','Sequelize','TypeORM','Jest','Vitest',
+  'Playwright','Cypress','Rollup','Webpack','Vite']) label;
 select ok(not private.valid_resources('{"gc_pause_ms":-1}') and not private.valid_resources('{"mem_used_pct":101}'),'DB enforces resource bounds');
 
 -- Replay the upgrade with one real request and one empty legacy batch.

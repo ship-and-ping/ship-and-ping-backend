@@ -18,31 +18,29 @@ declare
   word text;
   fragment text;
   candidate text;
-  known_only boolean := true;
-  credential constant text := '^(?:bearer|basic|[spr]k(?:$|[- ]|live|test)|glpat|xox[baprs]|githubpat|gh[pousr](?:$|[- ])|spsrv|sppub|sbsecret|apikey|accesstoken|password|akia|asia[0-9]|aiza|eyj)';
+  short_run integer := 0;
+  credential constant text := '^(?:(?:bearer|basic)[- ]?[a-z0-9]{3}|[spr]k(?:-|live|test)[- ]?[a-z0-9]{4}|(?:glpat|xox[baprs]|githubpat|gh[pousr]|spsrv|sppub|sbsecret|apikey|accesstoken|password|akia|asia|aiza|eyj)[- ]?[a-z0-9]{8})';
 begin
   if jsonb_typeof(v)<>'string' or length(s) not between 1 and lim
     or private.mask(s)<>s or private.mask(compact)<>compact or private.profile_encoded_text(compact) then return false; end if;
-  -- Match the same short display words and product names as the Worker.
   foreach word in array string_to_array(replace(s,'-',' '),' ') loop
-    if suffix collate "C" ~* credential or replace(suffix,' ','') collate "C" ~* credential then return false; end if;
+    if word collate "C" !~ '^(?:[가-힣]{1,16}|[A-Za-z][A-Za-z0-9]{0,14}|[0-9]{1,2}|C[+][+]|C#|[.]NET|[A-Za-z][A-Za-z0-9]{0,14}(?:[.][A-Za-z][A-Za-z0-9]{0,14})+)$'
+      or replace(suffix,' ','') collate "C" ~* credential or private.profile_encoded_text(word) then return false; end if;
+    if word collate "C" ~ '^[A-Za-z0-9]{1,4}$' then
+      short_run := short_run+length(word);
+      if short_run>=16 then return false; end if;
+    else
+      short_run := 0;
+    end if;
     candidate := '';
     foreach fragment in array string_to_array(suffix,' ') loop
       exit when length(candidate)+length(fragment)>=16 or fragment collate "C" !~ '^[A-Za-z0-9]+$';
       candidate := candidate||fragment;
       if private.profile_encoded_text(candidate) then return false; end if;
     end loop;
-    if word not in ('Node.js','Next.js','Nuxt.js','Vue.js','.NET','ASP.NET','C++','C#','JavaScript','TypeScript',
-      'FastAPI','SQLAlchemy','PostgreSQL','MySQL','MongoDB','SQLite','GitHub','GitLab','Cloudflare','Kubernetes',
-      'Spring','Boot','Framework','Actions') and word collate "C" !~ '^[가-힣]{1,16}$'
-      and word collate "C" !~* '^(check|view|open|use|the|in|on|to|from|previous|release|deploy|redeploy|rollback|version|server|hosting|dashboard|metrics|logs|console)$' then
-      if word collate "C" !~ '^(?:[가-힣]{1,16}|(?:[A-Z]?[a-z]{1,14}|[A-Z]{1,6})[0-9]{0,2}|[0-9]{1,2})$'
-        or private.profile_encoded_text(word) then return false; end if;
-      known_only := false;
-    end if;
     suffix := substr(suffix,length(word)+2);
   end loop;
-  return known_only or replace(compact,'-','') collate "C" !~ '[A-Za-z0-9]{16}';
+  return true;
 end $$;
 create function private.valid_profile(p jsonb) returns boolean
 language plpgsql immutable strict set search_path='' as $$

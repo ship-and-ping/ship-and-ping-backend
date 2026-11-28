@@ -373,7 +373,8 @@ export function Chart({ rows, days, now, baseline, p95 = null, samples, learnsRa
       {!!thresholds?.size && <StatPanel {...shared} title="만족도" unit="%" help="선택 기간 중 평소 상한 안에 끝난 성공 요청 비율이에요." value={period.satisfaction === null ? "기록 없음" : period.satisfaction+"%"} series={points.map(p => p.satisfaction)}/>}
     </div>
     <section aria-label="서버 상태"><h3>서버 상태</h3>
-      {resources.some(row => serverMetrics.some(([key]) => row.peaks[key] != null)) ? <div className="stat-grid">
+      {resources.some(row => serverMetrics.some(([key]) => row.peaks[key] != null)) ? <div className="stat-grid"
+        data-readout-size={longestTime+" · "+formatMetric(1_000_000,"개")}>
         {serverMetrics.map(([key,title,unit]) => {
           const series = points.map((_,i) => resources.find(row => row.slot === i)?.peaks[key] ?? null);
           const measured = series.filter(n => n !== null);
