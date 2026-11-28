@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Validation definitions reachable from DiscoverResultResponse and ListToolsResultResponse, with description annotations omitted. Source: https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/fdc75bd0668db05f5b43e4fc76c2e5aa54296a42/schema/2026-07-28/schema.json",
+  "$defs": {
+    "DiscoverResultResponse": {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "jsonrpc": {
+          "const": "2.0",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/DiscoverResult"
+        }
+      },
+      "required": [
+        "id",
+        "jsonrpc",
+        "result"
+      ],
+      "type": "object"
+    },
+    "RequestId": {
+      "type": [
+        "string",
+        "integer"
+      ]
+    },
+    "DiscoverResult": {
+      "properties": {
+        "_meta": {
+          "$ref": "#/$defs/ResultMetaObject"
+        },
+        "cacheScope": {
+          "enum": [
+            "private",
+            "public"
+          ],
+          "type": "string"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/ServerCapabilities"
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "resultType": {
+          "type": "string"
+        },
+        "supportedVersions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ttlMs": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cacheScope",
+        "capabilities",
+        "resultType",
+        "supportedVersions",
+        "ttlMs"
+      ],
+      "type": "object"
+    },
+    "ResultMetaObject": {
+      "properties": {
+        "io.modelcontextprotocol/serverInfo": {
+          "$ref": "#/$defs/Implementation"
+        }
+      },
+      "type": "object"
+    },
+    "Implementation": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "icons": {
+          "items": {
+            "$ref": "#/$defs/Icon"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "websiteUrl": {
+          "format": "uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "type": "object"
+    },
+    "Icon": {
+      "properties": {
+        "mimeType": {
+          "type": "string"
+        },
+        "sizes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "src": {
+          "format": "uri",
+          "type": "string"
+        },
+        "theme": {
+          "enum": [
+            "dark",
+            "light"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "src"
+      ],
+      "type": "object"
+    },
+    "ServerCapabilities": {
+      "properties": {
+        "completions": {
+          "$ref": "#/$defs/JSONObject"
+        },
+        "experimental": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JSONObject"
+          },
+          "type": "object"
+        },
+        "extensions": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JSONObject"
+          },
+          "type": "object"
+        },
+        "logging": {
+          "$ref": "#/$defs/JSONObject"
+        },
+        "prompts": {
+          "properties": {
+            "listChanged": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "resources": {
+          "properties": {
+            "listChanged": {
+              "type": "boolean"
+            },
+            "subscribe": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "tools": {
+          "properties": {
+            "listChanged": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "JSONObject": {
+      "additionalProperties": {
+        "$ref": "#/$defs/JSONValue"
+      },
+      "type": "object"
+    },
+    "JSONValue": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/JSONObject"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JSONValue"
+          },
+          "type": "array"
+        },
+        {
+          "type": [
+            "string",
+            "integer",
+            "boolean"
+          ]
+        }
+      ]
+    },
+    "ListToolsResultResponse": {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "jsonrpc": {
+          "const": "2.0",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/ListToolsResult"
+        }
+      },
+      "required": [
+        "id",
+        "jsonrpc",
+        "result"
+      ],
+      "type": "object"
+    },
+    "ListToolsResult": {
+      "properties": {
+        "_meta": {
+          "$ref": "#/$defs/ResultMetaObject"
+        },
+        "cacheScope": {
+          "enum": [
+            "private",
+            "public"
+          ],
+          "type": "string"
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "resultType": {
+          "type": "string"
+        },
+        "tools": {
+          "items": {
+            "$ref": "#/$defs/Tool"
+          },
+          "type": "array"
+        },
+        "ttlMs": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cacheScope",
+        "resultType",
+        "tools",
+        "ttlMs"
+      ],
+      "type": "object"
+    },
+    "Tool": {
+      "properties": {
+        "_meta": {
+          "$ref": "#/$defs/MetaObject"
+        },
+        "annotations": {
+          "$ref": "#/$defs/ToolAnnotations"
+        },
+        "description": {
+          "type": "string"
+        },
+        "icons": {
+          "items": {
+            "$ref": "#/$defs/Icon"
+          },
+          "type": "array"
+        },
+        "inputSchema": {
+          "additionalProperties": {},
+          "properties": {
+            "$schema": {
+              "type": "string"
+            },
+            "type": {
+              "const": "object",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        "name": {
+          "type": "string"
+        },
+        "outputSchema": {
+          "additionalProperties": {},
+          "properties": {
+            "$schema": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "inputSchema",
+        "name"
+      ],
+      "type": "object"
+    },
+    "MetaObject": {
+      "type": "object"
+    },
+    "ToolAnnotations": {
+      "properties": {
+        "destructiveHint": {
+          "type": "boolean"
+        },
+        "idempotentHint": {
+          "type": "boolean"
+        },
+        "openWorldHint": {
+          "type": "boolean"
+        },
+        "readOnlyHint": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  }
+}

@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { createServer, type Server } from "node:http";
 import { once } from "node:events";
+import Ajv2020 from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
+import schema from "./fixtures/mcp-2026-07-28/schema.json";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { serveMcp } from "../worker/src/mcp.js";
 
@@ -90,13 +93,44 @@ it("returns the seven advertised tools and preserves untrusted traffic as data",
     if (t.name === "get_incident") expect(result.structuredContent.data.investigation_prompt).toContain("[쉽앤핑 문제 보고]");
   }
 });
+it.each([
+  ["server/discover", "DiscoverResultResponse"],
+  ["tools/list", "ListToolsResultResponse"],
+])("validates the %s HTTP response against the published schema", async (method, definition) => {
+  const ajv = addFormats(new Ajv2020({ allowUnionTypes: true }));
+  const validate = ajv.compile({ ...schema, $ref: "#/$defs/" + definition });
+  const response = await (await call(method)).json();
+  expect(validate(response), ajv.errorsText(validate.errors)).toBe(true);
+  expect(response.result).toMatchObject({ resultType: "complete", ttlMs: 0, cacheScope: "private" });
+});
+it.each(["2025-11-25", "2025-06-18"])("negotiates %s and returns its tool list", async version => {
+  const init = await call("initialize", { protocolVersion: version, capabilities: {}, clientInfo: { name: "test", version: "1" } }, {}, true);
+  expect((await init.json()).result.protocolVersion).toBe(version);
+  const list = await call("tools/list", {}, { "MCP-Protocol-Version": version }, true);
+  expect((await list.json()).result).toEqual({ tools: expect.any(Array) });
+});
+it.each([
+  ["get_server_metrics", { range: "1d" }, "5m"],
+  ["get_feature_metrics", { range: "1h", feature: "bad" }, "UUID"],
+  ["get_incident", {}, "id"],
+  ["list_apps", { app_id: id }, "인자"],
+])("returns actionable input errors for %s without querying app data", async (name, args, hint) => {
+  const response = await call("tools/call", { name, arguments: args });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ result: { resultType: "complete", isError: true,
+    content: [{ type: "text", text: expect.stringContaining(hint) }] } });
+  expect(audit.p_tool).toBe("invalid");
+  expect(audit.p_args).toEqual({});
+});
 it("validates headers, origin and app scope before tool execution", async () => {
   expect((await call("ping", {}, { Origin: "https://invalid.test" })).status).toBe(403);
   expect((await call("ping", {}, { Authorization: "Bearer sp_pub_" + "a".repeat(64) })).status).toBe(401);
   expect((await call("tools/list", {}, { "Mcp-Method": "tools/call" })).status).toBe(400);
   expect(audit.p_tool).toBe("invalid");
-  const reply = await call("tools/call", { name: "list_apps", arguments: { app_id: id } });
-  expect((await reply.json()).error.code).toBe(-32602);
+  for (const params of [{ name: "unknown" }, { name: "list_apps", arguments: [] }]) {
+    const reply = await call("tools/call", params);
+    expect((await reply.json()).error.code).toBe(-32602);
+  }
   expect(audit.p_tool).toBe("invalid");
   for (const status of [401,429]) {
     storageStatus = status;

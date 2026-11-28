@@ -6,6 +6,7 @@ const legacy = ["2025-11-25", "2025-06-18"];
 const supported = [current, ...legacy];
 const serverInfo = { name: "ship-and-ping", version: "1.0.0" };
 const capabilities = { tools: {} };
+const cacheHints = { ttlMs: 0, cacheScope: "private" };
 const uuid = { type: "string", format: "uuid" };
 const range = { type: "string", enum: ["5m", "1h"] };
 const tools = [
@@ -110,17 +111,25 @@ function planMessage(message, headers) {
   if (!modern && method === "notifications/initialized" && id === undefined) {
     return { audit: method, finish: () => new Response(null, { status: 202, headers: commonHeaders }) };
   }
-  if (method === "server/discover") return { audit: method, finish: () => result({ supportedVersions: supported, capabilities, instructions: notice }) };
+  if (method === "server/discover") return { audit: method, finish: () => result({ supportedVersions: supported, capabilities, instructions: notice, ...cacheHints }) };
   if (method === "ping") return { audit: method, finish: () => result({}) };
-  if (method === "tools/list") return { audit: method, finish: () => result({ tools }) };
+  if (method === "tools/list") return { audit: method, finish: () => result(modern ? { tools, ...cacheHints } : { tools }) };
   if (method !== "tools/call") return { error: rpcError(id, -32601, "Method not found", modern ? 404 : 200) };
   const tool = tools.find(t => t.name === params.name);
   const args = params.arguments === undefined ? {} : params.arguments;
   if (!tool) return { error: rpcError(id, -32602, "Unknown tool", 200) };
-  if (!object(args) || Object.keys(args).length !== tool.inputSchema.required.length ||
-      !tool.inputSchema.required.every(k => Object.hasOwn(args, k) && (k === "range" ? range.enum.includes(args[k]) :
-        typeof args[k] === "string" && /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(args[k])))) {
-    return { error: rpcError(id, -32602, "Invalid tool arguments", 200) };
+  if (!object(args)) return { error: rpcError(id, -32602, "Expected an arguments object", 200) };
+  const inputError = text => ({ finish: () => result({ isError: true, content: [{ type: "text", text }] }) });
+  for (const field of tool.inputSchema.required) {
+    if (!Object.hasOwn(args, field)) return inputError(field + " 인자가 필요해요.");
+    if (field === "range") {
+      if (!range.enum.includes(args.range)) return inputError("range에는 5m 또는 1h를 사용하세요.");
+    } else if (typeof args[field] !== "string" || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(args[field])) {
+      return inputError(field + "에는 UUID를 사용하세요.");
+    }
+  }
+  if (Object.keys(args).length !== tool.inputSchema.required.length) {
+    return inputError("도구에 정의된 인자만 보내세요.");
   }
   return { audit: tool.name, args, finish: (data, status) => {
     if (status === 404) return result({ isError: true, content: [{ type: "text", text: "기록을 찾을 수 없어요." }] });

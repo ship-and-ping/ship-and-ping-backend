@@ -1,6 +1,8 @@
 -- All user-originated labels use the display sanitizer before leaving Postgres.
 create function private.ai_text(label text) returns text language sql immutable strict set search_path='' as $$
- select left(private.mask(regexp_replace(label,'[[:cntrl:]]','','g')),160)
+ -- Preserve whitespace boundaries for the shared credential matcher, including folded lines.
+ select left(btrim(regexp_replace(private.mask(translate(private.normalize_text(label),E'\n',' ')),
+                                  '[[:cntrl:]]','','g')),160)
 $$;
 
 create function private.ai_metrics(app uuid, feature uuid, span interval)
@@ -8,7 +10,7 @@ returns table(feature_id uuid,total bigint,failures bigint,p50_ms float8,p95_ms 
 language sql stable set search_path='' as $$
  with buckets as materialized (
   select s.* from private.speed_buckets s where s.app_id=app and (feature is null or s.feature_id=feature)
-   and s.bucket>date_bin('5 minutes',now(),timestamptz 'epoch')-span and s.bucket<=now()
+   and s.bucket>=date_bin('5 minutes',now()-span,timestamptz 'epoch') and s.bucket<=now()
  ), attempts as materialized (
   select a.* from public.attempts a where a.app_id=app and (feature is null or a.feature_id=feature)
    and a.ended_at between now()-span and now() and a.status in ('success','failure')
@@ -40,7 +42,7 @@ language plpgsql stable set search_path='' as $$
 declare f public.features; progress record; baseline public.baselines; latest text; previous text; evidence jsonb;
  cutoff timestamptz:=i.opened_at-case when i.kind='unconfirmed' then interval '1 hour' else interval '30 minutes' end;
 begin
- select * into strict f from public.features where app_id=i.app_id and id=i.feature_id;
+ select * into f from public.features where app_id=i.app_id and id=i.feature_id;
  select * into baseline from public.baselines where feature_id=f.id;
  select * into progress from private.verification_progress(i);
  latest:=coalesce(i.resolved_version,progress.version);
@@ -50,7 +52,7 @@ begin
  where key in ('total','failures','p50','baseline','baseline_p50','baseline_p95','window','unconfirmed','severity')
  and jsonb_typeof(value)='number';
  return jsonb_build_object('id',i.id,'kind',i.kind,'status',i.status,'opened',i.opened_at,'closed',i.closed_at,
- 'feature',private.ai_text(f.name),'route',private.ai_text(private.route(f.route)),'feature_id',f.id,
+ 'feature',coalesce(private.ai_text(f.name),'앱 전체'),'route',private.ai_text(private.route(f.route)),'feature_id',i.feature_id,
  'versions',case when latest is not null then array[latest,i.opened_version] else array_remove(array[i.opened_version,previous],null) end,
  'mode',case when i.status='open' and (progress.latest_success=false or
    (i.kind='slow' and progress.latest_duration_ms>least(f.slow_threshold_ms,baseline.p95_ms+500,
@@ -106,8 +108,9 @@ begin
      case when issues>0 then 'incident' when total>0 then 'observed' else 'no_data' end) order by id),'[]')) into data from rows;
  when 'list_incidents' then
   select jsonb_build_object('incidents',coalesce(jsonb_agg(to_jsonb(r) order by opened_at desc,id),'[]')) into data from (
-   select i.id,i.feature_id,i.kind,i.status,i.opened_at,i.closed_at,private.ai_text(f.name) feature
-   from public.incidents i join public.features f on f.id=i.feature_id where i.app_id=k.app_id and i.status in ('open','resolved')
+   select i.id,i.feature_id,i.kind,i.status,i.opened_at,i.closed_at,coalesce(private.ai_text(f.name),'앱 전체') feature
+   from public.incidents i left join public.features f on f.app_id=i.app_id and f.id=i.feature_id
+   where i.app_id=k.app_id and i.status in ('open','resolved')
    order by i.opened_at desc,i.id limit 40) r;
  when 'get_incident','check_resolution' then
   select * into issue from public.incidents where app_id=k.app_id and id=item;
